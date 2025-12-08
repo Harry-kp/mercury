@@ -1,0 +1,118 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Install Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        
+      - name: Build
+        run: cargo build --release
+        
+      - name: Create DMG
+        run: |
+          mkdir -p Mercury.app/Contents/MacOS
+          mkdir -p Mercury.app/Contents/Resources
+          cp target/release/mercury Mercury.app/Contents/MacOS/
+          cp assets/icon.png Mercury.app/Contents/Resources/icon.png
+          
+          cat > Mercury.app/Contents/Info.plist << EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>CFBundleExecutable</key>
+              <string>mercury</string>
+              <key>CFBundleIdentifier</key>
+              <string>com.mercury.app</string>
+              <key>CFBundleName</key>
+              <string>Mercury</string>
+              <key>CFBundleVersion</key>
+              <string>1.0.0</string>
+              <key>CFBundleShortVersionString</key>
+              <string>1.0.0</string>
+          </dict>
+          </plist>
+          EOF
+          
+          # Ad-hoc code signing (no Apple Developer account needed)
+          codesign --force --deep --sign - Mercury.app
+          
+          hdiutil create -volname Mercury -srcfolder Mercury.app -ov -format UDZO mercury-macos.dmg
+          
+      - name: Upload Release Asset
+        uses: softprops/action-gh-release@v1
+        with:
+          files: mercury-macos.dmg
+
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Install Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        
+      - name: Build
+        run: cargo build --release
+        
+      - name: Upload Release Asset
+        uses: softprops/action-gh-release@v1
+        with:
+          files: target/release/mercury.exe
+
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libspeechd-dev libxkbcommon-dev libssl-dev
+          
+      - name: Install Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        
+      - name: Build
+        run: cargo build --release
+        
+      - name: Create AppImage
+        run: |
+          wget -q https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
+          chmod +x linuxdeploy-x86_64.AppImage
+          
+          mkdir -p AppDir/usr/bin
+          mkdir -p AppDir/usr/share/applications
+          mkdir -p AppDir/usr/share/icons/hicolor/256x256/apps
+          
+          cp target/release/mercury AppDir/usr/bin/
+          cp assets/icon.png AppDir/usr/share/icons/hicolor/256x256/apps/mercury.png
+          
+          cat > AppDir/usr/share/applications/mercury.desktop << EOF
+          [Desktop Entry]
+          Name=Mercury
+          Exec=mercury
+          Icon=mercury
+          Type=Application
+          Categories=Development;Network;
+          EOF
+          
+          ./linuxdeploy-x86_64.AppImage --appdir AppDir --output appimage
+          mv Mercury*.AppImage mercury-linux.AppImage
+          
+      - name: Upload Release Asset
+        uses: softprops/action-gh-release@v1
+        with:
+          files: mercury-linux.AppImage
