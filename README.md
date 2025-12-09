@@ -5,7 +5,7 @@
 <h1 align="center">Mercury</h1>
 
 <p align="center">
-  <strong>The last API client you'll ever need.</strong><br>
+  <strong>API Testing for Purists.</strong><br>
   5MB. 50ms startup. $0 forever.
 </p>
 
