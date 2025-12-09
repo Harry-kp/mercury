@@ -501,6 +501,9 @@ impl MercuryApp {
                 }
 
                 // Listen for events and signal main thread
+                // Keep debouncer alive throughout the thread
+                #[allow(unused_variables)]
+                let _debouncer = debouncer;
                 loop {
                     // Check for shutdown signal
                     if let Ok(_) | Err(std::sync::mpsc::TryRecvError::Disconnected) = shutdown_rx.try_recv() {
