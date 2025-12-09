@@ -1,0 +1,10 @@
+cff-version: 1.2.0
+message: "If you use Mercury, please cite it as below."
+authors:
+- family-names: "KP"
+  given-names: "Harry"
+  url: "https://github.com/Harry-kp"
+title: "Mercury: API Testing for Purists"
+version: 0.1.0
+date-released: 2025-12-10
+url: "https://github.com/Harry-kp/mercury"
