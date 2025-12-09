@@ -71,8 +71,14 @@ pub fn import_insomnia_collection(json_path: &Path, output_dir: &Path) -> Result
     let content = fs::read_to_string(json_path)
         .map_err(|e| format!("Failed to read file: {}", e))?;
     
-    let export: InsomniaExport = serde_json::from_str(&content)
-        .map_err(|e| format!("Failed to parse Insomnia export: {}", e))?;
+    let export: InsomniaExport = match serde_json::from_str(&content) {
+        Ok(json) => json,
+        Err(_) => {
+            // Try parsing as YAML if JSON fails
+            serde_yaml::from_str(&content)
+                .map_err(|e| format!("Failed to parse as JSON or YAML: {}", e))?
+        }
+    };
     
     // Extract request groups (folders)
     let mut groups: HashMap<String, String> = HashMap::new();
