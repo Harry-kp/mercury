@@ -255,12 +255,12 @@ pub fn json_syntax_highlight(ui: &mut Ui, json: &str) {
     let mut job = LayoutJob::default();
     let font_id = egui::FontId::monospace(FontSize::SM);
 
-    let mut chars = json.chars().peekable();
+    let chars = json.chars().peekable();
     let mut current_token = String::new();
     let mut in_string = false;
     let mut is_key = true; // Track if we're parsing a key or value
 
-    while let Some(ch) = chars.next() {
+    for ch in chars {
         match ch {
             '"' if !in_string => {
                 // Start of string
@@ -455,13 +455,13 @@ pub fn json_layout_job(text: &str, wrap_width: f32) -> egui::text::LayoutJob {
         return job;
     }
 
-    let mut chars = text.chars().peekable();
+    let chars = text.chars().peekable();
     let mut current_token = String::new();
     let mut in_string = false;
     let mut escape_next = false;
     let mut is_key = true;
 
-    while let Some(ch) = chars.next() {
+    for ch in chars {
         if escape_next {
             current_token.push(ch);
             escape_next = false;

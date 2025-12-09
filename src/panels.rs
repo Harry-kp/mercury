@@ -969,8 +969,8 @@ impl MercuryApp {
                     }
 
                     // Remove button - bigger, closer
-                    if !key.is_empty() || !value.is_empty() {
-                        if ui
+                    if (!key.is_empty() || !value.is_empty())
+                        && ui
                             .add(
                                 egui::Label::new(
                                     egui::RichText::new("×")
@@ -981,9 +981,8 @@ impl MercuryApp {
                             )
                             .on_hover_text("Remove")
                             .clicked()
-                        {
-                            to_remove = Some(idx);
-                        }
+                    {
+                        to_remove = Some(idx);
                     }
                 });
             }

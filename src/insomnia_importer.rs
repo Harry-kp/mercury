@@ -155,9 +155,9 @@ pub fn import_insomnia_collection(
             if let Some(body) = &request.body {
                 if let Some(text) = &body.text {
                     if !text.is_empty() {
-                        http_content.push_str("\n");
+                        http_content.push('\n');
                         http_content.push_str(text);
-                        http_content.push_str("\n");
+                        http_content.push('\n');
                     }
                 }
             }

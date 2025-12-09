@@ -236,12 +236,10 @@ impl MercuryApp {
 
         // Scan for .env files
         self.env_files = vec!["None".to_string()];
-        for entry in WalkDir::new(&path).max_depth(2) {
-            if let Ok(entry) = entry {
-                let file_name = entry.file_name().to_string_lossy();
-                if file_name.starts_with(".env") {
-                    self.env_files.push(file_name.to_string());
-                }
+        for entry in WalkDir::new(&path).max_depth(2).into_iter().flatten() {
+            let file_name = entry.file_name().to_string_lossy();
+            if file_name.starts_with(".env") {
+                self.env_files.push(file_name.to_string());
             }
         }
 
@@ -319,23 +317,21 @@ impl MercuryApp {
         let mut chars = text.chars().peekable();
 
         while let Some(c) = chars.next() {
-            if c == '{' {
-                if chars.peek() == Some(&'{') {
-                    chars.next(); // consume second {
-                    let mut var_name = String::new();
+            if c == '{' && chars.peek() == Some(&'{') {
+                chars.next(); // consume second {
+                let mut var_name = String::new();
 
-                    while let Some(c) = chars.next() {
-                        if c == '}' {
-                            if chars.peek() == Some(&'}') {
-                                chars.next(); // consume second }
-                                if !var_name.is_empty() {
-                                    vars.push(var_name.trim().to_string());
-                                }
-                                break;
+                while let Some(c) = chars.next() {
+                    if c == '}' {
+                        if chars.peek() == Some(&'}') {
+                            chars.next(); // consume second }
+                            if !var_name.is_empty() {
+                                vars.push(var_name.trim().to_string());
                             }
-                        } else {
-                            var_name.push(c);
+                            break;
                         }
+                    } else {
+                        var_name.push(c);
                     }
                 }
             }
@@ -355,6 +351,7 @@ impl MercuryApp {
         }
     }
 
+    #[allow(clippy::only_used_in_recursion)]
     fn scan_directory(&self, dir: &Path, workspace_root: &Path) -> Vec<CollectionItem> {
         let mut folders = Vec::new();
         let mut requests = Vec::new();
@@ -1281,7 +1278,7 @@ impl eframe::App for MercuryApp {
                         let env_display = if self.workspace_path.is_none() && env_name == "None" {
                             "No env (open folder)"
                         } else {
-                            &format!("{}", env_name)
+                            &env_name.to_string()
                         };
 
                         let env_id = egui::Id::new("env_popup");
@@ -1476,17 +1473,17 @@ impl eframe::App for MercuryApp {
                     );
                     ui.add_space(crate::theme::Spacing::XS);
                     let response = ui.text_edit_singleline(&mut self.new_request_name);
-                    if response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
-                        if !self.new_request_name.is_empty() {
-                            if let Some(parent) = self.context_menu_item.clone() {
-                                let name = self.new_request_name.clone();
-                                if let Err(e) = self.create_new_request(&parent, &name) {
-                                    self.last_action_message =
-                                        Some((e, ctx.input(|i| i.time), true));
-                                }
+                    if response.lost_focus()
+                        && ui.input(|i| i.key_pressed(egui::Key::Enter))
+                        && !self.new_request_name.is_empty()
+                    {
+                        if let Some(parent) = self.context_menu_item.clone() {
+                            let name = self.new_request_name.clone();
+                            if let Err(e) = self.create_new_request(&parent, &name) {
+                                self.last_action_message = Some((e, ctx.input(|i| i.time), true));
                             }
-                            self.show_new_request_dialog = false;
                         }
+                        self.show_new_request_dialog = false;
                     }
                     ui.add_space(crate::theme::Spacing::SM);
                     ui.horizontal(|ui| {
@@ -1540,17 +1537,17 @@ impl eframe::App for MercuryApp {
                     );
                     ui.add_space(crate::theme::Spacing::XS);
                     let response = ui.text_edit_singleline(&mut self.new_folder_name);
-                    if response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
-                        if !self.new_folder_name.is_empty() {
-                            if let Some(parent) = self.context_menu_item.clone() {
-                                let name = self.new_folder_name.clone();
-                                if let Err(e) = self.create_new_folder(&parent, &name) {
-                                    self.last_action_message =
-                                        Some((e, ctx.input(|i| i.time), true));
-                                }
+                    if response.lost_focus()
+                        && ui.input(|i| i.key_pressed(egui::Key::Enter))
+                        && !self.new_folder_name.is_empty()
+                    {
+                        if let Some(parent) = self.context_menu_item.clone() {
+                            let name = self.new_folder_name.clone();
+                            if let Err(e) = self.create_new_folder(&parent, &name) {
+                                self.last_action_message = Some((e, ctx.input(|i| i.time), true));
                             }
-                            self.show_new_folder_dialog = false;
                         }
+                        self.show_new_folder_dialog = false;
                     }
                     ui.add_space(crate::theme::Spacing::SM);
                     ui.horizontal(|ui| {
@@ -1604,17 +1601,17 @@ impl eframe::App for MercuryApp {
                     );
                     ui.add_space(crate::theme::Spacing::XS);
                     let response = ui.text_edit_singleline(&mut self.rename_text);
-                    if response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
-                        if !self.rename_text.is_empty() {
-                            if let Some(old_path) = self.context_menu_item.clone() {
-                                let new_name = self.rename_text.clone();
-                                if let Err(e) = self.rename_item(&old_path, &new_name) {
-                                    self.last_action_message =
-                                        Some((e, ctx.input(|i| i.time), true));
-                                }
+                    if response.lost_focus()
+                        && ui.input(|i| i.key_pressed(egui::Key::Enter))
+                        && !self.rename_text.is_empty()
+                    {
+                        if let Some(old_path) = self.context_menu_item.clone() {
+                            let new_name = self.rename_text.clone();
+                            if let Err(e) = self.rename_item(&old_path, &new_name) {
+                                self.last_action_message = Some((e, ctx.input(|i| i.time), true));
                             }
-                            self.show_rename_dialog = false;
                         }
+                        self.show_rename_dialog = false;
                     }
                     ui.add_space(crate::theme::Spacing::SM);
                     ui.horizontal(|ui| {
@@ -1751,20 +1748,21 @@ impl eframe::App for MercuryApp {
                     );
                     ui.add_space(crate::theme::Spacing::XS);
                     let response = ui.text_edit_singleline(&mut self.new_env_name);
-                    if response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
-                        if !self.new_env_name.is_empty() {
-                            let name = self.new_env_name.clone();
-                            if let Err(e) = self.create_new_env(&name) {
-                                self.last_action_message = Some((e, ctx.input(|i| i.time), true));
-                            } else {
-                                self.last_action_message = Some((
-                                    "Environment created".to_string(),
-                                    ctx.input(|i| i.time),
-                                    false,
-                                ));
-                            }
-                            self.show_new_env_dialog = false;
+                    if response.lost_focus()
+                        && ui.input(|i| i.key_pressed(egui::Key::Enter))
+                        && !self.new_env_name.is_empty()
+                    {
+                        let name = self.new_env_name.clone();
+                        if let Err(e) = self.create_new_env(&name) {
+                            self.last_action_message = Some((e, ctx.input(|i| i.time), true));
+                        } else {
+                            self.last_action_message = Some((
+                                "Environment created".to_string(),
+                                ctx.input(|i| i.time),
+                                false,
+                            ));
                         }
+                        self.show_new_env_dialog = false;
                     }
                     ui.add_space(crate::theme::Spacing::SM);
                     ui.horizontal(|ui| {
@@ -2015,11 +2013,9 @@ impl eframe::App for MercuryApp {
             }
 
             // Cmd/Ctrl + E: Cycle through environments
-            if i.key_pressed(egui::Key::E) && i.modifiers.command {
-                if !self.env_files.is_empty() {
-                    self.selected_env = (self.selected_env + 1) % self.env_files.len();
-                    self.load_env();
-                }
+            if i.key_pressed(egui::Key::E) && i.modifiers.command && !self.env_files.is_empty() {
+                self.selected_env = (self.selected_env + 1) % self.env_files.len();
+                self.load_env();
             }
 
             // Escape: Clear search
