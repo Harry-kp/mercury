@@ -113,6 +113,8 @@ Variables are loaded from `.env` files in your workspace.
 
 ## Features
 
+- **Live File Sync** — Edit in VS Code, updates instantly. Two-way sync.
+- **Auto-Save** — Changes are persisted immediately. Never lose work.
 - **Collections** — Organize requests in folders
 - **Environments** — `.env` file support with `{{variable}}` syntax
 - **History** — Timeline of all requests with restore
