@@ -80,7 +80,9 @@ pub fn parse_http_file(content: &str) -> Result<HttpRequest, String> {
 
     // Parse first line: METHOD URL
     let first_line = lines[0].trim();
-    let parts: Vec<&str> = first_line.split_whitespace().collect();
+    // Split only on the first whitespace to separate Method and URL, 
+    // allowing spaces in the URL (e.g., for handlebars syntax)
+    let parts: Vec<&str> = first_line.splitn(2, |c: char| c.is_whitespace()).collect();
     
     if parts.len() < 2 {
         return Err("Invalid first line. Expected: METHOD URL".to_string());
@@ -88,7 +90,7 @@ pub fn parse_http_file(content: &str) -> Result<HttpRequest, String> {
 
     request.method = HttpMethod::from_str(parts[0])
         .ok_or_else(|| format!("Invalid HTTP method: {}", parts[0]))?;
-    request.url = parts[1].to_string();
+    request.url = parts[1].trim().to_string();
 
     // Parse headers and body
     let mut i = 1;
@@ -158,5 +160,14 @@ Content-Type: application/json
         assert_eq!(request.headers.get("Authorization"), Some(&"Bearer token123".to_string()));
         assert_eq!(request.headers.get("Content-Type"), Some(&"application/json".to_string()));
         assert_eq!(request.body, Some(r#"{"name": "John"}"#.to_string()));
+    }
+
+    #[test]
+    fn test_parse_url_with_spaces() {
+        let content = "GET {{ base_url }}/users";
+        let request = parse_http_file(content).unwrap();
+        
+        assert!(matches!(request.method, HttpMethod::GET));
+        assert_eq!(request.url, "{{ base_url }}/users");
     }
 }
