@@ -2,11 +2,13 @@ use crate::env_parser::{parse_env_file, substitute_variables};
 use crate::http_parser::{parse_http_file, HttpMethod, HttpRequest};
 use crate::request_executor::{execute_request, HttpResponse};
 use eframe::egui;
+use notify_debouncer_mini::new_debouncer;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::mpsc::{channel, Receiver, Sender};
+use std::sync::mpsc::{channel, Receiver, RecvTimeoutError, Sender};
+use std::time::Duration;
 use walkdir::WalkDir;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -119,6 +121,15 @@ pub struct MercuryApp {
     pub has_unsaved_changes: bool,
     last_save_time: f64,
     last_saved_content: Option<String>, // Content at last save for comparison
+
+    // File system watcher
+    watcher_rx: Receiver<Result<(), String>>,
+    #[allow(dead_code)]
+    watcher_tx: Sender<Result<(), String>>,
+    watcher_shutdown: Option<Sender<()>>,
+    watched_path: Option<PathBuf>,
+    expanded_folders: HashSet<PathBuf>,
+    file_watcher_error: Option<String>,
 }
 
 // Timeline entry for request history
@@ -139,6 +150,7 @@ impl MercuryApp {
     pub fn new(_cc: &eframe::CreationContext<'_>) -> Self {
         let (response_tx, response_rx) = channel();
         let (folder_tx, folder_rx) = channel();
+        let (watcher_tx, watcher_rx) = channel();
 
         // Load saved state
         let saved_state = Self::load_state();
@@ -202,6 +214,12 @@ impl MercuryApp {
             has_unsaved_changes: false,
             last_save_time: f64::MAX, // Start high so first auto-save waits for actual save/load
             last_saved_content: None,
+            watcher_rx,
+            watcher_tx,
+            watcher_shutdown: None,
+            watched_path: None,
+            expanded_folders: HashSet::new(),
+            file_watcher_error: None,
         };
 
         // Restore saved state
@@ -267,6 +285,9 @@ impl MercuryApp {
 
         // Build collection tree
         self.build_collection_tree();
+
+        // Start file system watcher for external changes
+        self.start_file_watcher();
 
         // Scan for .http files (backward compatibility)
         for entry in WalkDir::new(&path).into_iter().filter_map(|e| e.ok()) {
@@ -396,13 +417,121 @@ impl MercuryApp {
     }
 
     fn build_collection_tree(&mut self) {
-        if let Some(workspace) = &self.workspace_path {
-            self.collection_tree = self.scan_directory(workspace, workspace);
+        if let Some(workspace) = self.workspace_path.clone() {
+            // Save current expanded state before rebuilding
+            let old_tree = std::mem::take(&mut self.collection_tree);
+            self.save_expanded_state(&old_tree);
+
+            // Rebuild tree
+            self.collection_tree = self.scan_directory(&workspace, &workspace);
+
             self.workspace_name = workspace
                 .file_name()
                 .unwrap_or_default()
                 .to_string_lossy()
                 .to_string();
+        }
+    }
+
+    /// Save the expanded state of all folders to the HashSet
+    fn save_expanded_state(&mut self, items: &[CollectionItem]) {
+        for item in items {
+            if let CollectionItem::Folder {
+                path,
+                expanded,
+                children,
+                ..
+            } = item
+            {
+                if *expanded {
+                    self.expanded_folders.insert(path.clone());
+                } else {
+                    self.expanded_folders.remove(path);
+                }
+                self.save_expanded_state(children);
+            }
+        }
+    }
+
+    /// Start file system watcher for the workspace directory
+    /// Start file system watcher for the workspace directory
+    fn start_file_watcher(&mut self) {
+        if let Some(workspace) = &self.workspace_path {
+            // Avoid restarting if path implementation hasn't changed
+            if self.watched_path.as_ref() == Some(workspace) {
+                return;
+            }
+
+            // Shutdown existing watcher if running
+            if let Some(shutdown_tx) = self.watcher_shutdown.take() {
+                let _ = shutdown_tx.send(());
+            }
+
+            // Update watched path
+            self.watched_path = Some(workspace.clone());
+            self.file_watcher_error = None;
+
+            let workspace_path = workspace.clone();
+            let tx = self.watcher_tx.clone();
+            let (shutdown_tx, shutdown_rx) = channel();
+            self.watcher_shutdown = Some(shutdown_tx);
+
+            std::thread::spawn(move || {
+                // Initial delay to avoid race condition with workspace loading
+                std::thread::sleep(Duration::from_secs(1));
+
+                let (debouncer_tx, debouncer_rx) = std::sync::mpsc::channel();
+
+                // Create debounced watcher (500ms debounce to avoid rapid rebuilds)
+                let mut debouncer = match new_debouncer(Duration::from_millis(500), debouncer_tx) {
+                    Ok(d) => d,
+                    Err(e) => {
+                        let _ = tx.send(Err(format!("Failed to create file watcher: {}", e)));
+                        return;
+                    }
+                };
+
+                // Watch the workspace directory recursively
+                if let Err(e) = debouncer
+                    .watcher()
+                    .watch(&workspace_path, notify::RecursiveMode::Recursive)
+                {
+                    let _ = tx.send(Err(format!("Failed to watch directory: {}", e)));
+                    return;
+                }
+
+                // Listen for events and signal main thread
+                // Keep debouncer alive throughout the thread
+                #[allow(unused_variables)]
+                let _debouncer = debouncer;
+                loop {
+                    // Check for shutdown signal
+                    if let Ok(_) | Err(std::sync::mpsc::TryRecvError::Disconnected) =
+                        shutdown_rx.try_recv()
+                    {
+                        break;
+                    }
+
+                    match debouncer_rx.recv_timeout(Duration::from_millis(200)) {
+                        Ok(Ok(events)) => {
+                            if !events.is_empty() {
+                                let _ = tx.send(Ok(()));
+                            }
+                        }
+                        Ok(Err(error)) => {
+                            let _ = tx.send(Err(format!("File watcher error: {:?}", error)));
+                        }
+                        Err(RecvTimeoutError::Timeout) => {
+                            // Timeout hit, loop back to check shutdown
+                            continue;
+                        }
+                        Err(RecvTimeoutError::Disconnected) => {
+                            // Debouncer channel closed
+                            break;
+                        }
+                    }
+                }
+            });
         }
     }
 
@@ -430,10 +559,12 @@ impl MercuryApp {
 
                 if path.is_dir() {
                     let children = self.scan_directory(&path, workspace_root);
+                    // Check saved state; expand all folders on first load (when expanded_folders is empty)
+                    let is_expanded = self.expanded_folders.contains(&path);
                     folders.push(CollectionItem::Folder {
                         name,
                         path: path.clone(),
-                        expanded: true,
+                        expanded: is_expanded || self.expanded_folders.is_empty(),
                         children,
                     });
                 } else if path.extension().and_then(|s| s.to_str()) == Some("http") {
@@ -1117,6 +1248,41 @@ impl eframe::App for MercuryApp {
         // Check for folder selection from async dialog
         if let Ok(path) = self.folder_rx.try_recv() {
             self.load_workspace(path);
+            ctx.request_repaint();
+        }
+
+        // Check for file system changes from watcher
+        // Check for file system changes from watcher
+        let mut needs_rebuild = false;
+        while let Ok(msg) = self.watcher_rx.try_recv() {
+            match msg {
+                Ok(_) => needs_rebuild = true,
+                Err(e) => {
+                    self.last_action_message = Some((e, ctx.input(|i| i.time), true));
+                    ctx.request_repaint();
+                }
+            }
+        }
+
+        if needs_rebuild {
+            // Rebuild tree while preserving expanded state
+            self.build_collection_tree();
+
+            // Handle edge case: current file was deleted externally
+            if let Some(ref current_path) = self.current_file {
+                if !current_path.exists() {
+                    self.current_file = None;
+                    self.url.clear();
+                    self.headers_text.clear();
+                    self.body_text.clear();
+                    self.response = None;
+                    self.last_action_message = Some((
+                        "File was deleted externally".to_string(),
+                        ctx.input(|i| i.time),
+                        true,
+                    ));
+                }
+            }
             ctx.request_repaint();
         }
 
