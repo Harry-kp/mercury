@@ -23,6 +23,8 @@ regex = "1"
 rfd = "0.15"
 image = "0.24"
 open = "5"
+notify = "7"
+notify-debouncer-mini = "0.5"
 
 [dev-dependencies]
 tempfile = "3"
