@@ -123,9 +123,9 @@ pub struct MercuryApp {
     last_saved_content: Option<String>, // Content at last save for comparison
 
     // File system watcher
-    watcher_rx: Receiver<()>,
+    watcher_rx: Receiver<Result<(), String>>,
     #[allow(dead_code)]
-    watcher_tx: Sender<()>,
+    watcher_tx: Sender<Result<(), String>>,
     expanded_folders: HashSet<PathBuf>,
 }
 
@@ -460,7 +460,7 @@ impl MercuryApp {
                 let mut debouncer = match new_debouncer(Duration::from_millis(500), debouncer_tx) {
                     Ok(d) => d,
                     Err(e) => {
-                        eprintln!("Failed to create file watcher: {}", e);
+                        let _ = tx.send(Err(format!("Failed to create file watcher: {}", e)));
                         return;
                     }
                 };
@@ -470,7 +470,7 @@ impl MercuryApp {
                     .watcher()
                     .watch(&workspace_path, notify::RecursiveMode::Recursive)
                 {
-                    eprintln!("Failed to watch directory: {}", e);
+                    let _ = tx.send(Err(format!("Failed to watch directory: {}", e)));
                     return;
                 }
 
@@ -481,12 +481,12 @@ impl MercuryApp {
                             // Any file change in workspace triggers rebuild
                             // The debouncer already batches events, just signal rebuild if any events
                             if !events.is_empty() {
-                                let _ = tx.send(());
+                                let _ = tx.send(Ok(()));
                             }
                         }
                         Ok(Err(error)) => {
-                            // Log watcher error but continue
-                            eprintln!("File watcher error: {:?}", error);
+                             // Report watcher error
+                             let _ = tx.send(Err(format!("File watcher error: {:?}", error)));
                         }
                         Err(_) => {
                             // Channel closed, exit watcher thread
@@ -1215,7 +1215,19 @@ impl eframe::App for MercuryApp {
         }
 
         // Check for file system changes from watcher
-        if self.watcher_rx.try_recv().is_ok() {
+        // Check for file system changes from watcher
+        let mut needs_rebuild = false;
+        while let Ok(msg) = self.watcher_rx.try_recv() {
+            match msg {
+                Ok(_) => needs_rebuild = true,
+                Err(e) => {
+                    self.last_action_message = Some((e, ctx.input(|i| i.time), true));
+                    ctx.request_repaint();
+                }
+            }
+        }
+
+        if needs_rebuild {
             // Rebuild tree while preserving expanded state
             self.build_collection_tree();
 
@@ -1342,7 +1354,7 @@ impl eframe::App for MercuryApp {
             ctx.request_repaint();
         }
         // Drain any pending watcher events (handled above, but drain to avoid buildup)
-        while self.watcher_rx.try_recv().is_ok() {}
+
 
         // Top panel with breadcrumb navigation
         egui::TopBottomPanel::top("top_panel")
