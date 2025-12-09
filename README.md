@@ -16,17 +16,17 @@
   <a href="#shortcuts">Shortcuts</a>
 </p>
 
-<p align="center">
-  <img src="website/assets/screenshot.png" alt="Mercury Screenshot" width="100%" style="border-radius: 8px; border: 1px solid #333;">
-</p>
 
 <p align="center">
   <img src="https://img.shields.io/github/v/release/Harry-kp/mercury?style=flat-square&color=00ff88" alt="Release">
+  <img src="https://img.shields.io/github/actions/workflow/status/Harry-kp/mercury/ci.yml?branch=master&style=flat-square&label=build" alt="Build Status">
   <img src="https://img.shields.io/github/license/Harry-kp/mercury?style=flat-square" alt="License">
   <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-blue?style=flat-square" alt="Platform">
 </p>
 
----
+<p align="center">
+  <img src="website/assets/screenshot.png" alt="Mercury Screenshot" width="100%" style="border-radius: 8px; border: 1px solid #333;">
+</p>
 
 ## Why Mercury?
 
