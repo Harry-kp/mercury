@@ -12,25 +12,22 @@ pub struct CurlRequest {
 /// Parse a cURL command into a structured request
 pub fn parse_curl(curl_cmd: &str) -> Result<CurlRequest, String> {
     let curl_cmd = curl_cmd.trim();
-    
+
     // Remove leading 'curl' command
-    let curl_cmd = curl_cmd
-        .strip_prefix("curl")
-        .unwrap_or(curl_cmd)
-        .trim();
-    
+    let curl_cmd = curl_cmd.strip_prefix("curl").unwrap_or(curl_cmd).trim();
+
     let mut url = String::new();
     let mut method = HttpMethod::GET;
     let mut headers = Vec::new();
     let mut body = None;
-    
+
     // Simple tokenizer for shell arguments
     let mut chars = curl_cmd.chars().peekable();
     let mut tokens = Vec::new();
     let mut current_token = String::new();
     let mut in_quotes = false;
     let mut quote_char = ' ';
-    
+
     while let Some(ch) = chars.next() {
         match ch {
             '\'' | '"' if !in_quotes => {
@@ -56,16 +53,16 @@ pub fn parse_curl(curl_cmd: &str) -> Result<CurlRequest, String> {
             }
         }
     }
-    
+
     if !current_token.is_empty() {
         tokens.push(current_token);
     }
-    
+
     // Parse tokens
     let mut i = 0;
     while i < tokens.len() {
         let token = &tokens[i];
-        
+
         match token.as_str() {
             "-X" | "--request" => {
                 if i + 1 < tokens.len() {
@@ -113,14 +110,14 @@ pub fn parse_curl(curl_cmd: &str) -> Result<CurlRequest, String> {
                 // Unknown flag, skip
             }
         }
-        
+
         i += 1;
     }
-    
+
     if url.is_empty() {
         return Err("No URL found in cURL command".to_string());
     }
-    
+
     Ok(CurlRequest {
         method,
         url,

@@ -73,17 +73,17 @@ impl HttpRequest {
 pub fn parse_http_file(content: &str) -> Result<HttpRequest, String> {
     let mut request = HttpRequest::new();
     let lines: Vec<&str> = content.lines().collect();
-    
+
     if lines.is_empty() {
         return Err("Empty file".to_string());
     }
 
     // Parse first line: METHOD URL
     let first_line = lines[0].trim();
-    // Split only on the first whitespace to separate Method and URL, 
+    // Split only on the first whitespace to separate Method and URL,
     // allowing spaces in the URL (e.g., for handlebars syntax)
     let parts: Vec<&str> = first_line.splitn(2, |c: char| c.is_whitespace()).collect();
-    
+
     if parts.len() < 2 {
         return Err("Invalid first line. Expected: METHOD URL".to_string());
     }
@@ -99,7 +99,7 @@ pub fn parse_http_file(content: &str) -> Result<HttpRequest, String> {
 
     while i < lines.len() {
         let line = lines[i];
-        
+
         // Empty line signals start of body
         if line.trim().is_empty() && !in_body {
             in_body = true;
@@ -113,10 +113,9 @@ pub fn parse_http_file(content: &str) -> Result<HttpRequest, String> {
             // Parse header
             let parts: Vec<&str> = line.splitn(2, ':').collect();
             if parts.len() == 2 {
-                request.headers.insert(
-                    parts[0].trim().to_string(),
-                    parts[1].trim().to_string(),
-                );
+                request
+                    .headers
+                    .insert(parts[0].trim().to_string(), parts[1].trim().to_string());
             }
         }
 
@@ -138,7 +137,7 @@ mod tests {
     fn test_parse_simple_get() {
         let content = "GET https://api.example.com/users";
         let request = parse_http_file(content).unwrap();
-        
+
         assert!(matches!(request.method, HttpMethod::GET));
         assert_eq!(request.url, "https://api.example.com/users");
         assert!(request.headers.is_empty());
@@ -152,13 +151,19 @@ Authorization: Bearer token123
 Content-Type: application/json
 
 {"name": "John"}"#;
-        
+
         let request = parse_http_file(content).unwrap();
-        
+
         assert!(matches!(request.method, HttpMethod::POST));
         assert_eq!(request.url, "https://api.example.com/users");
-        assert_eq!(request.headers.get("Authorization"), Some(&"Bearer token123".to_string()));
-        assert_eq!(request.headers.get("Content-Type"), Some(&"application/json".to_string()));
+        assert_eq!(
+            request.headers.get("Authorization"),
+            Some(&"Bearer token123".to_string())
+        );
+        assert_eq!(
+            request.headers.get("Content-Type"),
+            Some(&"application/json".to_string())
+        );
         assert_eq!(request.body, Some(r#"{"name": "John"}"#.to_string()));
     }
 
@@ -166,7 +171,7 @@ Content-Type: application/json
     fn test_parse_url_with_spaces() {
         let content = "GET {{ base_url }}/users";
         let request = parse_http_file(content).unwrap();
-        
+
         assert!(matches!(request.method, HttpMethod::GET));
         assert_eq!(request.url, "{{ base_url }}/users");
     }

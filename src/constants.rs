@@ -1,4 +1,4 @@
-pub const GITHUB_USERNAME: &str = "Harry-kp"; 
+pub const GITHUB_USERNAME: &str = "Harry-kp";
 pub const GITHUB_REPO: &str = "mercury";
 
 pub fn get_repo_url() -> String {

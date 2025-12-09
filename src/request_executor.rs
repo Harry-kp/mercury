@@ -14,9 +14,9 @@ pub struct HttpResponse {
 
 pub fn execute_request(request: &HttpRequest) -> Result<HttpResponse, String> {
     let start = Instant::now();
-    
+
     let client = reqwest::blocking::Client::new();
-    
+
     let mut req_builder = match request.method {
         HttpMethod::GET => client.get(&request.url),
         HttpMethod::POST => client.post(&request.url),
@@ -43,7 +43,7 @@ pub fn execute_request(request: &HttpRequest) -> Result<HttpResponse, String> {
 
     let status = response.status().as_u16();
     let status_text = response.status().to_string();
-    
+
     let mut headers = Vec::new();
     for (name, value) in response.headers() {
         if let Ok(value_str) = value.to_str() {

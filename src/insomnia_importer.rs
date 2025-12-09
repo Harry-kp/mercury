@@ -67,19 +67,26 @@ struct InsomniaBody {
     text: Option<String>,
 }
 
-pub fn import_insomnia_collection(json_path: &Path, output_dir: &Path) -> Result<(usize, usize), String> {
-    let content = fs::read_to_string(json_path)
-        .map_err(|e| format!("Failed to read file: {}", e))?;
-    
+pub fn import_insomnia_collection(
+    json_path: &Path,
+    output_dir: &Path,
+) -> Result<(usize, usize), String> {
+    let content =
+        fs::read_to_string(json_path).map_err(|e| format!("Failed to read file: {}", e))?;
+
     let export: InsomniaExport = match serde_json::from_str(&content) {
         Ok(json) => json,
         Err(json_err) => {
             // Try parsing as YAML if JSON fails
-            serde_yaml::from_str(&content)
-                .map_err(|yaml_err| format!("Failed to parse as JSON ({}) or YAML ({})", json_err, yaml_err))?
+            serde_yaml::from_str(&content).map_err(|yaml_err| {
+                format!(
+                    "Failed to parse as JSON ({}) or YAML ({})",
+                    json_err, yaml_err
+                )
+            })?
         }
     };
-    
+
     // Extract request groups (folders)
     let mut groups: HashMap<String, String> = HashMap::new();
     for resource in &export.resources {
@@ -87,7 +94,7 @@ pub fn import_insomnia_collection(json_path: &Path, output_dir: &Path) -> Result
             groups.insert(group.id.clone(), group.name.clone());
         }
     }
-    
+
     // Extract environments
     let mut env_count = 0;
     for resource in &export.resources {
@@ -95,7 +102,7 @@ pub fn import_insomnia_collection(json_path: &Path, output_dir: &Path) -> Result
             if !env.data.is_empty() {
                 let env_name = env.name.to_lowercase().replace(' ', "-");
                 let env_path = output_dir.join(format!(".env.{}", env_name));
-                
+
                 let mut env_content = String::new();
                 for (key, value) in &env.data {
                     let value_str = match value {
@@ -106,43 +113,44 @@ pub fn import_insomnia_collection(json_path: &Path, output_dir: &Path) -> Result
                     };
                     env_content.push_str(&format!("{}={}\n", key, value_str));
                 }
-                
+
                 fs::write(&env_path, env_content)
                     .map_err(|e| format!("Failed to write environment file: {}", e))?;
                 env_count += 1;
             }
         }
     }
-    
+
     // Convert requests to .http files
     let mut request_count = 0;
     for resource in &export.resources {
         if let InsomniaResource::Request(request) = resource {
-            let folder_name = request.parent_id
+            let folder_name = request
+                .parent_id
                 .as_ref()
                 .and_then(|id| groups.get(id))
                 .map(|name| name.to_lowercase().replace(' ', "-"))
                 .unwrap_or_else(|| "imported".to_string());
-            
+
             let folder_path = output_dir.join(&folder_name);
             fs::create_dir_all(&folder_path)
                 .map_err(|e| format!("Failed to create folder: {}", e))?;
-            
+
             let file_name = format!("{}.http", request.name.to_lowercase().replace(' ', "-"));
             let file_path = folder_path.join(&file_name);
-            
+
             let mut http_content = String::new();
-            
+
             // Method and URL
             http_content.push_str(&format!("{} {}\n", request.method, request.url));
-            
+
             // Headers
             for header in &request.headers {
                 if !header.disabled {
                     http_content.push_str(&format!("{}: {}\n", header.name, header.value));
                 }
             }
-            
+
             // Body
             if let Some(body) = &request.body {
                 if let Some(text) = &body.text {
@@ -153,13 +161,13 @@ pub fn import_insomnia_collection(json_path: &Path, output_dir: &Path) -> Result
                     }
                 }
             }
-            
+
             fs::write(&file_path, http_content)
                 .map_err(|e| format!("Failed to write request file: {}", e))?;
             request_count += 1;
         }
     }
-    
+
     Ok((request_count, env_count))
 }
 
