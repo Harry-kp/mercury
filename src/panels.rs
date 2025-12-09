@@ -60,10 +60,10 @@ impl MercuryApp {
                                     ui.horizontal(|ui| {
                                         ui.add_space(Spacing::MD);
                                         let method_color = match temp.method.as_str() {
-                                            "GET" => egui::Color32::from_rgb(34, 197, 94),
-                                            "POST" => egui::Color32::from_rgb(59, 130, 246),
-                                            "PUT" => egui::Color32::from_rgb(251, 146, 60),
-                                            "DELETE" => egui::Color32::from_rgb(239, 68, 68),
+                                            "GET" => Colors::METHOD_GET,
+                                            "POST" => Colors::METHOD_POST,
+                                            "PUT" => Colors::METHOD_PUT,
+                                            "DELETE" => Colors::METHOD_DELETE,
                                             _ => Colors::TEXT_MUTED,
                                         };
                                         ui.label(egui::RichText::new(&temp.method)
@@ -203,7 +203,7 @@ impl MercuryApp {
             .resizable(true)
             .frame(egui::Frame::none()
                 .fill(Colors::BG_CARD)
-                .stroke(egui::Stroke::new(1.0, Colors::BORDER_SUBTLE))
+                .stroke(egui::Stroke::new(crate::theme::StrokeWidth::THIN, Colors::BORDER_SUBTLE))
                 .inner_margin(Spacing::MD)
             )
             .show(ctx, |ui| {
@@ -350,7 +350,7 @@ impl MercuryApp {
                 
                 ScrollArea::vertical()
                     .id_salt("response_headers")
-                    .max_height(120.0)
+                    .max_height(Layout::HEADERS_MAX_HEIGHT)
                     .show(ui, |ui| {
                         for (name, value) in &response.headers {
                             ui.horizontal(|ui| {
@@ -412,7 +412,7 @@ impl MercuryApp {
                 
                 // Rocket icon
                 ui.label(egui::RichText::new("🚀")
-                    .size(48.0));
+                    .size(FontSize::HERO));
                 
                 ui.add_space(Spacing::MD);
                 
@@ -505,7 +505,7 @@ impl MercuryApp {
         egui::Frame::none()
             .fill(Colors::BG_CARD)
             .rounding(Radius::MD)
-            .stroke(egui::Stroke::new(1.0, Colors::BORDER_SUBTLE))
+            .stroke(egui::Stroke::new(crate::theme::StrokeWidth::THIN, Colors::BORDER_SUBTLE))
             .inner_margin(Spacing::MD)
             .outer_margin(egui::Margin { left: 0.0, right: Spacing::SM, top: 0.0, bottom: 0.0 })
             .show(ui, |ui| {
@@ -518,7 +518,7 @@ impl MercuryApp {
         egui::Frame::none()
             .fill(Colors::BG_CARD)
             .rounding(Radius::MD)
-            .stroke(egui::Stroke::new(1.0, Colors::BORDER_SUBTLE))
+            .stroke(egui::Stroke::new(crate::theme::StrokeWidth::THIN, Colors::BORDER_SUBTLE))
             .inner_margin(Spacing::MD)
             .outer_margin(egui::Margin { left: 0.0, right: Spacing::SM, top: 0.0, bottom: 0.0 })
             .show(ui, |ui| {
@@ -556,7 +556,7 @@ impl MercuryApp {
             }
             
             egui::popup_below_widget(ui, egui::Id::new("method_popup"), &method_response, egui::PopupCloseBehavior::CloseOnClickOutside, |ui| {
-                ui.set_min_width(80.0);
+                ui.set_min_width(Layout::METHOD_POPUP_WIDTH);
                 for method in [HttpMethod::GET, HttpMethod::POST, HttpMethod::PUT, HttpMethod::PATCH, HttpMethod::DELETE] {
                     let color = match method.as_str() {
                         "GET" => Colors::METHOD_GET,
@@ -760,13 +760,13 @@ impl MercuryApp {
                             changed = true;
                         }
                     } else {
-                        ui.add_space(18.0); // Placeholder space for empty row
+                        ui.add_space(Spacing::LG + 2.0); // Placeholder space for empty row (checkbox width)
                     }
                     
                     let key_response = ui.add(
                         egui::TextEdit::singleline(key)
                             .hint_text(egui::RichText::new("Key").color(Colors::PLACEHOLDER))
-                            .desired_width(100.0)
+                            .desired_width(Layout::INPUT_FIELD_WIDTH)
                             .frame(false)
                             .font(egui::TextStyle::Monospace)
                     );

@@ -134,7 +134,7 @@ pub fn error_state(ui: &mut Ui, error: &str) {
             .rounding(Radius::SM)
             .inner_margin(Spacing::SM)
             .show(ui, |ui| {
-                ui.label(RichText::new(error).color(Color32::from_rgb(255, 180, 180)).monospace().size(FontSize::SM));
+                ui.label(RichText::new(error).color(Colors::ERROR).monospace().size(FontSize::SM));
             });
     });
 }
@@ -167,7 +167,7 @@ pub fn copy_icon_button(ui: &mut Ui) -> bool {
         ui.painter().rect_stroke(
             response.rect.expand(2.0),
             2.0,
-            egui::Stroke::new(1.0, Colors::PRIMARY)
+            egui::Stroke::new(crate::theme::StrokeWidth::THIN, Colors::PRIMARY)
         );
     }
     

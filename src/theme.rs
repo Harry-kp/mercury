@@ -10,9 +10,15 @@ impl Colors {
     pub const BG_BASE: Color32 = Color32::from_rgb(26, 26, 30);       // #1a1a1e - App background
     pub const BG_SURFACE: Color32 = Color32::from_rgb(33, 33, 38);    // #212126 - Panel background
     pub const BG_CARD: Color32 = Color32::from_rgb(39, 39, 44);       // #27272c - Card background
+    pub const BG_MODAL: Color32 = Color32::from_rgb(48, 48, 54);      // #303036 - Modal background (lighter for contrast)
+    pub const BG_INPUT: Color32 = Color32::from_rgb(36, 36, 42);      // #24242a - Text input background
+    pub const BG_WIDGET_INACTIVE: Color32 = Color32::from_rgb(52, 52, 58);  // Widget inactive state
+    pub const BG_WIDGET_HOVER: Color32 = Color32::from_rgb(60, 60, 68);     // Widget hover state
+    pub const BG_CODE: Color32 = Color32::from_rgb(30, 30, 34);             // Code block background
     
     // Borders - Subtle with warmth
     pub const BORDER_SUBTLE: Color32 = Color32::from_rgb(50, 50, 58);     // #32323a
+    pub const BORDER_WIDGET: Color32 = Color32::from_rgb(61, 61, 71);     // Widget borders
     
     // Text - Warm whites, clear hierarchy
     pub const TEXT_PRIMARY: Color32 = Color32::from_rgb(232, 232, 237);   // #e8e8ed - Main content
@@ -67,6 +73,7 @@ impl Spacing {
     pub const XS: f32 = 4.0;    // 4px - tight
     pub const SM: f32 = 8.0;    // 8px - compact  
     pub const MD: f32 = 12.0;   // 12px - default
+    pub const LG: f32 = 16.0;   // 16px - comfortable
     pub const XL: f32 = 24.0;   // 24px - spacious
     pub const XXL: f32 = 32.0;  // 32px - section gaps
 }
@@ -89,6 +96,7 @@ impl FontSize {
     pub const LG: f32 = 13.0;   // Subheadings
     pub const ICON: f32 = 16.0; // Icons
     pub const EMOJI: f32 = 32.0; // Emojis
+    pub const HERO: f32 = 48.0;  // Large decorative icons/emoji in empty states
 }
 
 /// Stroke widths
@@ -115,13 +123,27 @@ pub const BYTES_PER_KB: f32 = 1024.0;
 pub struct Layout;
 
 impl Layout {
+    // Sidebar
     pub const SIDEBAR_MIN: f32 = 180.0;
     pub const SIDEBAR_MAX: f32 = 280.0;
     pub const SIDEBAR_DEFAULT: f32 = 220.0;
+    
+    // Response panel
     pub const RESPONSE_MIN: f32 = 280.0;
     pub const RESPONSE_MAX: f32 = 500.0;
     pub const RESPONSE_DEFAULT: f32 = 350.0;
+    
+    // Fixed heights
+    pub const TOPBAR_HEIGHT: f32 = 40.0;
     pub const STATUS_BAR_HEIGHT: f32 = 24.0;
+    pub const HEADERS_MAX_HEIGHT: f32 = 120.0;
+    
+    // Modal/Popup widths
+    pub const MODAL_WIDTH: f32 = 420.0;
+    pub const POPUP_MIN_WIDTH: f32 = 140.0;
+    pub const POPUP_WIDE_WIDTH: f32 = 160.0;
+    pub const METHOD_POPUP_WIDTH: f32 = 80.0;
+    pub const INPUT_FIELD_WIDTH: f32 = 100.0;
 }
 
 

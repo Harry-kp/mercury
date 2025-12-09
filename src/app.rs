@@ -868,7 +868,7 @@ impl MercuryApp {
             .exact_height(crate::theme::Layout::STATUS_BAR_HEIGHT)
             .frame(egui::Frame::none()
                 .fill(crate::theme::Colors::BG_SURFACE)
-                .stroke(egui::Stroke::new(1.0, crate::theme::Colors::BORDER_SUBTLE))
+                .stroke(egui::Stroke::new(crate::theme::StrokeWidth::THIN, crate::theme::Colors::BORDER_SUBTLE))
                 .inner_margin(egui::Margin::symmetric(12.0, 0.0))
             )
             .show(ctx, |ui| {
@@ -1076,18 +1076,18 @@ impl eframe::App for MercuryApp {
         
         // Top panel with breadcrumb navigation
         egui::TopBottomPanel::top("top_panel")
-            .exact_height(40.0)
+            .exact_height(crate::theme::Layout::TOPBAR_HEIGHT)
             .frame(egui::Frame::none()
                 .fill(crate::theme::Colors::BG_SURFACE)
-                .stroke(egui::Stroke::new(1.0, crate::theme::Colors::BORDER_SUBTLE))
-                .inner_margin(egui::Margin::symmetric(12.0, 0.0))
+                .stroke(egui::Stroke::new(crate::theme::StrokeWidth::THIN, crate::theme::Colors::BORDER_SUBTLE))
+                .inner_margin(egui::Margin::symmetric(crate::theme::Spacing::MD, 0.0))
             )
             .show(ctx, |ui| {
             ui.horizontal_centered(|ui| {
                 // Breadcrumb navigation: workspace / folder / request
                 if !self.workspace_name.is_empty() {
                     ui.label(egui::RichText::new(&self.workspace_name)
-                        .size(12.0)
+                        .size(crate::theme::FontSize::MD)
                         .color(crate::theme::Colors::TEXT_SECONDARY));
                     
                     // Show folder path if request is in a subfolder
@@ -1103,17 +1103,17 @@ impl eframe::App for MercuryApp {
                                 
                                 for part in parts {
                                     ui.label(egui::RichText::new("/")
-                                        .size(12.0)
+                                        .size(crate::theme::FontSize::MD)
                                         .color(crate::theme::Colors::TEXT_MUTED));
                                     ui.label(egui::RichText::new(part)
-                                        .size(12.0)
+                                        .size(crate::theme::FontSize::MD)
                                         .color(crate::theme::Colors::TEXT_SECONDARY));
                                 }
                             }
                         }
                         
                         ui.label(egui::RichText::new("/")
-                            .size(12.0)
+                            .size(crate::theme::FontSize::MD)
                             .color(crate::theme::Colors::TEXT_MUTED));
                         
                         let request_name = path.file_stem()
@@ -1141,25 +1141,25 @@ impl eframe::App for MercuryApp {
                             .color(crate::theme::Colors::TEXT_PRIMARY));
                     } else {
                         ui.label(egui::RichText::new("/")
-                            .size(12.0)
+                            .size(crate::theme::FontSize::MD)
                             .color(crate::theme::Colors::TEXT_MUTED));
                         ui.label(egui::RichText::new("Untitled")
-                            .size(12.0)
+                            .size(crate::theme::FontSize::MD)
                             .color(crate::theme::Colors::TEXT_MUTED));
                     }
                 } else {
                     ui.label(egui::RichText::new("No workspace")
-                        .size(12.0)
+                        .size(crate::theme::FontSize::MD)
                         .color(crate::theme::Colors::TEXT_MUTED));
                 }
                 
-                ui.add_space(16.0);
+                ui.add_space(crate::theme::Spacing::LG);
                 
                 // Search - minimal, fills space
                 ui.add(
                     egui::TextEdit::singleline(&mut self.search_query)
                         .hint_text(egui::RichText::new("Search (Cmd+K)").color(crate::theme::Colors::PLACEHOLDER))
-                        .desired_width(160.0)
+                        .desired_width(crate::theme::Layout::POPUP_WIDE_WIDTH)
                         .frame(false)
                         .id(egui::Id::new("search_box"))
                 );
@@ -1186,7 +1186,7 @@ impl eframe::App for MercuryApp {
                     let env_response = ui.add_enabled(
                         self.workspace_path.is_some(),
                         egui::Label::new(egui::RichText::new(env_display)
-                            .size(12.0)
+                            .size(crate::theme::FontSize::MD)
                             .color(env_color))
                             .sense(egui::Sense::click())
                     );
@@ -1200,7 +1200,7 @@ impl eframe::App for MercuryApp {
                     let mut new_selection = None;
                     
                     egui::popup_below_widget(ui, env_id, &env_response, egui::PopupCloseBehavior::CloseOnClickOutside, |ui| {
-                        ui.set_min_width(140.0);
+                        ui.set_min_width(crate::theme::Layout::POPUP_MIN_WIDTH);
                         ui.set_min_height(100.0);
                         for (i, env) in env_files_clone.iter().enumerate() {
                             let color = if env.contains("prod") {
@@ -1224,13 +1224,13 @@ impl eframe::App for MercuryApp {
                         self.load_env();
                     }
                     
-                    ui.add_space(20.0);
+                    ui.add_space(crate::theme::Spacing::XL);
                     
                     // Open - borderless, just text
                     let open_id = egui::Id::new("open_popup");
                     let open_response = ui.add(
                         egui::Label::new(egui::RichText::new("Open")
-                            .size(12.0)
+                            .size(crate::theme::FontSize::MD)
                             .color(crate::theme::Colors::TEXT_SECONDARY))
                             .sense(egui::Sense::click())
                     );
@@ -1239,7 +1239,7 @@ impl eframe::App for MercuryApp {
                     }
                     
                     egui::popup_below_widget(ui, open_id, &open_response, egui::PopupCloseBehavior::CloseOnClickOutside, |ui| {
-                        ui.set_min_width(160.0);
+                        ui.set_min_width(crate::theme::Layout::POPUP_WIDE_WIDTH);
                         if ui.selectable_label(false, "Open Folder...").clicked() {
                             let tx = self.folder_tx.clone();
                             std::thread::spawn(move || {
@@ -1255,13 +1255,13 @@ impl eframe::App for MercuryApp {
                         }
                     });
                     
-                    ui.add_space(20.0);
+                    ui.add_space(crate::theme::Spacing::XL);
                     
                     // Help - borderless
                     let help_id = egui::Id::new("help_popup");
                     let help_response = ui.add(
                         egui::Label::new(egui::RichText::new("Help")
-                            .size(12.0)
+                            .size(crate::theme::FontSize::MD)
                             .color(crate::theme::Colors::TEXT_SECONDARY))
                             .sense(egui::Sense::click())
                     );
@@ -1270,7 +1270,7 @@ impl eframe::App for MercuryApp {
                     }
                     
                     egui::popup_below_widget(ui, help_id, &help_response, egui::PopupCloseBehavior::CloseOnClickOutside, |ui| {
-                        ui.set_min_width(140.0);
+                        ui.set_min_width(crate::theme::Layout::POPUP_MIN_WIDTH);
                         if ui.selectable_label(false, "Keyboard Shortcuts").clicked() {
                             self.show_shortcuts = true;
                             ui.memory_mut(|mem| mem.close_popup());
@@ -1319,11 +1319,22 @@ impl eframe::App for MercuryApp {
 
         // New Request Dialog
         if self.show_new_request_dialog {
+            // Escape to close
+            if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+                self.show_new_request_dialog = false;
+            }
             egui::Window::new("New Request")
                 .collapsible(false)
                 .resizable(false)
+                .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+                .frame(egui::Frame::none()
+                    .fill(crate::theme::Colors::BG_MODAL)
+                    .stroke(egui::Stroke::new(crate::theme::StrokeWidth::THIN, crate::theme::Colors::BORDER_SUBTLE))
+                    .rounding(crate::theme::Radius::MD)
+                    .inner_margin(crate::theme::Spacing::MD))
                 .show(ctx, |ui| {
-                    ui.label("Request name:");
+                    ui.label(egui::RichText::new("Request name:").color(crate::theme::Colors::TEXT_SECONDARY));
+                    ui.add_space(crate::theme::Spacing::XS);
                     let response = ui.text_edit_singleline(&mut self.new_request_name);
                     if response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
                         if !self.new_request_name.is_empty() {
@@ -1336,6 +1347,7 @@ impl eframe::App for MercuryApp {
                             self.show_new_request_dialog = false;
                         }
                     }
+                    ui.add_space(crate::theme::Spacing::SM);
                     ui.horizontal(|ui| {
                         if ui.button("Create").clicked() && !self.new_request_name.is_empty() {
                             if let Some(parent) = self.context_menu_item.clone() {
@@ -1357,11 +1369,22 @@ impl eframe::App for MercuryApp {
 
         // New Folder Dialog
         if self.show_new_folder_dialog {
+            // Escape to close
+            if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+                self.show_new_folder_dialog = false;
+            }
             egui::Window::new("New Folder")
                 .collapsible(false)
                 .resizable(false)
+                .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+                .frame(egui::Frame::none()
+                    .fill(crate::theme::Colors::BG_MODAL)
+                    .stroke(egui::Stroke::new(crate::theme::StrokeWidth::THIN, crate::theme::Colors::BORDER_SUBTLE))
+                    .rounding(crate::theme::Radius::MD)
+                    .inner_margin(crate::theme::Spacing::MD))
                 .show(ctx, |ui| {
-                    ui.label("Folder name:");
+                    ui.label(egui::RichText::new("Folder name:").color(crate::theme::Colors::TEXT_SECONDARY));
+                    ui.add_space(crate::theme::Spacing::XS);
                     let response = ui.text_edit_singleline(&mut self.new_folder_name);
                     if response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
                         if !self.new_folder_name.is_empty() {
@@ -1374,6 +1397,7 @@ impl eframe::App for MercuryApp {
                             self.show_new_folder_dialog = false;
                         }
                     }
+                    ui.add_space(crate::theme::Spacing::SM);
                     ui.horizontal(|ui| {
                         if ui.button("Create").clicked() && !self.new_folder_name.is_empty() {
                             if let Some(parent) = self.context_menu_item.clone() {
@@ -1395,11 +1419,22 @@ impl eframe::App for MercuryApp {
 
         // Rename Dialog
         if self.show_rename_dialog {
+            // Escape to close
+            if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+                self.show_rename_dialog = false;
+            }
             egui::Window::new("Rename")
                 .collapsible(false)
                 .resizable(false)
+                .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+                .frame(egui::Frame::none()
+                    .fill(crate::theme::Colors::BG_MODAL)
+                    .stroke(egui::Stroke::new(crate::theme::StrokeWidth::THIN, crate::theme::Colors::BORDER_SUBTLE))
+                    .rounding(crate::theme::Radius::MD)
+                    .inner_margin(crate::theme::Spacing::MD))
                 .show(ctx, |ui| {
-                    ui.label("New name:");
+                    ui.label(egui::RichText::new("New name:").color(crate::theme::Colors::TEXT_SECONDARY));
+                    ui.add_space(crate::theme::Spacing::XS);
                     let response = ui.text_edit_singleline(&mut self.rename_text);
                     if response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
                         if !self.rename_text.is_empty() {
@@ -1412,6 +1447,7 @@ impl eframe::App for MercuryApp {
                             self.show_rename_dialog = false;
                         }
                     }
+                    ui.add_space(crate::theme::Spacing::SM);
                     ui.horizontal(|ui| {
                         if ui.button("Rename").clicked() && !self.rename_text.is_empty() {
                             if let Some(old_path) = self.context_menu_item.clone() {
@@ -1433,9 +1469,19 @@ impl eframe::App for MercuryApp {
 
         // Delete Confirmation Dialog
         if self.show_delete_confirm {
+            // Escape to cancel
+            if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+                self.show_delete_confirm = false;
+            }
             egui::Window::new("Confirm Delete")
                 .collapsible(false)
                 .resizable(false)
+                .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+                .frame(egui::Frame::none()
+                    .fill(crate::theme::Colors::BG_MODAL)
+                    .stroke(egui::Stroke::new(crate::theme::StrokeWidth::THIN, crate::theme::Colors::BORDER_SUBTLE))
+                    .rounding(crate::theme::Radius::MD)
+                    .inner_margin(crate::theme::Spacing::MD))
                 .show(ctx, |ui| {
                     let target_info = self.delete_target.as_ref().map(|t| {
                         (t.file_name().unwrap_or_default().to_string_lossy().to_string(), 
@@ -1444,18 +1490,20 @@ impl eframe::App for MercuryApp {
                     });
                     
                     if let Some((name, is_dir, target_path)) = target_info {
-                        ui.label(format!("Are you sure you want to delete '{}'?", name));
+                        ui.label(egui::RichText::new(format!("Are you sure you want to delete '{}'?", name))
+                            .color(crate::theme::Colors::TEXT_PRIMARY));
                         if is_dir {
-                            ui.colored_label(egui::Color32::from_rgb(255, 100, 100), 
-                                "Warning: This will delete the folder and all its contents!");
+                            ui.add_space(crate::theme::Spacing::XS);
+                            ui.label(egui::RichText::new("⚠ This will delete the folder and all its contents!")
+                                .color(crate::theme::Colors::ERROR));
                         }
-                        ui.add_space(8.0);
+                        ui.add_space(crate::theme::Spacing::MD);
                         
                         // Check for Enter key to confirm
                         let enter_pressed = ui.input(|i| i.key_pressed(egui::Key::Enter));
                         
                         ui.horizontal(|ui| {
-                            if ui.button("Delete").clicked() || enter_pressed {
+                            if ui.button(egui::RichText::new("Delete").color(crate::theme::Colors::ERROR)).clicked() || enter_pressed {
                                 if let Err(e) = self.delete_item(&target_path) {
                                     self.last_action_message = Some((e, ctx.input(|i| i.time), true));
                                 } else {
@@ -1473,11 +1521,23 @@ impl eframe::App for MercuryApp {
 
         // New Environment Dialog
         if self.show_new_env_dialog {
+            // Escape to close
+            if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+                self.show_new_env_dialog = false;
+            }
             egui::Window::new("New Environment")
                 .collapsible(false)
                 .resizable(false)
+                .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+                .frame(egui::Frame::none()
+                    .fill(crate::theme::Colors::BG_MODAL)
+                    .stroke(egui::Stroke::new(crate::theme::StrokeWidth::THIN, crate::theme::Colors::BORDER_SUBTLE))
+                    .rounding(crate::theme::Radius::MD)
+                    .inner_margin(crate::theme::Spacing::MD))
                 .show(ctx, |ui| {
-                    ui.label("Environment name (e.g., 'staging', 'production'):");
+                    ui.label(egui::RichText::new("Environment name (e.g., 'staging', 'production'):")
+                        .color(crate::theme::Colors::TEXT_SECONDARY));
+                    ui.add_space(crate::theme::Spacing::XS);
                     let response = ui.text_edit_singleline(&mut self.new_env_name);
                     if response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
                         if !self.new_env_name.is_empty() {
@@ -1490,6 +1550,7 @@ impl eframe::App for MercuryApp {
                             self.show_new_env_dialog = false;
                         }
                     }
+                    ui.add_space(crate::theme::Spacing::SM);
                     ui.horizontal(|ui| {
                         if ui.button("Create").clicked() && !self.new_env_name.is_empty() {
                             let name = self.new_env_name.clone();
@@ -1509,74 +1570,82 @@ impl eframe::App for MercuryApp {
 
         // Keyboard shortcuts help window
         if self.show_shortcuts {
+            // Escape to close
+            if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+                self.show_shortcuts = false;
+            }
             egui::Window::new("Keyboard Shortcuts")
                 .collapsible(false)
                 .resizable(false)
-                .default_width(400.0)
+                .default_width(crate::theme::Layout::MODAL_WIDTH)
+                .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+                .frame(egui::Frame::none()
+                    .fill(crate::theme::Colors::BG_MODAL)
+                    .stroke(egui::Stroke::new(crate::theme::StrokeWidth::THIN, crate::theme::Colors::BORDER_SUBTLE))
+                    .rounding(crate::theme::Radius::MD)
+                    .inner_margin(crate::theme::Spacing::MD))
                 .show(ctx, |ui| {
-                    ui.add_space(8.0);
+                    ui.add_space(crate::theme::Spacing::SM);
                     
                     egui::Grid::new("shortcuts_grid")
                         .num_columns(2)
                         .spacing([40.0, 8.0])
                         .striped(true)
                         .show(ui, |ui| {
-                            ui.label(egui::RichText::new("Action").strong());
-                            ui.label(egui::RichText::new("Shortcut").strong());
+                            ui.label(egui::RichText::new("Action").strong().color(crate::theme::Colors::TEXT_PRIMARY));
+                            ui.label(egui::RichText::new("Shortcut").strong().color(crate::theme::Colors::TEXT_PRIMARY));
                             ui.end_row();
                             
-                            ui.label("New Request");
-                            ui.label("Cmd/Ctrl + N");
+                            ui.label(egui::RichText::new("New Request").color(crate::theme::Colors::TEXT_SECONDARY));
+                            ui.label(egui::RichText::new("Cmd/Ctrl + N").color(crate::theme::Colors::TEXT_MUTED));
                             ui.end_row();
                             
-                            ui.label("Send Request");
-                            ui.label("Cmd/Ctrl + Enter");
+                            ui.label(egui::RichText::new("Send Request").color(crate::theme::Colors::TEXT_SECONDARY));
+                            ui.label(egui::RichText::new("Cmd/Ctrl + Enter").color(crate::theme::Colors::TEXT_MUTED));
                             ui.end_row();
                             
-                            ui.label("Focus Search");
-                            ui.label("Cmd/Ctrl + K");
+                            ui.label(egui::RichText::new("Focus Search").color(crate::theme::Colors::TEXT_SECONDARY));
+                            ui.label(egui::RichText::new("Cmd/Ctrl + K").color(crate::theme::Colors::TEXT_MUTED));
                             ui.end_row();
                             
-                            ui.label("Copy as cURL");
-                            ui.label("Cmd/Ctrl + Shift + C");
+                            ui.label(egui::RichText::new("Copy as cURL").color(crate::theme::Colors::TEXT_SECONDARY));
+                            ui.label(egui::RichText::new("Cmd/Ctrl + Shift + C").color(crate::theme::Colors::TEXT_MUTED));
                             ui.end_row();
                             
-                            ui.label("Open Folder");
-                            ui.label("Cmd/Ctrl + O");
+                            ui.label(egui::RichText::new("Open Folder").color(crate::theme::Colors::TEXT_SECONDARY));
+                            ui.label(egui::RichText::new("Cmd/Ctrl + O").color(crate::theme::Colors::TEXT_MUTED));
                             ui.end_row();
                             
-                            ui.label("Switch Environment");
-                            ui.label("Cmd/Ctrl + E");
+                            ui.label(egui::RichText::new("Switch Environment").color(crate::theme::Colors::TEXT_SECONDARY));
+                            ui.label(egui::RichText::new("Cmd/Ctrl + E").color(crate::theme::Colors::TEXT_MUTED));
                             ui.end_row();
                             
-                            ui.label("Delete Current Request");
-                            ui.label("Right-click > Delete");
+                            ui.label(egui::RichText::new("Delete Current Request").color(crate::theme::Colors::TEXT_SECONDARY));
+                            ui.label(egui::RichText::new("Right-click > Delete").color(crate::theme::Colors::TEXT_MUTED));
                             ui.end_row();
                             
-                            ui.label("Toggle Raw View");
-                            ui.label("Cmd/Ctrl + R");
+                            ui.label(egui::RichText::new("Toggle Raw View").color(crate::theme::Colors::TEXT_SECONDARY));
+                            ui.label(egui::RichText::new("Cmd/Ctrl + R").color(crate::theme::Colors::TEXT_MUTED));
                             ui.end_row();
                             
-                            ui.label("Clear Search");
-                            ui.label("Escape");
+                            ui.label(egui::RichText::new("Clear Search").color(crate::theme::Colors::TEXT_SECONDARY));
+                            ui.label(egui::RichText::new("Escape").color(crate::theme::Colors::TEXT_MUTED));
                             ui.end_row();
                             
-                            ui.label("Show Shortcuts");
-                            ui.label("?");
+                            ui.label(egui::RichText::new("Show Shortcuts").color(crate::theme::Colors::TEXT_SECONDARY));
+                            ui.label(egui::RichText::new("?").color(crate::theme::Colors::TEXT_MUTED));
                             ui.end_row();
                             
-                            ui.label("Focus Mode");
-                            ui.label("Cmd/Ctrl + Shift + F");
+                            ui.label(egui::RichText::new("Focus Mode").color(crate::theme::Colors::TEXT_SECONDARY));
+                            ui.label(egui::RichText::new("Cmd/Ctrl + Shift + F").color(crate::theme::Colors::TEXT_MUTED));
                             ui.end_row();
                             
-                            ui.label("Toggle History");
-                            ui.label("Cmd/Ctrl + H");
+                            ui.label(egui::RichText::new("Toggle History").color(crate::theme::Colors::TEXT_SECONDARY));
+                            ui.label(egui::RichText::new("Cmd/Ctrl + H").color(crate::theme::Colors::TEXT_MUTED));
                             ui.end_row();
                         });
                     
-                    ui.add_space(8.0);
-                    ui.separator();
-                    ui.add_space(8.0);
+                    ui.add_space(crate::theme::Spacing::MD);
                     
                     ui.horizontal(|ui| {
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
