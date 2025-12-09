@@ -454,6 +454,9 @@ impl MercuryApp {
             let tx = self.watcher_tx.clone();
 
             std::thread::spawn(move || {
+                // Initial delay to avoid race condition with workspace loading
+                std::thread::sleep(Duration::from_secs(1));
+
                 let (debouncer_tx, debouncer_rx) = std::sync::mpsc::channel();
 
                 // Create debounced watcher (500ms debounce to avoid rapid rebuilds)
