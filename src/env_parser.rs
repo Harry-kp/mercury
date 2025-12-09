@@ -8,7 +8,7 @@ pub fn parse_env_file(path: &Path) -> Result<HashMap<String, String>, std::io::E
 
     for line in content.lines() {
         let line = line.trim();
-        
+
         // Skip empty lines and comments
         if line.is_empty() || line.starts_with('#') {
             continue;
@@ -17,7 +17,8 @@ pub fn parse_env_file(path: &Path) -> Result<HashMap<String, String>, std::io::E
         // Parse KEY=VALUE
         if let Some((key, value)) = line.split_once('=') {
             let key = key.trim().to_string();
-            let value = value.trim()
+            let value = value
+                .trim()
                 .trim_matches('"')
                 .trim_matches('\'')
                 .to_string();
@@ -30,12 +31,12 @@ pub fn parse_env_file(path: &Path) -> Result<HashMap<String, String>, std::io::E
 
 pub fn substitute_variables(text: &str, variables: &HashMap<String, String>) -> String {
     let mut result = text.to_string();
-    
+
     for (key, value) in variables {
         let pattern = format!("{{{{{}}}}}", key);
         result = result.replace(&pattern, value);
     }
-    
+
     result
 }
 
@@ -51,7 +52,7 @@ mod tests {
 
         let input = "https://{{host}}/users?token={{token}}";
         let output = substitute_variables(input, &vars);
-        
+
         assert_eq!(output, "https://api.example.com/users?token=abc123");
     }
 }

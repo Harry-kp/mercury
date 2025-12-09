@@ -50,37 +50,37 @@ pub struct MercuryApp {
     pub workspace_path: Option<PathBuf>,
     pub workspace_name: String,
     pub collection_tree: Vec<CollectionItem>,
-    
+
     pub current_file: Option<PathBuf>,
     pub method: HttpMethod,
     pub url: String,
     pub headers_text: String,
     pub body_text: String,
     pub auth_text: String,
-    
+
     pub response: Option<HttpResponse>,
     pub previous_response: Option<HttpResponse>,
     pub response_view_raw: bool,
     pub show_response_headers: bool,
     pub show_response_diff: bool,
-    
+
     pub env_files: Vec<String>,
     pub selected_env: usize,
     pub env_variables: HashMap<String, String>,
-    
+
     pub search_query: String,
     pub show_shortcuts: bool,
     pub selected_tab: usize,
     pub focus_mode: bool,
-    pub headers_bulk_edit: bool,  // Toggle between key-value and bulk edit
-    
+    pub headers_bulk_edit: bool, // Toggle between key-value and bulk edit
+
     pub timeline: Vec<TimelineEntry>,
     pub timeline_search: String,
     pub show_timeline: bool,
-    
+
     pub temp_requests: Vec<TempRequest>,
     pub recent_expanded: bool,
-    
+
     pub context_menu_item: Option<PathBuf>,
     pub selected_folder: Option<PathBuf>,
     pub show_rename_dialog: bool,
@@ -93,7 +93,7 @@ pub struct MercuryApp {
     pub new_env_name: String,
     pub show_delete_confirm: bool,
     pub delete_target: Option<PathBuf>,
-    
+
     pub should_create_new_request: bool,
     pub should_execute_request: bool,
     pub should_open_folder_dialog: bool,
@@ -101,17 +101,17 @@ pub struct MercuryApp {
     pub should_focus_search: bool,
     pub should_focus_url_bar: bool,
     pub should_copy_curl: bool,
-    
+
     pub last_action_message: Option<(String, f64, bool)>,
     pub copied_feedback_until: f64,
     pub request_error: Option<String>,
-    
+
     pub show_about: bool,
-    
+
     pub executing: bool,
     response_rx: Receiver<Result<HttpResponse, String>>,
     response_tx: Sender<Result<HttpResponse, String>>,
-    
+
     folder_rx: Receiver<PathBuf>,
     folder_tx: Sender<PathBuf>,
 }
@@ -134,10 +134,10 @@ impl MercuryApp {
     pub fn new(_cc: &eframe::CreationContext<'_>) -> Self {
         let (response_tx, response_rx) = channel();
         let (folder_tx, folder_rx) = channel();
-        
+
         // Load saved state
         let saved_state = Self::load_state();
-        
+
         let mut app = Self {
             workspace_path: None,
             workspace_name: String::new(),
@@ -195,7 +195,7 @@ impl MercuryApp {
             folder_rx,
             folder_tx,
         };
-        
+
         // Restore saved state
         if let Some(state) = saved_state {
             // Restore method
@@ -213,7 +213,7 @@ impl MercuryApp {
             app.body_text = state.body_text;
             app.auth_text = state.auth_text;
             app.selected_tab = state.selected_tab;
-            
+
             // Restore workspace if it exists
             if let Some(workspace_str) = state.workspace_path {
                 let workspace_path = PathBuf::from(&workspace_str);
@@ -227,24 +227,22 @@ impl MercuryApp {
                 }
             }
         }
-        
+
         app
     }
 
     fn load_workspace(&mut self, path: PathBuf) {
         self.workspace_path = Some(path.clone());
-        
+
         // Scan for .env files
         self.env_files = vec!["None".to_string()];
-        for entry in WalkDir::new(&path).max_depth(2) {
-            if let Ok(entry) = entry {
-                let file_name = entry.file_name().to_string_lossy();
-                if file_name.starts_with(".env") {
-                    self.env_files.push(file_name.to_string());
-                }
+        for entry in WalkDir::new(&path).max_depth(2).into_iter().flatten() {
+            let file_name = entry.file_name().to_string_lossy();
+            if file_name.starts_with(".env") {
+                self.env_files.push(file_name.to_string());
             }
         }
-        
+
         // Auto-select first non-production environment if available
         if self.env_files.len() > 1 {
             // Try to find .env.dev or .env.development first
@@ -261,7 +259,7 @@ impl MercuryApp {
 
         // Build collection tree
         self.build_collection_tree();
-        
+
         // Scan for .http files (backward compatibility)
         for entry in WalkDir::new(&path).into_iter().filter_map(|e| e.ok()) {
             let path = entry.path();
@@ -286,7 +284,7 @@ impl MercuryApp {
                 self.current_file = Some(path.to_path_buf());
                 self.method = request.method;
                 self.url = request.url;
-                
+
                 // Convert headers map to text
                 self.headers_text = request
                     .headers
@@ -294,7 +292,7 @@ impl MercuryApp {
                     .map(|(k, v)| format!("{}: {}", k, v))
                     .collect::<Vec<_>>()
                     .join("\n");
-                
+
                 self.body_text = request.body.unwrap_or_default();
                 self.response = None;
             }
@@ -303,7 +301,7 @@ impl MercuryApp {
 
     fn load_env(&mut self) {
         self.env_variables.clear();
-        
+
         if self.selected_env > 0 && self.selected_env < self.env_files.len() {
             if let Some(workspace) = &self.workspace_path {
                 let env_file = workspace.join(&self.env_files[self.selected_env]);
@@ -313,65 +311,68 @@ impl MercuryApp {
             }
         }
     }
-    
+
     pub fn extract_variables(text: &str) -> Vec<String> {
         let mut vars = Vec::new();
         let mut chars = text.chars().peekable();
-        
+
         while let Some(c) = chars.next() {
-            if c == '{' {
-                if chars.peek() == Some(&'{') {
-                    chars.next(); // consume second {
-                    let mut var_name = String::new();
-                    
-                    while let Some(c) = chars.next() {
-                        if c == '}' {
-                            if chars.peek() == Some(&'}') {
-                                chars.next(); // consume second }
-                                if !var_name.is_empty() {
-                                    vars.push(var_name.trim().to_string());
-                                }
-                                break;
+            if c == '{' && chars.peek() == Some(&'{') {
+                chars.next(); // consume second {
+                let mut var_name = String::new();
+
+                while let Some(c) = chars.next() {
+                    if c == '}' {
+                        if chars.peek() == Some(&'}') {
+                            chars.next(); // consume second }
+                            if !var_name.is_empty() {
+                                vars.push(var_name.trim().to_string());
                             }
-                        } else {
-                            var_name.push(c);
+                            break;
                         }
+                    } else {
+                        var_name.push(c);
                     }
                 }
             }
         }
-        
+
         vars
     }
-    
 
     fn build_collection_tree(&mut self) {
         if let Some(workspace) = &self.workspace_path {
             self.collection_tree = self.scan_directory(workspace, workspace);
-            self.workspace_name = workspace.file_name()
+            self.workspace_name = workspace
+                .file_name()
                 .unwrap_or_default()
                 .to_string_lossy()
                 .to_string();
         }
     }
-    
+
+    #[allow(clippy::only_used_in_recursion)]
     fn scan_directory(&self, dir: &Path, workspace_root: &Path) -> Vec<CollectionItem> {
         let mut folders = Vec::new();
         let mut requests = Vec::new();
-        
+
         if let Ok(entries) = fs::read_dir(dir) {
             let mut entries: Vec<_> = entries.filter_map(|e| e.ok()).collect();
             entries.sort_by_key(|e| e.path());
-            
+
             for entry in entries {
                 let path = entry.path();
-                let name = path.file_name().unwrap_or_default().to_string_lossy().to_string();
-                
+                let name = path
+                    .file_name()
+                    .unwrap_or_default()
+                    .to_string_lossy()
+                    .to_string();
+
                 // Skip hidden files and env files
                 if name.starts_with('.') {
                     continue;
                 }
-                
+
                 if path.is_dir() {
                     let children = self.scan_directory(&path, workspace_root);
                     folders.push(CollectionItem::Folder {
@@ -386,7 +387,7 @@ impl MercuryApp {
                     } else {
                         None
                     };
-                    
+
                     requests.push(CollectionItem::Request {
                         name,
                         path: path.clone(),
@@ -395,57 +396,62 @@ impl MercuryApp {
                 }
             }
         }
-        
+
         // Combine folders first, then requests
         folders.extend(requests);
         folders
     }
-    
+
     fn create_new_request(&mut self, parent_path: &Path, name: &str) -> Result<(), String> {
         let file_name = if name.ends_with(".http") {
             name.to_string()
         } else {
             format!("{}.http", name)
         };
-        
+
         let file_path = parent_path.join(&file_name);
-        
+
         if file_path.exists() {
             return Err("File already exists".to_string());
         }
-        
+
         // Use current form content instead of template
-        let content = format!("{:?} {}\n{}\n{}", 
-            self.method, 
+        let content = format!(
+            "{:?} {}\n{}\n{}",
+            self.method,
             self.url,
-            if !self.headers_text.is_empty() { format!("\n{}", self.headers_text) } else { String::new() },
-            if !self.body_text.is_empty() { format!("\n{}", self.body_text) } else { String::new() }
+            if !self.headers_text.is_empty() {
+                format!("\n{}", self.headers_text)
+            } else {
+                String::new()
+            },
+            if !self.body_text.is_empty() {
+                format!("\n{}", self.body_text)
+            } else {
+                String::new()
+            }
         );
-        
-        fs::write(&file_path, content)
-            .map_err(|e| format!("Failed to create file: {}", e))?;
-        
+
+        fs::write(&file_path, content).map_err(|e| format!("Failed to create file: {}", e))?;
+
         // Remove from temp requests if it exists
         if let Some(pos) = self.temp_requests.iter().position(|t| t.url == self.url) {
             self.temp_requests.remove(pos);
             self.save_temp_requests();
         }
-        
+
         self.build_collection_tree();
         self.load_file(&file_path);
         Ok(())
     }
-    
-    
+
     fn delete_item(&mut self, path: &Path) -> Result<(), String> {
         if path.is_dir() {
-            fs::remove_dir_all(path)
-                .map_err(|e| format!("Failed to delete folder: {}", e))?;
+            fs::remove_dir_all(path).map_err(|e| format!("Failed to delete folder: {}", e))?;
         } else {
-            fs::remove_file(path)
-                .map_err(|e| format!("Failed to delete file: {}", e))?;
+            fs::remove_file(path).map_err(|e| format!("Failed to delete file: {}", e))?;
         }
-        
+
         self.build_collection_tree();
         if self.current_file.as_ref() == Some(&path.to_path_buf()) {
             self.current_file = None;
@@ -456,53 +462,51 @@ impl MercuryApp {
         }
         Ok(())
     }
-    
+
     fn rename_item(&mut self, old_path: &Path, new_name: &str) -> Result<(), String> {
         let parent = old_path.parent().ok_or("No parent directory")?;
         let new_path = parent.join(new_name);
-        
+
         if new_path.exists() {
             return Err("Name already exists".to_string());
         }
-        
-        fs::rename(old_path, &new_path)
-            .map_err(|e| format!("Failed to rename: {}", e))?;
-        
+
+        fs::rename(old_path, &new_path).map_err(|e| format!("Failed to rename: {}", e))?;
+
         // Update current file if it was renamed
         if self.current_file.as_ref() == Some(&old_path.to_path_buf()) {
             self.current_file = Some(new_path.clone());
         }
-        
+
         self.build_collection_tree();
         Ok(())
     }
-    
+
     fn create_new_folder(&mut self, parent_path: &Path, name: &str) -> Result<(), String> {
         let folder_path = parent_path.join(name);
-        
+
         if folder_path.exists() {
             return Err("Folder already exists".to_string());
         }
-        
-        fs::create_dir(&folder_path)
-            .map_err(|e| format!("Failed to create folder: {}", e))?;
-        
+
+        fs::create_dir(&folder_path).map_err(|e| format!("Failed to create folder: {}", e))?;
+
         self.build_collection_tree();
         Ok(())
     }
-    
+
     fn duplicate_request(&mut self, path: &Path) -> Result<(), String> {
         if !path.is_file() {
             return Err("Not a file".to_string());
         }
-        
-        let content = fs::read_to_string(path)
-            .map_err(|e| format!("Failed to read file: {}", e))?;
-        
+
+        let content =
+            fs::read_to_string(path).map_err(|e| format!("Failed to read file: {}", e))?;
+
         let parent = path.parent().ok_or("No parent directory")?;
         let stem = path.file_stem().unwrap_or_default().to_string_lossy();
         let ext = path.extension().unwrap_or_default().to_string_lossy();
-        
+
         let mut counter = 1;
         let mut new_path;
         loop {
@@ -512,14 +516,13 @@ impl MercuryApp {
             }
             counter += 1;
         }
-        
-        fs::write(&new_path, content)
-            .map_err(|e| format!("Failed to duplicate file: {}", e))?;
-        
+
+        fs::write(&new_path, content).map_err(|e| format!("Failed to duplicate file: {}", e))?;
+
         self.build_collection_tree();
         Ok(())
     }
-    
+
     fn create_new_env(&mut self, name: &str) -> Result<(), String> {
         if let Some(workspace) = &self.workspace_path {
             let env_name = if name.starts_with(".env") {
@@ -527,25 +530,22 @@ impl MercuryApp {
             } else {
                 format!(".env.{}", name)
             };
-            
+
             let env_path = workspace.join(&env_name);
-            
+
             if env_path.exists() {
                 return Err("Environment already exists".to_string());
             }
-            
+
             fs::write(&env_path, "# Environment variables\n")
                 .map_err(|e| format!("Failed to create environment: {}", e))?;
-            
+
             self.load_workspace(workspace.clone());
             Ok(())
         } else {
             Err("No workspace loaded".to_string())
         }
     }
-    
-
-
 
     pub fn execute_request(&mut self, ctx: &egui::Context) {
         let url = substitute_variables(&self.url, &self.env_variables);
@@ -571,7 +571,7 @@ impl MercuryApp {
         let ctx = ctx.clone();
         let tx = self.response_tx.clone();
         self.executing = true;
-        
+
         std::thread::spawn(move || {
             let response = execute_request(&request);
             let _ = tx.send(response);
@@ -583,21 +583,21 @@ impl MercuryApp {
         let url = substitute_variables(&self.url, &self.env_variables);
         let headers_text = substitute_variables(&self.headers_text, &self.env_variables);
         let body = substitute_variables(&self.body_text, &self.env_variables);
-        
+
         let mut curl = format!("curl -X {} '{}'", self.method.as_str(), url);
-        
+
         // Add headers
         for line in headers_text.lines() {
             if let Some((key, value)) = line.split_once(':') {
                 curl.push_str(&format!(" \\\n  -H '{}: {}'", key.trim(), value.trim()));
             }
         }
-        
+
         // Add body
         if !body.is_empty() {
             curl.push_str(&format!(" \\\n  -d '{}'", body.replace('\'', "'\\''")));
         }
-        
+
         curl
     }
 
@@ -605,7 +605,6 @@ impl MercuryApp {
         let curl = self.generate_curl();
         ctx.output_mut(|o| o.copied_text = curl);
     }
-
 }
 
 impl MercuryApp {
@@ -613,12 +612,12 @@ impl MercuryApp {
         let home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
         home.join(".mercury").join("recent.json")
     }
-    
+
     fn get_state_file_path() -> PathBuf {
         let home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
         home.join(".mercury").join("state.json")
     }
-    
+
     fn load_state() -> Option<AppState> {
         let path = Self::get_state_file_path();
         if path.exists() {
@@ -630,15 +629,18 @@ impl MercuryApp {
         }
         None
     }
-    
+
     pub fn save_state(&self) {
         let path = Self::get_state_file_path();
         if let Some(parent) = path.parent() {
             let _ = fs::create_dir_all(parent);
         }
-        
+
         let state = AppState {
-            workspace_path: self.workspace_path.as_ref().map(|p| p.to_string_lossy().to_string()),
+            workspace_path: self
+                .workspace_path
+                .as_ref()
+                .map(|p| p.to_string_lossy().to_string()),
             method: self.method.as_str().to_string(),
             url: self.url.clone(),
             headers_text: self.headers_text.clone(),
@@ -647,12 +649,12 @@ impl MercuryApp {
             selected_tab: self.selected_tab,
             selected_env: self.selected_env,
         };
-        
+
         if let Ok(json) = serde_json::to_string_pretty(&state) {
             let _ = fs::write(&path, json);
         }
     }
-    
+
     fn load_temp_requests() -> Vec<TempRequest> {
         let path = Self::get_recent_file_path();
         if path.exists() {
@@ -664,161 +666,191 @@ impl MercuryApp {
         }
         Vec::new()
     }
-    
+
     pub fn save_temp_requests(&self) {
         let path = Self::get_recent_file_path();
         if let Some(parent) = path.parent() {
             let _ = fs::create_dir_all(parent);
         }
-        
-        let to_save: Vec<_> = self.temp_requests.iter()
+
+        let to_save: Vec<_> = self
+            .temp_requests
+            .iter()
             .rev()
             .take(50)
             .rev()
             .cloned()
             .collect();
-        
+
         if let Ok(json) = serde_json::to_string_pretty(&to_save) {
             let _ = fs::write(&path, json);
         }
     }
-    
-    pub fn render_collection_tree(&mut self, ui: &mut egui::Ui, items: &mut [CollectionItem], depth: usize) {
+
+    pub fn render_collection_tree(
+        &mut self,
+        ui: &mut egui::Ui,
+        items: &mut [CollectionItem],
+        depth: usize,
+    ) {
         let search = self.search_query.to_lowercase();
-        
+
         for item in items {
             match item {
-                CollectionItem::Folder { name, path, expanded, children } => {
+                CollectionItem::Folder {
+                    name,
+                    path,
+                    expanded,
+                    children,
+                } => {
                     // If searching, check if any child matches
                     let folder_matches = if search.is_empty() {
                         true
                     } else {
                         // Folder matches if its name or any descendant matches
-                        name.to_lowercase().contains(&search) || 
-                        Self::folder_has_matching_children(children, &search)
+                        name.to_lowercase().contains(&search)
+                            || Self::folder_has_matching_children(children, &search)
                     };
-                    
+
                     if !folder_matches {
                         continue;
                     }
-                    
+
                     let folder_row = ui.horizontal(|ui| {
-                        ui.add_space((depth * crate::theme::Indent::TREE_LEVEL as usize) as f32 + 12.0);
-                        
+                        ui.add_space(
+                            (depth * crate::theme::Indent::TREE_LEVEL as usize) as f32 + 12.0,
+                        );
+
                         // Folder icon (open/closed state)
                         let folder_icon = if *expanded { "📂" } else { "📁" };
-                        ui.label(egui::RichText::new(folder_icon)
-                            .size(crate::theme::FontSize::MD));
-                        
+                        ui.label(egui::RichText::new(folder_icon).size(crate::theme::FontSize::MD));
+
                         let is_selected = self.selected_folder.as_ref() == Some(path);
-                        
+
                         ui.add_space(crate::theme::Spacing::XS);
-                        let mut name_text = egui::RichText::new(name.as_str()).size(crate::theme::FontSize::SM);
+                        let mut name_text =
+                            egui::RichText::new(name.as_str()).size(crate::theme::FontSize::SM);
                         if is_selected {
-                            name_text = name_text.color(crate::theme::Colors::SELECTED_ITEM).strong();
+                            name_text = name_text
+                                .color(crate::theme::Colors::SELECTED_ITEM)
+                                .strong();
                         }
-                        
+
                         ui.label(name_text);
                     });
-                    
+
                     // Create interactive area covering the full row
                     let row_rect = folder_row.response.rect;
                     let full_rect = egui::Rect::from_min_max(
                         egui::pos2(row_rect.min.x, row_rect.min.y),
-                        egui::pos2(ui.available_width() + row_rect.min.x, row_rect.max.y)
+                        egui::pos2(ui.available_width() + row_rect.min.x, row_rect.max.y),
                     );
-                    let folder_response = ui.interact(full_rect, egui::Id::new(("folder", path.clone())), egui::Sense::click());
-                    
+                    let folder_response = ui.interact(
+                        full_rect,
+                        egui::Id::new(("folder", path.clone())),
+                        egui::Sense::click(),
+                    );
+
                     if folder_response.hovered() {
                         ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
                     }
-                    
+
                     if folder_response.clicked() {
                         *expanded = !*expanded;
                         self.selected_folder = Some(path.clone());
                     }
-                    
+
                     folder_response.context_menu(|ui| {
-                            if ui.button("➕ New Request").clicked() {
-                                self.context_menu_item = Some(path.clone());
-                                self.show_new_request_dialog = true;
-                                self.new_request_name = String::new();
-                                ui.close_menu();
-                            }
-                            if ui.button("📁 New Folder").clicked() {
-                                self.context_menu_item = Some(path.clone());
-                                self.show_new_folder_dialog = true;
-                                self.new_folder_name = String::new();
-                                ui.close_menu();
-                            }
-                            ui.separator();
-                            if ui.button("✏️ Rename").clicked() {
-                                self.context_menu_item = Some(path.clone());
-                                self.show_rename_dialog = true;
-                                self.rename_text = name.clone();
-                                ui.close_menu();
-                            }
-                            if ui.button("🗑 Delete").clicked() {
-                                self.delete_target = Some(path.clone());
-                                self.show_delete_confirm = true;
-                                ui.close_menu();
-                            }
-                        });
-                    
+                        if ui.button("➕ New Request").clicked() {
+                            self.context_menu_item = Some(path.clone());
+                            self.show_new_request_dialog = true;
+                            self.new_request_name = String::new();
+                            ui.close_menu();
+                        }
+                        if ui.button("📁 New Folder").clicked() {
+                            self.context_menu_item = Some(path.clone());
+                            self.show_new_folder_dialog = true;
+                            self.new_folder_name = String::new();
+                            ui.close_menu();
+                        }
+                        ui.separator();
+                        if ui.button("✏️ Rename").clicked() {
+                            self.context_menu_item = Some(path.clone());
+                            self.show_rename_dialog = true;
+                            self.rename_text = name.clone();
+                            ui.close_menu();
+                        }
+                        if ui.button("🗑 Delete").clicked() {
+                            self.delete_target = Some(path.clone());
+                            self.show_delete_confirm = true;
+                            ui.close_menu();
+                        }
+                    });
+
                     if *expanded || !search.is_empty() {
                         // If searching, always show children (auto-expand)
                         self.render_collection_tree(ui, children, depth + 1);
                     }
-                },
+                }
                 CollectionItem::Request { name, path, method } => {
                     // If searching, skip non-matching requests
                     if !search.is_empty() && !name.to_lowercase().contains(&search) {
                         continue;
                     }
-                    
+
                     let request_row = ui.horizontal(|ui| {
-                        ui.add_space((depth * crate::theme::Indent::TREE_LEVEL as usize) as f32 + 14.0);
-                        
+                        ui.add_space(
+                            (depth * crate::theme::Indent::TREE_LEVEL as usize) as f32 + 14.0,
+                        );
+
                         // Request/document icon
-                        ui.label(egui::RichText::new("📄")
-                            .size(crate::theme::FontSize::SM));
-                        
+                        ui.label(egui::RichText::new("📄").size(crate::theme::FontSize::SM));
+
                         if let Some(method) = method {
                             let (r, g, b) = method.color();
                             let color = egui::Color32::from_rgb(r, g, b);
-                            ui.label(egui::RichText::new(method.as_str())
-                                .color(color)
-                                .size(crate::theme::FontSize::XS)
-                                .strong());
+                            ui.label(
+                                egui::RichText::new(method.as_str())
+                                    .color(color)
+                                    .size(crate::theme::FontSize::XS)
+                                    .strong(),
+                            );
                         }
-                        
+
                         ui.add_space(crate::theme::Spacing::XS);
-                        
+
                         let is_current = self.current_file.as_ref() == Some(path);
-                        let mut name_text = egui::RichText::new(name.as_str()).size(crate::theme::FontSize::SM);
+                        let mut name_text =
+                            egui::RichText::new(name.as_str()).size(crate::theme::FontSize::SM);
                         if is_current {
-                            name_text = name_text.strong().color(crate::theme::Colors::SELECTED_ITEM);
+                            name_text = name_text
+                                .strong()
+                                .color(crate::theme::Colors::SELECTED_ITEM);
                         }
-                        
+
                         ui.label(name_text);
                     });
-                    
+
                     // Create interactive area covering the full row
                     let row_rect = request_row.response.rect;
                     let full_rect = egui::Rect::from_min_max(
                         egui::pos2(row_rect.min.x, row_rect.min.y),
-                        egui::pos2(ui.available_width() + row_rect.min.x, row_rect.max.y)
+                        egui::pos2(ui.available_width() + row_rect.min.x, row_rect.max.y),
                     );
-                    let request_response = ui.interact(full_rect, egui::Id::new(("request", path.clone())), egui::Sense::click());
-                    
+                    let request_response = ui.interact(
+                        full_rect,
+                        egui::Id::new(("request", path.clone())),
+                        egui::Sense::click(),
+                    );
+
                     if request_response.hovered() {
                         ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
                     }
-                    
+
                     if request_response.clicked() {
                         self.load_file(path);
                     }
-                    
+
                     request_response.context_menu(|ui| {
                         if ui.button("📋 Duplicate").clicked() {
                             let _ = self.duplicate_request(path);
@@ -840,7 +872,7 @@ impl MercuryApp {
             }
         }
     }
-    
+
     /// Helper to check if a folder has any matching children
     fn folder_has_matching_children(children: &[CollectionItem], search: &str) -> bool {
         for child in children {
@@ -862,48 +894,77 @@ impl MercuryApp {
         }
         false
     }
-    
+
     fn render_status_bar(&mut self, ctx: &egui::Context) {
         egui::TopBottomPanel::bottom("status_bar")
             .exact_height(crate::theme::Layout::STATUS_BAR_HEIGHT)
-            .frame(egui::Frame::none()
-                .fill(crate::theme::Colors::BG_SURFACE)
-                .stroke(egui::Stroke::new(1.0, crate::theme::Colors::BORDER_SUBTLE))
-                .inner_margin(egui::Margin::symmetric(12.0, 0.0))
+            .frame(
+                egui::Frame::none()
+                    .fill(crate::theme::Colors::BG_SURFACE)
+                    .stroke(egui::Stroke::new(
+                        crate::theme::StrokeWidth::THIN,
+                        crate::theme::Colors::BORDER_SUBTLE,
+                    ))
+                    .inner_margin(egui::Margin::symmetric(12.0, 0.0)),
             )
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
                     let current_time = ui.input(|i| i.time);
-                    
+
                     if let Some((msg, timestamp, is_error)) = &self.last_action_message {
                         if current_time - timestamp < crate::constants::FADE_DURATION_SECONDS {
-                            let alpha = ((crate::constants::FADE_DURATION_SECONDS - (current_time - timestamp)) / crate::constants::FADE_DURATION_SECONDS * 255.0) as u8;
+                            let alpha = ((crate::constants::FADE_DURATION_SECONDS
+                                - (current_time - timestamp))
+                                / crate::constants::FADE_DURATION_SECONDS
+                                * 255.0) as u8;
                             let color = if *is_error {
-                                egui::Color32::from_rgba_unmultiplied(crate::theme::Colors::ERROR_FLASH.r(), crate::theme::Colors::ERROR_FLASH.g(), crate::theme::Colors::ERROR_FLASH.b(), alpha)
+                                egui::Color32::from_rgba_unmultiplied(
+                                    crate::theme::Colors::ERROR_FLASH.r(),
+                                    crate::theme::Colors::ERROR_FLASH.g(),
+                                    crate::theme::Colors::ERROR_FLASH.b(),
+                                    alpha,
+                                )
                             } else {
-                                egui::Color32::from_rgba_unmultiplied(crate::theme::Colors::SUCCESS_FLASH.r(), crate::theme::Colors::SUCCESS_FLASH.g(), crate::theme::Colors::SUCCESS_FLASH.b(), alpha)
+                                egui::Color32::from_rgba_unmultiplied(
+                                    crate::theme::Colors::SUCCESS_FLASH.r(),
+                                    crate::theme::Colors::SUCCESS_FLASH.g(),
+                                    crate::theme::Colors::SUCCESS_FLASH.b(),
+                                    alpha,
+                                )
                             };
-                            ui.label(egui::RichText::new(msg).color(color).size(crate::theme::FontSize::SM));
+                            ui.label(
+                                egui::RichText::new(msg)
+                                    .color(color)
+                                    .size(crate::theme::FontSize::SM),
+                            );
                             ctx.request_repaint();
                         }
                     }
-                    
+
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if ui.add(
-                            egui::Label::new(egui::RichText::new("? Shortcuts")
-                                .size(crate::theme::FontSize::SM)
-                                .color(crate::theme::Colors::TEXT_MUTED))
-                                .sense(egui::Sense::click())
-                        ).on_hover_cursor(egui::CursorIcon::PointingHand).clicked() {
+                        if ui
+                            .add(
+                                egui::Label::new(
+                                    egui::RichText::new("? Shortcuts")
+                                        .size(crate::theme::FontSize::SM)
+                                        .color(crate::theme::Colors::TEXT_MUTED),
+                                )
+                                .sense(egui::Sense::click()),
+                            )
+                            .on_hover_cursor(egui::CursorIcon::PointingHand)
+                            .clicked()
+                        {
                             self.show_shortcuts = true;
                         }
-                        
+
                         ui.add_space(crate::theme::Spacing::SM * 2.0);
-                        
+
                         if !self.workspace_name.is_empty() {
-                            ui.label(egui::RichText::new(&self.workspace_name)
-                                .size(crate::theme::FontSize::SM)
-                                .color(crate::theme::Colors::TEXT_MUTED));
+                            ui.label(
+                                egui::RichText::new(&self.workspace_name)
+                                    .size(crate::theme::FontSize::SM)
+                                    .color(crate::theme::Colors::TEXT_MUTED),
+                            );
                         }
                     });
                 });
@@ -930,22 +991,22 @@ impl eframe::App for MercuryApp {
                         _response_body: response.body.clone(),
                     };
                     self.timeline.push(entry);
-                    
+
                     if self.timeline.len() > crate::constants::MAX_TIMELINE_ENTRIES {
                         self.timeline.remove(0);
                     }
-                    
+
                     // Save to Recent (only if not a saved file AND it's a new unique request)
                     if self.current_file.is_none() && !self.url.is_empty() {
                         let method_str = format!("{:?}", self.method);
                         // Check if this exact request already exists
-                        let exists = self.temp_requests.iter().any(|t| 
-                            t.url == self.url && 
-                            t.method == method_str &&
-                            t.headers == self.headers_text &&
-                            t.body == self.body_text
-                        );
-                        
+                        let exists = self.temp_requests.iter().any(|t| {
+                            t.url == self.url
+                                && t.method == method_str
+                                && t.headers == self.headers_text
+                                && t.body == self.body_text
+                        });
+
                         if !exists {
                             let temp_req = TempRequest {
                                 method: method_str,
@@ -958,7 +1019,7 @@ impl eframe::App for MercuryApp {
                             self.save_temp_requests();
                         }
                     }
-                    
+
                     // Track previous response for diff
                     self.previous_response = self.response.take();
                     self.response = Some(response);
@@ -973,17 +1034,17 @@ impl eframe::App for MercuryApp {
                 }
             }
         }
-        
+
         // Check for folder selection from async dialog
         if let Ok(path) = self.folder_rx.try_recv() {
             self.load_workspace(path);
             ctx.request_repaint();
         }
-        
+
         // Execute deferred actions (after keyboard input processing)
         if self.should_create_new_request {
             self.should_create_new_request = false;
-            
+
             // Always just clear the form - no dialog, no save required
             self.current_file = None;
             self.method = HttpMethod::GET;
@@ -994,15 +1055,16 @@ impl eframe::App for MercuryApp {
             self.response = None;
             self.previous_response = None;
             self.should_focus_url_bar = true;
-            self.last_action_message = Some(("New request".to_string(), ctx.input(|i| i.time), false));
+            self.last_action_message =
+                Some(("New request".to_string(), ctx.input(|i| i.time), false));
             ctx.request_repaint();
         }
-        
+
         if self.should_execute_request {
             self.should_execute_request = false;
             self.execute_request(ctx);
         }
-        
+
         if self.should_open_folder_dialog {
             self.should_open_folder_dialog = false;
             let tx = self.folder_tx.clone();
@@ -1012,12 +1074,12 @@ impl eframe::App for MercuryApp {
                 }
             });
         }
-        
+
         if self.should_open_insomnia_import {
             self.should_open_insomnia_import = false;
             let current_workspace = self.workspace_path.clone();
             let folder_tx = self.folder_tx.clone();
-            
+
             std::thread::spawn(move || {
                 if let Some(file_path) = rfd::FileDialog::new()
                     .add_filter("Insomnia Export", &["json", "yaml", "yml"])
@@ -1032,16 +1094,26 @@ impl eframe::App for MercuryApp {
                     } else {
                         rfd::FileDialog::new()
                             .set_title("Choose where to save imported collection")
-                            .set_directory(dirs::document_dir().unwrap_or_else(|| std::path::PathBuf::from("~")))
+                            .set_directory(
+                                dirs::document_dir()
+                                    .unwrap_or_else(|| std::path::PathBuf::from("~")),
+                            )
                             .set_file_name("Mercury")
                             .pick_folder()
                     };
 
                     if let Some(folder_path) = target_folder {
-                        match crate::insomnia_importer::import_insomnia_collection(&file_path, &folder_path) {
+                        match crate::insomnia_importer::import_insomnia_collection(
+                            &file_path,
+                            &folder_path,
+                        ) {
                             Ok((req_count, env_count)) => {
-                                println!("✅ Imported {} requests and {} environments to {}", 
-                                    req_count, env_count, folder_path.display());
+                                println!(
+                                    "✅ Imported {} requests and {} environments to {}",
+                                    req_count,
+                                    env_count,
+                                    folder_path.display()
+                                );
                                 // Always reload workspace (if we picked a new one, or just refreshed current)
                                 let _ = folder_tx.send(folder_path);
                             }
@@ -1053,12 +1125,12 @@ impl eframe::App for MercuryApp {
                 }
             });
         }
-        
+
         if self.should_focus_search {
             self.should_focus_search = false;
             ctx.memory_mut(|mem| mem.request_focus(egui::Id::new("search_box")));
         }
-        
+
         if self.should_copy_curl {
             self.should_copy_curl = false;
             self.copy_as_curl(ctx);
@@ -1067,283 +1139,366 @@ impl eframe::App for MercuryApp {
             self.last_action_message = Some(("Copied as cURL".to_string(), time, false));
             ctx.request_repaint();
         }
-        
+
         // Top panel
         if let Ok(path) = self.folder_rx.try_recv() {
             self.load_workspace(path);
             ctx.request_repaint();
         }
-        
+
         // Top panel with breadcrumb navigation
         egui::TopBottomPanel::top("top_panel")
-            .exact_height(40.0)
-            .frame(egui::Frame::none()
-                .fill(crate::theme::Colors::BG_SURFACE)
-                .stroke(egui::Stroke::new(1.0, crate::theme::Colors::BORDER_SUBTLE))
-                .inner_margin(egui::Margin::symmetric(12.0, 0.0))
+            .exact_height(crate::theme::Layout::TOPBAR_HEIGHT)
+            .frame(
+                egui::Frame::none()
+                    .fill(crate::theme::Colors::BG_SURFACE)
+                    .stroke(egui::Stroke::new(
+                        crate::theme::StrokeWidth::THIN,
+                        crate::theme::Colors::BORDER_SUBTLE,
+                    ))
+                    .inner_margin(egui::Margin::symmetric(crate::theme::Spacing::MD, 0.0)),
             )
             .show(ctx, |ui| {
-            ui.horizontal_centered(|ui| {
-                // Breadcrumb navigation: workspace / folder / request
-                if !self.workspace_name.is_empty() {
-                    ui.label(egui::RichText::new(&self.workspace_name)
-                        .size(12.0)
-                        .color(crate::theme::Colors::TEXT_SECONDARY));
-                    
-                    // Show folder path if request is in a subfolder
-                    if let Some(ref path) = self.current_file {
-                        if let Some(workspace) = &self.workspace_path {
-                            if let Ok(relative) = path.strip_prefix(workspace) {
-                                let parts: Vec<_> = relative.parent()
-                                    .and_then(|p| p.to_str())
-                                    .unwrap_or("")
-                                    .split(std::path::MAIN_SEPARATOR)
-                                    .filter(|s| !s.is_empty())
-                                    .collect();
-                                
-                                for part in parts {
-                                    ui.label(egui::RichText::new("/")
-                                        .size(12.0)
-                                        .color(crate::theme::Colors::TEXT_MUTED));
-                                    ui.label(egui::RichText::new(part)
-                                        .size(12.0)
-                                        .color(crate::theme::Colors::TEXT_SECONDARY));
+                ui.horizontal_centered(|ui| {
+                    // Breadcrumb navigation: workspace / folder / request
+                    if !self.workspace_name.is_empty() {
+                        ui.label(
+                            egui::RichText::new(&self.workspace_name)
+                                .size(crate::theme::FontSize::MD)
+                                .color(crate::theme::Colors::TEXT_SECONDARY),
+                        );
+
+                        // Show folder path if request is in a subfolder
+                        if let Some(ref path) = self.current_file {
+                            if let Some(workspace) = &self.workspace_path {
+                                if let Ok(relative) = path.strip_prefix(workspace) {
+                                    let parts: Vec<_> = relative
+                                        .parent()
+                                        .and_then(|p| p.to_str())
+                                        .unwrap_or("")
+                                        .split(std::path::MAIN_SEPARATOR)
+                                        .filter(|s| !s.is_empty())
+                                        .collect();
+
+                                    for part in parts {
+                                        ui.label(
+                                            egui::RichText::new("/")
+                                                .size(crate::theme::FontSize::MD)
+                                                .color(crate::theme::Colors::TEXT_MUTED),
+                                        );
+                                        ui.label(
+                                            egui::RichText::new(part)
+                                                .size(crate::theme::FontSize::MD)
+                                                .color(crate::theme::Colors::TEXT_SECONDARY),
+                                        );
+                                    }
                                 }
                             }
-                        }
-                        
-                        ui.label(egui::RichText::new("/")
-                            .size(12.0)
-                            .color(crate::theme::Colors::TEXT_MUTED));
-                        
-                        let request_name = path.file_stem()
-                            .and_then(|s| s.to_str())
-                            .unwrap_or("Untitled");
-                        
-                        // HTTP Method badge
-                        let method_color = match self.method {
-                            HttpMethod::GET => crate::theme::Colors::METHOD_GET,
-                            HttpMethod::POST => crate::theme::Colors::METHOD_POST,
-                            HttpMethod::PUT => crate::theme::Colors::METHOD_PUT,
-                            HttpMethod::PATCH => crate::theme::Colors::METHOD_PATCH,
-                            HttpMethod::DELETE => crate::theme::Colors::METHOD_DELETE,
-                            HttpMethod::HEAD => crate::theme::Colors::TEXT_SECONDARY,
-                            HttpMethod::OPTIONS => crate::theme::Colors::TEXT_SECONDARY,
-                        };
-                        ui.label(egui::RichText::new(format!("{:?}", self.method))
-                            .size(crate::theme::FontSize::SM)
-                            .strong()
-                            .color(method_color));
-                        
-                        ui.label(egui::RichText::new(request_name)
-                            .size(crate::theme::FontSize::MD)
-                            .strong()
-                            .color(crate::theme::Colors::TEXT_PRIMARY));
-                    } else {
-                        ui.label(egui::RichText::new("/")
-                            .size(12.0)
-                            .color(crate::theme::Colors::TEXT_MUTED));
-                        ui.label(egui::RichText::new("Untitled")
-                            .size(12.0)
-                            .color(crate::theme::Colors::TEXT_MUTED));
-                    }
-                } else {
-                    ui.label(egui::RichText::new("No workspace")
-                        .size(12.0)
-                        .color(crate::theme::Colors::TEXT_MUTED));
-                }
-                
-                ui.add_space(16.0);
-                
-                // Search - minimal, fills space
-                ui.add(
-                    egui::TextEdit::singleline(&mut self.search_query)
-                        .hint_text(egui::RichText::new("Search (Cmd+K)").color(crate::theme::Colors::PLACEHOLDER))
-                        .desired_width(160.0)
-                        .frame(false)
-                        .id(egui::Id::new("search_box"))
-                );
-                
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    // Environment selector - borderless, just text
-                    let env_name = &self.env_files[self.selected_env];
-                    let env_color = if env_name.contains("prod") {
-                        crate::theme::Colors::ERROR
-                    } else if env_name.contains("stag") {
-                        crate::theme::Colors::WARNING
-                    } else {
-                        crate::theme::Colors::TEXT_SECONDARY
-                    };
-                    
-                    // Show disabled state if no workspace
-                    let env_display = if self.workspace_path.is_none() && env_name == "None" {
-                        "No env (open folder)"
-                    } else {
-                        &format!("{}", env_name)
-                    };
-                    
-                    let env_id = egui::Id::new("env_popup");
-                    let env_response = ui.add_enabled(
-                        self.workspace_path.is_some(),
-                        egui::Label::new(egui::RichText::new(env_display)
-                            .size(12.0)
-                            .color(env_color))
-                            .sense(egui::Sense::click())
-                    );
-                    if env_response.clicked() && self.workspace_path.is_some() {
-                        ui.memory_mut(|mem| mem.toggle_popup(env_id));
-                    }
-                    
-                    // Clone env_files to avoid borrow issues
-                    let env_files_clone: Vec<_> = self.env_files.clone();
-                    let current_selection = self.selected_env;
-                    let mut new_selection = None;
-                    
-                    egui::popup_below_widget(ui, env_id, &env_response, egui::PopupCloseBehavior::CloseOnClickOutside, |ui| {
-                        ui.set_min_width(140.0);
-                        ui.set_min_height(100.0);
-                        for (i, env) in env_files_clone.iter().enumerate() {
-                            let color = if env.contains("prod") {
-                                crate::theme::Colors::ERROR
-                            } else if env.contains("stag") {
-                                crate::theme::Colors::WARNING
-                            } else {
-                                crate::theme::Colors::TEXT_SECONDARY
+
+                            ui.label(
+                                egui::RichText::new("/")
+                                    .size(crate::theme::FontSize::MD)
+                                    .color(crate::theme::Colors::TEXT_MUTED),
+                            );
+
+                            let request_name = path
+                                .file_stem()
+                                .and_then(|s| s.to_str())
+                                .unwrap_or("Untitled");
+
+                            // HTTP Method badge
+                            let method_color = match self.method {
+                                HttpMethod::GET => crate::theme::Colors::METHOD_GET,
+                                HttpMethod::POST => crate::theme::Colors::METHOD_POST,
+                                HttpMethod::PUT => crate::theme::Colors::METHOD_PUT,
+                                HttpMethod::PATCH => crate::theme::Colors::METHOD_PATCH,
+                                HttpMethod::DELETE => crate::theme::Colors::METHOD_DELETE,
+                                HttpMethod::HEAD => crate::theme::Colors::TEXT_SECONDARY,
+                                HttpMethod::OPTIONS => crate::theme::Colors::TEXT_SECONDARY,
                             };
-                            if ui.selectable_label(current_selection == i, 
-                                egui::RichText::new(env).color(color)).clicked() {
-                                new_selection = Some(i);
-                                ui.memory_mut(|mem| mem.close_popup());
-                            }
+                            ui.label(
+                                egui::RichText::new(format!("{:?}", self.method))
+                                    .size(crate::theme::FontSize::SM)
+                                    .strong()
+                                    .color(method_color),
+                            );
+
+                            ui.label(
+                                egui::RichText::new(request_name)
+                                    .size(crate::theme::FontSize::MD)
+                                    .strong()
+                                    .color(crate::theme::Colors::TEXT_PRIMARY),
+                            );
+                        } else {
+                            ui.label(
+                                egui::RichText::new("/")
+                                    .size(crate::theme::FontSize::MD)
+                                    .color(crate::theme::Colors::TEXT_MUTED),
+                            );
+                            ui.label(
+                                egui::RichText::new("Untitled")
+                                    .size(crate::theme::FontSize::MD)
+                                    .color(crate::theme::Colors::TEXT_MUTED),
+                            );
                         }
-                    });
-                    
-                    // Apply selection change after popup closes
-                    if let Some(i) = new_selection {
-                        self.selected_env = i;
-                        self.load_env();
+                    } else {
+                        ui.label(
+                            egui::RichText::new("No workspace")
+                                .size(crate::theme::FontSize::MD)
+                                .color(crate::theme::Colors::TEXT_MUTED),
+                        );
                     }
-                    
-                    ui.add_space(20.0);
-                    
-                    // Open - borderless, just text
-                    let open_id = egui::Id::new("open_popup");
-                    let open_response = ui.add(
-                        egui::Label::new(egui::RichText::new("Open")
-                            .size(12.0)
-                            .color(crate::theme::Colors::TEXT_SECONDARY))
-                            .sense(egui::Sense::click())
+
+                    ui.add_space(crate::theme::Spacing::LG);
+
+                    // Search - minimal, fills space
+                    ui.add(
+                        egui::TextEdit::singleline(&mut self.search_query)
+                            .hint_text(
+                                egui::RichText::new("Search (Cmd+K)")
+                                    .color(crate::theme::Colors::PLACEHOLDER),
+                            )
+                            .desired_width(crate::theme::Layout::POPUP_WIDE_WIDTH)
+                            .frame(false)
+                            .id(egui::Id::new("search_box")),
                     );
-                    if open_response.clicked() {
-                        ui.memory_mut(|mem| mem.toggle_popup(open_id));
-                    }
-                    
-                    egui::popup_below_widget(ui, open_id, &open_response, egui::PopupCloseBehavior::CloseOnClickOutside, |ui| {
-                        ui.set_min_width(160.0);
-                        if ui.selectable_label(false, "Open Folder...").clicked() {
-                            let tx = self.folder_tx.clone();
-                            std::thread::spawn(move || {
-                                if let Some(path) = rfd::FileDialog::new().pick_folder() {
-                                    let _ = tx.send(path);
+
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        // Environment selector - borderless, just text
+                        let env_name = &self.env_files[self.selected_env];
+                        let env_color = if env_name.contains("prod") {
+                            crate::theme::Colors::ERROR
+                        } else if env_name.contains("stag") {
+                            crate::theme::Colors::WARNING
+                        } else {
+                            crate::theme::Colors::TEXT_SECONDARY
+                        };
+
+                        // Show disabled state if no workspace
+                        let env_display = if self.workspace_path.is_none() && env_name == "None" {
+                            "No env (open folder)"
+                        } else {
+                            &env_name.to_string()
+                        };
+
+                        let env_id = egui::Id::new("env_popup");
+                        let env_response = ui.add_enabled(
+                            self.workspace_path.is_some(),
+                            egui::Label::new(
+                                egui::RichText::new(env_display)
+                                    .size(crate::theme::FontSize::MD)
+                                    .color(env_color),
+                            )
+                            .sense(egui::Sense::click()),
+                        );
+                        if env_response.clicked() && self.workspace_path.is_some() {
+                            ui.memory_mut(|mem| mem.toggle_popup(env_id));
+                        }
+
+                        // Clone env_files to avoid borrow issues
+                        let env_files_clone: Vec<_> = self.env_files.clone();
+                        let current_selection = self.selected_env;
+                        let mut new_selection = None;
+
+                        egui::popup_below_widget(
+                            ui,
+                            env_id,
+                            &env_response,
+                            egui::PopupCloseBehavior::CloseOnClickOutside,
+                            |ui| {
+                                ui.set_min_width(crate::theme::Layout::POPUP_MIN_WIDTH);
+                                ui.set_min_height(100.0);
+                                for (i, env) in env_files_clone.iter().enumerate() {
+                                    let color = if env.contains("prod") {
+                                        crate::theme::Colors::ERROR
+                                    } else if env.contains("stag") {
+                                        crate::theme::Colors::WARNING
+                                    } else {
+                                        crate::theme::Colors::TEXT_SECONDARY
+                                    };
+                                    if ui
+                                        .selectable_label(
+                                            current_selection == i,
+                                            egui::RichText::new(env).color(color),
+                                        )
+                                        .clicked()
+                                    {
+                                        new_selection = Some(i);
+                                        ui.memory_mut(|mem| mem.close_popup());
+                                    }
                                 }
-                            });
-                            ui.memory_mut(|mem| mem.close_popup());
+                            },
+                        );
+
+                        // Apply selection change after popup closes
+                        if let Some(i) = new_selection {
+                            self.selected_env = i;
+                            self.load_env();
                         }
-                        if ui.selectable_label(false, "Import Insomnia...").clicked() {
-                            self.should_open_insomnia_import = true;
-                            ui.memory_mut(|mem| mem.close_popup());
+
+                        ui.add_space(crate::theme::Spacing::XL);
+
+                        // Open - borderless, just text
+                        let open_id = egui::Id::new("open_popup");
+                        let open_response = ui.add(
+                            egui::Label::new(
+                                egui::RichText::new("Open")
+                                    .size(crate::theme::FontSize::MD)
+                                    .color(crate::theme::Colors::TEXT_SECONDARY),
+                            )
+                            .sense(egui::Sense::click()),
+                        );
+                        if open_response.clicked() {
+                            ui.memory_mut(|mem| mem.toggle_popup(open_id));
                         }
-                    });
-                    
-                    ui.add_space(20.0);
-                    
-                    // Help - borderless
-                    let help_id = egui::Id::new("help_popup");
-                    let help_response = ui.add(
-                        egui::Label::new(egui::RichText::new("Help")
-                            .size(12.0)
-                            .color(crate::theme::Colors::TEXT_SECONDARY))
-                            .sense(egui::Sense::click())
-                    );
-                    if help_response.clicked() {
-                        ui.memory_mut(|mem| mem.toggle_popup(help_id));
-                    }
-                    
-                    egui::popup_below_widget(ui, help_id, &help_response, egui::PopupCloseBehavior::CloseOnClickOutside, |ui| {
-                        ui.set_min_width(140.0);
-                        if ui.selectable_label(false, "Keyboard Shortcuts").clicked() {
-                            self.show_shortcuts = true;
-                            ui.memory_mut(|mem| mem.close_popup());
+
+                        egui::popup_below_widget(
+                            ui,
+                            open_id,
+                            &open_response,
+                            egui::PopupCloseBehavior::CloseOnClickOutside,
+                            |ui| {
+                                ui.set_min_width(crate::theme::Layout::POPUP_WIDE_WIDTH);
+                                if ui.selectable_label(false, "Open Folder...").clicked() {
+                                    let tx = self.folder_tx.clone();
+                                    std::thread::spawn(move || {
+                                        if let Some(path) = rfd::FileDialog::new().pick_folder() {
+                                            let _ = tx.send(path);
+                                        }
+                                    });
+                                    ui.memory_mut(|mem| mem.close_popup());
+                                }
+                                if ui.selectable_label(false, "Import Insomnia...").clicked() {
+                                    self.should_open_insomnia_import = true;
+                                    ui.memory_mut(|mem| mem.close_popup());
+                                }
+                            },
+                        );
+
+                        ui.add_space(crate::theme::Spacing::XL);
+
+                        // Help - borderless
+                        let help_id = egui::Id::new("help_popup");
+                        let help_response = ui.add(
+                            egui::Label::new(
+                                egui::RichText::new("Help")
+                                    .size(crate::theme::FontSize::MD)
+                                    .color(crate::theme::Colors::TEXT_SECONDARY),
+                            )
+                            .sense(egui::Sense::click()),
+                        );
+                        if help_response.clicked() {
+                            ui.memory_mut(|mem| mem.toggle_popup(help_id));
                         }
-                        if ui.selectable_label(false, "About Mercury").clicked() {
-                            self.show_about = true;
-                            ui.memory_mut(|mem| mem.close_popup());
-                        }
-                        ui.separator();
-                        if ui.selectable_label(false, "Check for Updates").clicked() {
-                            let _ = open::that(crate::constants::get_releases_url());
-                            ui.memory_mut(|mem| mem.close_popup());
-                        }
-                        if ui.selectable_label(false, "Documentation").clicked() {
-                            let _ = open::that(crate::constants::get_repo_url());
-                            ui.memory_mut(|mem| mem.close_popup());
-                        }
-                        if ui.selectable_label(false, "Report Issue").clicked() {
-                            let _ = open::that(crate::constants::get_issues_url());
-                            ui.memory_mut(|mem| mem.close_popup());
-                        }
+
+                        egui::popup_below_widget(
+                            ui,
+                            help_id,
+                            &help_response,
+                            egui::PopupCloseBehavior::CloseOnClickOutside,
+                            |ui| {
+                                ui.set_min_width(crate::theme::Layout::POPUP_MIN_WIDTH);
+                                if ui.selectable_label(false, "Keyboard Shortcuts").clicked() {
+                                    self.show_shortcuts = true;
+                                    ui.memory_mut(|mem| mem.close_popup());
+                                }
+                                if ui.selectable_label(false, "About Mercury").clicked() {
+                                    self.show_about = true;
+                                    ui.memory_mut(|mem| mem.close_popup());
+                                }
+                                ui.separator();
+                                if ui.selectable_label(false, "Check for Updates").clicked() {
+                                    let _ = open::that(crate::constants::get_releases_url());
+                                    ui.memory_mut(|mem| mem.close_popup());
+                                }
+                                if ui.selectable_label(false, "Documentation").clicked() {
+                                    let _ = open::that(crate::constants::get_repo_url());
+                                    ui.memory_mut(|mem| mem.close_popup());
+                                }
+                                if ui.selectable_label(false, "Report Issue").clicked() {
+                                    let _ = open::that(crate::constants::get_issues_url());
+                                    ui.memory_mut(|mem| mem.close_popup());
+                                }
+                            },
+                        );
                     });
                 });
             });
-        });
 
         // Render panels using new modular methods
         if !self.focus_mode {
             self.render_sidebar_panel(ctx);
         }
-        
+
         self.render_response_panel_new(ctx);
 
         // Center: Request editor
         egui::CentralPanel::default()
-            .frame(egui::Frame::none()
-                .fill(crate::theme::Colors::BG_BASE)
-                .inner_margin(egui::Margin::same(crate::theme::Spacing::MD))
+            .frame(
+                egui::Frame::none()
+                    .fill(crate::theme::Colors::BG_BASE)
+                    .inner_margin(egui::Margin::same(crate::theme::Spacing::MD)),
             )
             .show(ctx, |ui| {
                 self.render_request_panel(ui, ctx);
             });
-        
+
         // Status bar at bottom
         self.render_status_bar(ctx);
 
         // New Request Dialog
         if self.show_new_request_dialog {
+            // Escape to close
+            if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+                self.show_new_request_dialog = false;
+            }
             egui::Window::new("New Request")
                 .collapsible(false)
                 .resizable(false)
+                .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+                .frame(
+                    egui::Frame::none()
+                        .fill(crate::theme::Colors::BG_MODAL)
+                        .stroke(egui::Stroke::new(
+                            crate::theme::StrokeWidth::THIN,
+                            crate::theme::Colors::BORDER_SUBTLE,
+                        ))
+                        .rounding(crate::theme::Radius::MD)
+                        .inner_margin(crate::theme::Spacing::MD),
+                )
                 .show(ctx, |ui| {
-                    ui.label("Request name:");
+                    ui.label(
+                        egui::RichText::new("Request name:")
+                            .color(crate::theme::Colors::TEXT_SECONDARY),
+                    );
+                    ui.add_space(crate::theme::Spacing::XS);
                     let response = ui.text_edit_singleline(&mut self.new_request_name);
-                    if response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
-                        if !self.new_request_name.is_empty() {
-                            if let Some(parent) = self.context_menu_item.clone() {
-                                let name = self.new_request_name.clone();
-                                if let Err(e) = self.create_new_request(&parent, &name) {
-                                    self.last_action_message = Some((e, ctx.input(|i| i.time), true));
-                                }
+                    if response.lost_focus()
+                        && ui.input(|i| i.key_pressed(egui::Key::Enter))
+                        && !self.new_request_name.is_empty()
+                    {
+                        if let Some(parent) = self.context_menu_item.clone() {
+                            let name = self.new_request_name.clone();
+                            if let Err(e) = self.create_new_request(&parent, &name) {
+                                self.last_action_message = Some((e, ctx.input(|i| i.time), true));
                             }
-                            self.show_new_request_dialog = false;
                         }
+                        self.show_new_request_dialog = false;
                     }
+                    ui.add_space(crate::theme::Spacing::SM);
                     ui.horizontal(|ui| {
                         if ui.button("Create").clicked() && !self.new_request_name.is_empty() {
                             if let Some(parent) = self.context_menu_item.clone() {
                                 let name = self.new_request_name.clone();
                                 if let Err(e) = self.create_new_request(&parent, &name) {
-                                    self.last_action_message = Some((e, ctx.input(|i| i.time), true));
+                                    self.last_action_message =
+                                        Some((e, ctx.input(|i| i.time), true));
                                 } else {
-                                    self.last_action_message = Some(("Request created".to_string(), ctx.input(|i| i.time), false));
+                                    self.last_action_message = Some((
+                                        "Request created".to_string(),
+                                        ctx.input(|i| i.time),
+                                        false,
+                                    ));
                                 }
                             }
                             self.show_new_request_dialog = false;
@@ -1357,31 +1512,57 @@ impl eframe::App for MercuryApp {
 
         // New Folder Dialog
         if self.show_new_folder_dialog {
+            // Escape to close
+            if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+                self.show_new_folder_dialog = false;
+            }
             egui::Window::new("New Folder")
                 .collapsible(false)
                 .resizable(false)
+                .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+                .frame(
+                    egui::Frame::none()
+                        .fill(crate::theme::Colors::BG_MODAL)
+                        .stroke(egui::Stroke::new(
+                            crate::theme::StrokeWidth::THIN,
+                            crate::theme::Colors::BORDER_SUBTLE,
+                        ))
+                        .rounding(crate::theme::Radius::MD)
+                        .inner_margin(crate::theme::Spacing::MD),
+                )
                 .show(ctx, |ui| {
-                    ui.label("Folder name:");
+                    ui.label(
+                        egui::RichText::new("Folder name:")
+                            .color(crate::theme::Colors::TEXT_SECONDARY),
+                    );
+                    ui.add_space(crate::theme::Spacing::XS);
                     let response = ui.text_edit_singleline(&mut self.new_folder_name);
-                    if response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
-                        if !self.new_folder_name.is_empty() {
-                            if let Some(parent) = self.context_menu_item.clone() {
-                                let name = self.new_folder_name.clone();
-                                if let Err(e) = self.create_new_folder(&parent, &name) {
-                                    self.last_action_message = Some((e, ctx.input(|i| i.time), true));
-                                }
+                    if response.lost_focus()
+                        && ui.input(|i| i.key_pressed(egui::Key::Enter))
+                        && !self.new_folder_name.is_empty()
+                    {
+                        if let Some(parent) = self.context_menu_item.clone() {
+                            let name = self.new_folder_name.clone();
+                            if let Err(e) = self.create_new_folder(&parent, &name) {
+                                self.last_action_message = Some((e, ctx.input(|i| i.time), true));
                             }
-                            self.show_new_folder_dialog = false;
                         }
+                        self.show_new_folder_dialog = false;
                     }
+                    ui.add_space(crate::theme::Spacing::SM);
                     ui.horizontal(|ui| {
                         if ui.button("Create").clicked() && !self.new_folder_name.is_empty() {
                             if let Some(parent) = self.context_menu_item.clone() {
                                 let name = self.new_folder_name.clone();
                                 if let Err(e) = self.create_new_folder(&parent, &name) {
-                                    self.last_action_message = Some((e, ctx.input(|i| i.time), true));
+                                    self.last_action_message =
+                                        Some((e, ctx.input(|i| i.time), true));
                                 } else {
-                                    self.last_action_message = Some(("Folder created".to_string(), ctx.input(|i| i.time), false));
+                                    self.last_action_message = Some((
+                                        "Folder created".to_string(),
+                                        ctx.input(|i| i.time),
+                                        false,
+                                    ));
                                 }
                             }
                             self.show_new_folder_dialog = false;
@@ -1395,31 +1576,57 @@ impl eframe::App for MercuryApp {
 
         // Rename Dialog
         if self.show_rename_dialog {
+            // Escape to close
+            if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+                self.show_rename_dialog = false;
+            }
             egui::Window::new("Rename")
                 .collapsible(false)
                 .resizable(false)
+                .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+                .frame(
+                    egui::Frame::none()
+                        .fill(crate::theme::Colors::BG_MODAL)
+                        .stroke(egui::Stroke::new(
+                            crate::theme::StrokeWidth::THIN,
+                            crate::theme::Colors::BORDER_SUBTLE,
+                        ))
+                        .rounding(crate::theme::Radius::MD)
+                        .inner_margin(crate::theme::Spacing::MD),
+                )
                 .show(ctx, |ui| {
-                    ui.label("New name:");
+                    ui.label(
+                        egui::RichText::new("New name:")
+                            .color(crate::theme::Colors::TEXT_SECONDARY),
+                    );
+                    ui.add_space(crate::theme::Spacing::XS);
                     let response = ui.text_edit_singleline(&mut self.rename_text);
-                    if response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
-                        if !self.rename_text.is_empty() {
-                            if let Some(old_path) = self.context_menu_item.clone() {
-                                let new_name = self.rename_text.clone();
-                                if let Err(e) = self.rename_item(&old_path, &new_name) {
-                                    self.last_action_message = Some((e, ctx.input(|i| i.time), true));
-                                }
+                    if response.lost_focus()
+                        && ui.input(|i| i.key_pressed(egui::Key::Enter))
+                        && !self.rename_text.is_empty()
+                    {
+                        if let Some(old_path) = self.context_menu_item.clone() {
+                            let new_name = self.rename_text.clone();
+                            if let Err(e) = self.rename_item(&old_path, &new_name) {
+                                self.last_action_message = Some((e, ctx.input(|i| i.time), true));
                             }
-                            self.show_rename_dialog = false;
                         }
+                        self.show_rename_dialog = false;
                     }
+                    ui.add_space(crate::theme::Spacing::SM);
                     ui.horizontal(|ui| {
                         if ui.button("Rename").clicked() && !self.rename_text.is_empty() {
                             if let Some(old_path) = self.context_menu_item.clone() {
                                 let new_name = self.rename_text.clone();
                                 if let Err(e) = self.rename_item(&old_path, &new_name) {
-                                    self.last_action_message = Some((e, ctx.input(|i| i.time), true));
+                                    self.last_action_message =
+                                        Some((e, ctx.input(|i| i.time), true));
                                 } else {
-                                    self.last_action_message = Some(("Renamed successfully".to_string(), ctx.input(|i| i.time), false));
+                                    self.last_action_message = Some((
+                                        "Renamed successfully".to_string(),
+                                        ctx.input(|i| i.time),
+                                        false,
+                                    ));
                                 }
                             }
                             self.show_rename_dialog = false;
@@ -1433,33 +1640,76 @@ impl eframe::App for MercuryApp {
 
         // Delete Confirmation Dialog
         if self.show_delete_confirm {
+            // Escape to cancel
+            if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+                self.show_delete_confirm = false;
+            }
             egui::Window::new("Confirm Delete")
                 .collapsible(false)
                 .resizable(false)
+                .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+                .frame(
+                    egui::Frame::none()
+                        .fill(crate::theme::Colors::BG_MODAL)
+                        .stroke(egui::Stroke::new(
+                            crate::theme::StrokeWidth::THIN,
+                            crate::theme::Colors::BORDER_SUBTLE,
+                        ))
+                        .rounding(crate::theme::Radius::MD)
+                        .inner_margin(crate::theme::Spacing::MD),
+                )
                 .show(ctx, |ui| {
                     let target_info = self.delete_target.as_ref().map(|t| {
-                        (t.file_name().unwrap_or_default().to_string_lossy().to_string(), 
-                         t.is_dir(),
-                         t.clone())
+                        (
+                            t.file_name()
+                                .unwrap_or_default()
+                                .to_string_lossy()
+                                .to_string(),
+                            t.is_dir(),
+                            t.clone(),
+                        )
                     });
-                    
+
                     if let Some((name, is_dir, target_path)) = target_info {
-                        ui.label(format!("Are you sure you want to delete '{}'?", name));
+                        ui.label(
+                            egui::RichText::new(format!(
+                                "Are you sure you want to delete '{}'?",
+                                name
+                            ))
+                            .color(crate::theme::Colors::TEXT_PRIMARY),
+                        );
                         if is_dir {
-                            ui.colored_label(egui::Color32::from_rgb(255, 100, 100), 
-                                "Warning: This will delete the folder and all its contents!");
+                            ui.add_space(crate::theme::Spacing::XS);
+                            ui.label(
+                                egui::RichText::new(
+                                    "⚠ This will delete the folder and all its contents!",
+                                )
+                                .color(crate::theme::Colors::ERROR),
+                            );
                         }
-                        ui.add_space(8.0);
-                        
+                        ui.add_space(crate::theme::Spacing::MD);
+
                         // Check for Enter key to confirm
                         let enter_pressed = ui.input(|i| i.key_pressed(egui::Key::Enter));
-                        
+
                         ui.horizontal(|ui| {
-                            if ui.button("Delete").clicked() || enter_pressed {
+                            if ui
+                                .button(
+                                    egui::RichText::new("Delete")
+                                        .color(crate::theme::Colors::ERROR),
+                                )
+                                .clicked()
+                                || enter_pressed
+                            {
                                 if let Err(e) = self.delete_item(&target_path) {
-                                    self.last_action_message = Some((e, ctx.input(|i| i.time), true));
+                                    self.last_action_message =
+                                        Some((e, ctx.input(|i| i.time), true));
                                 } else {
-                                    self.last_action_message = Some(("Deleted successfully".to_string(), ctx.input(|i| i.time), false));
+                                    self.last_action_message = Some((
+                                        "Deleted successfully".to_string(),
+                                        ctx.input(|i| i.time),
+                                        false,
+                                    ));
                                 }
                                 self.show_delete_confirm = false;
                             }
@@ -1473,30 +1723,59 @@ impl eframe::App for MercuryApp {
 
         // New Environment Dialog
         if self.show_new_env_dialog {
+            // Escape to close
+            if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+                self.show_new_env_dialog = false;
+            }
             egui::Window::new("New Environment")
                 .collapsible(false)
                 .resizable(false)
+                .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+                .frame(
+                    egui::Frame::none()
+                        .fill(crate::theme::Colors::BG_MODAL)
+                        .stroke(egui::Stroke::new(
+                            crate::theme::StrokeWidth::THIN,
+                            crate::theme::Colors::BORDER_SUBTLE,
+                        ))
+                        .rounding(crate::theme::Radius::MD)
+                        .inner_margin(crate::theme::Spacing::MD),
+                )
                 .show(ctx, |ui| {
-                    ui.label("Environment name (e.g., 'staging', 'production'):");
+                    ui.label(
+                        egui::RichText::new("Environment name (e.g., 'staging', 'production'):")
+                            .color(crate::theme::Colors::TEXT_SECONDARY),
+                    );
+                    ui.add_space(crate::theme::Spacing::XS);
                     let response = ui.text_edit_singleline(&mut self.new_env_name);
-                    if response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
-                        if !self.new_env_name.is_empty() {
-                            let name = self.new_env_name.clone();
-                            if let Err(e) = self.create_new_env(&name) {
-                                self.last_action_message = Some((e, ctx.input(|i| i.time), true));
-                            } else {
-                                self.last_action_message = Some(("Environment created".to_string(), ctx.input(|i| i.time), false));
-                            }
-                            self.show_new_env_dialog = false;
+                    if response.lost_focus()
+                        && ui.input(|i| i.key_pressed(egui::Key::Enter))
+                        && !self.new_env_name.is_empty()
+                    {
+                        let name = self.new_env_name.clone();
+                        if let Err(e) = self.create_new_env(&name) {
+                            self.last_action_message = Some((e, ctx.input(|i| i.time), true));
+                        } else {
+                            self.last_action_message = Some((
+                                "Environment created".to_string(),
+                                ctx.input(|i| i.time),
+                                false,
+                            ));
                         }
+                        self.show_new_env_dialog = false;
                     }
+                    ui.add_space(crate::theme::Spacing::SM);
                     ui.horizontal(|ui| {
                         if ui.button("Create").clicked() && !self.new_env_name.is_empty() {
                             let name = self.new_env_name.clone();
                             if let Err(e) = self.create_new_env(&name) {
                                 self.last_action_message = Some((e, ctx.input(|i| i.time), true));
                             } else {
-                                self.last_action_message = Some(("Environment created".to_string(), ctx.input(|i| i.time), false));
+                                self.last_action_message = Some((
+                                    "Environment created".to_string(),
+                                    ctx.input(|i| i.time),
+                                    false,
+                                ));
                             }
                             self.show_new_env_dialog = false;
                         }
@@ -1509,75 +1788,167 @@ impl eframe::App for MercuryApp {
 
         // Keyboard shortcuts help window
         if self.show_shortcuts {
+            // Escape to close
+            if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+                self.show_shortcuts = false;
+            }
             egui::Window::new("Keyboard Shortcuts")
                 .collapsible(false)
                 .resizable(false)
-                .default_width(400.0)
+                .default_width(crate::theme::Layout::MODAL_WIDTH)
+                .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+                .frame(
+                    egui::Frame::none()
+                        .fill(crate::theme::Colors::BG_MODAL)
+                        .stroke(egui::Stroke::new(
+                            crate::theme::StrokeWidth::THIN,
+                            crate::theme::Colors::BORDER_SUBTLE,
+                        ))
+                        .rounding(crate::theme::Radius::MD)
+                        .inner_margin(crate::theme::Spacing::MD),
+                )
                 .show(ctx, |ui| {
-                    ui.add_space(8.0);
-                    
+                    ui.add_space(crate::theme::Spacing::SM);
+
                     egui::Grid::new("shortcuts_grid")
                         .num_columns(2)
                         .spacing([40.0, 8.0])
                         .striped(true)
                         .show(ui, |ui| {
-                            ui.label(egui::RichText::new("Action").strong());
-                            ui.label(egui::RichText::new("Shortcut").strong());
+                            ui.label(
+                                egui::RichText::new("Action")
+                                    .strong()
+                                    .color(crate::theme::Colors::TEXT_PRIMARY),
+                            );
+                            ui.label(
+                                egui::RichText::new("Shortcut")
+                                    .strong()
+                                    .color(crate::theme::Colors::TEXT_PRIMARY),
+                            );
                             ui.end_row();
-                            
-                            ui.label("New Request");
-                            ui.label("Cmd/Ctrl + N");
+
+                            ui.label(
+                                egui::RichText::new("New Request")
+                                    .color(crate::theme::Colors::TEXT_SECONDARY),
+                            );
+                            ui.label(
+                                egui::RichText::new("Cmd/Ctrl + N")
+                                    .color(crate::theme::Colors::TEXT_MUTED),
+                            );
                             ui.end_row();
-                            
-                            ui.label("Send Request");
-                            ui.label("Cmd/Ctrl + Enter");
+
+                            ui.label(
+                                egui::RichText::new("Send Request")
+                                    .color(crate::theme::Colors::TEXT_SECONDARY),
+                            );
+                            ui.label(
+                                egui::RichText::new("Cmd/Ctrl + Enter")
+                                    .color(crate::theme::Colors::TEXT_MUTED),
+                            );
                             ui.end_row();
-                            
-                            ui.label("Focus Search");
-                            ui.label("Cmd/Ctrl + K");
+
+                            ui.label(
+                                egui::RichText::new("Focus Search")
+                                    .color(crate::theme::Colors::TEXT_SECONDARY),
+                            );
+                            ui.label(
+                                egui::RichText::new("Cmd/Ctrl + K")
+                                    .color(crate::theme::Colors::TEXT_MUTED),
+                            );
                             ui.end_row();
-                            
-                            ui.label("Copy as cURL");
-                            ui.label("Cmd/Ctrl + Shift + C");
+
+                            ui.label(
+                                egui::RichText::new("Copy as cURL")
+                                    .color(crate::theme::Colors::TEXT_SECONDARY),
+                            );
+                            ui.label(
+                                egui::RichText::new("Cmd/Ctrl + Shift + C")
+                                    .color(crate::theme::Colors::TEXT_MUTED),
+                            );
                             ui.end_row();
-                            
-                            ui.label("Open Folder");
-                            ui.label("Cmd/Ctrl + O");
+
+                            ui.label(
+                                egui::RichText::new("Open Folder")
+                                    .color(crate::theme::Colors::TEXT_SECONDARY),
+                            );
+                            ui.label(
+                                egui::RichText::new("Cmd/Ctrl + O")
+                                    .color(crate::theme::Colors::TEXT_MUTED),
+                            );
                             ui.end_row();
-                            
-                            ui.label("Switch Environment");
-                            ui.label("Cmd/Ctrl + E");
+
+                            ui.label(
+                                egui::RichText::new("Switch Environment")
+                                    .color(crate::theme::Colors::TEXT_SECONDARY),
+                            );
+                            ui.label(
+                                egui::RichText::new("Cmd/Ctrl + E")
+                                    .color(crate::theme::Colors::TEXT_MUTED),
+                            );
                             ui.end_row();
-                            
-                            ui.label("Delete Current Request");
-                            ui.label("Right-click > Delete");
+
+                            ui.label(
+                                egui::RichText::new("Delete Current Request")
+                                    .color(crate::theme::Colors::TEXT_SECONDARY),
+                            );
+                            ui.label(
+                                egui::RichText::new("Right-click > Delete")
+                                    .color(crate::theme::Colors::TEXT_MUTED),
+                            );
                             ui.end_row();
-                            
-                            ui.label("Toggle Raw View");
-                            ui.label("Cmd/Ctrl + R");
+
+                            ui.label(
+                                egui::RichText::new("Toggle Raw View")
+                                    .color(crate::theme::Colors::TEXT_SECONDARY),
+                            );
+                            ui.label(
+                                egui::RichText::new("Cmd/Ctrl + R")
+                                    .color(crate::theme::Colors::TEXT_MUTED),
+                            );
                             ui.end_row();
-                            
-                            ui.label("Clear Search");
-                            ui.label("Escape");
+
+                            ui.label(
+                                egui::RichText::new("Clear Search")
+                                    .color(crate::theme::Colors::TEXT_SECONDARY),
+                            );
+                            ui.label(
+                                egui::RichText::new("Escape")
+                                    .color(crate::theme::Colors::TEXT_MUTED),
+                            );
                             ui.end_row();
-                            
-                            ui.label("Show Shortcuts");
-                            ui.label("?");
+
+                            ui.label(
+                                egui::RichText::new("Show Shortcuts")
+                                    .color(crate::theme::Colors::TEXT_SECONDARY),
+                            );
+                            ui.label(
+                                egui::RichText::new("?").color(crate::theme::Colors::TEXT_MUTED),
+                            );
                             ui.end_row();
-                            
-                            ui.label("Focus Mode");
-                            ui.label("Cmd/Ctrl + Shift + F");
+
+                            ui.label(
+                                egui::RichText::new("Focus Mode")
+                                    .color(crate::theme::Colors::TEXT_SECONDARY),
+                            );
+                            ui.label(
+                                egui::RichText::new("Cmd/Ctrl + Shift + F")
+                                    .color(crate::theme::Colors::TEXT_MUTED),
+                            );
                             ui.end_row();
-                            
-                            ui.label("Toggle History");
-                            ui.label("Cmd/Ctrl + H");
+
+                            ui.label(
+                                egui::RichText::new("Toggle History")
+                                    .color(crate::theme::Colors::TEXT_SECONDARY),
+                            );
+                            ui.label(
+                                egui::RichText::new("Cmd/Ctrl + H")
+                                    .color(crate::theme::Colors::TEXT_MUTED),
+                            );
                             ui.end_row();
                         });
-                    
-                    ui.add_space(8.0);
-                    ui.separator();
-                    ui.add_space(8.0);
-                    
+
+                    ui.add_space(crate::theme::Spacing::MD);
+
                     ui.horizontal(|ui| {
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                             if ui.button("Close").clicked() {
@@ -1594,9 +1965,13 @@ impl eframe::App for MercuryApp {
             if i.key_pressed(egui::Key::N) && i.modifiers.command {
                 self.should_create_new_request = true;
             }
-            
+
             // Cmd/Ctrl + S: Save temp request (if not already saved)
-            if i.key_pressed(egui::Key::S) && i.modifiers.command && self.current_file.is_none() && !self.url.is_empty() {
+            if i.key_pressed(egui::Key::S)
+                && i.modifiers.command
+                && self.current_file.is_none()
+                && !self.url.is_empty()
+            {
                 if let Some(workspace) = &self.workspace_path.clone() {
                     self.show_new_request_dialog = true;
                     self.new_request_name = String::new();
@@ -1604,66 +1979,69 @@ impl eframe::App for MercuryApp {
                 } else {
                     // No workspace - prompt to open folder first
                     self.should_open_folder_dialog = true;
-                    self.last_action_message = Some(("Open a folder first to save requests".to_string(), i.time, false));
+                    self.last_action_message = Some((
+                        "Open a folder first to save requests".to_string(),
+                        i.time,
+                        false,
+                    ));
                 }
             }
-            
+
             // Cmd/Ctrl + Enter: Send request
             if i.key_pressed(egui::Key::Enter) && i.modifiers.command && !self.executing {
                 self.should_execute_request = true;
             }
-            
+
             // Cmd/Ctrl + K: Focus search
             if i.key_pressed(egui::Key::K) && i.modifiers.command {
                 self.should_focus_search = true;
             }
-            
+
             // Cmd/Ctrl + Shift + C: Copy as cURL
             if i.key_pressed(egui::Key::C) && i.modifiers.command && i.modifiers.shift {
                 self.should_copy_curl = true;
             }
-            
+
             // Cmd/Ctrl + O: Open folder
             if i.key_pressed(egui::Key::O) && i.modifiers.command {
                 self.should_open_folder_dialog = true;
             }
-            
+
             // Cmd/Ctrl + R: Toggle raw view (if response exists)
             if i.key_pressed(egui::Key::R) && i.modifiers.command && self.response.is_some() {
                 self.response_view_raw = !self.response_view_raw;
             }
-            
+
             // Cmd/Ctrl + E: Cycle through environments
-            if i.key_pressed(egui::Key::E) && i.modifiers.command {
-                if !self.env_files.is_empty() {
-                    self.selected_env = (self.selected_env + 1) % self.env_files.len();
-                    self.load_env();
-                }
+            if i.key_pressed(egui::Key::E) && i.modifiers.command && !self.env_files.is_empty() {
+                self.selected_env = (self.selected_env + 1) % self.env_files.len();
+                self.load_env();
             }
-            
+
             // Escape: Clear search
             if i.key_pressed(egui::Key::Escape) && !self.search_query.is_empty() {
                 self.search_query.clear();
             }
-            
+
             // ? : Show keyboard shortcuts
-            if i.key_pressed(egui::Key::Questionmark) || 
-               (i.key_pressed(egui::Key::Slash) && i.modifiers.shift) {
+            if i.key_pressed(egui::Key::Questionmark)
+                || (i.key_pressed(egui::Key::Slash) && i.modifiers.shift)
+            {
                 self.show_shortcuts = !self.show_shortcuts;
             }
-            
+
             // Cmd+Shift+F: Focus Mode
             if i.key_pressed(egui::Key::F) && i.modifiers.command && i.modifiers.shift {
                 self.focus_mode = !self.focus_mode;
             }
-            
+
             // Cmd+H: Toggle Timeline/History
             if i.key_pressed(egui::Key::H) && i.modifiers.command {
                 self.show_timeline = !self.show_timeline;
             }
         });
     }
-    
+
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
         // Save state when app closes
         self.save_state();

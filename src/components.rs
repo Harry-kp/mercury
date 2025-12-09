@@ -1,10 +1,8 @@
 // components.rs - Reusable UI components
 // Modular widgets with consistent styling
 
+use crate::theme::{Colors, FontSize, Radius, Spacing};
 use egui::{self, Color32, RichText, Ui};
-use crate::theme::{Colors, Spacing, Radius, FontSize};
-
-
 
 /// Status badge for HTTP responses
 pub fn status_badge(ui: &mut Ui, status: u16, status_text: &str) {
@@ -15,7 +13,7 @@ pub fn status_badge(ui: &mut Ui, status: u16, status_text: &str) {
     } else {
         (Colors::ERROR, Colors::ERROR_BG)
     };
-    
+
     egui::Frame::none()
         .fill(bg)
         .rounding(Radius::SM)
@@ -27,10 +25,12 @@ pub fn status_badge(ui: &mut Ui, status: u16, status_text: &str) {
             } else {
                 format!("{} {}", status, status_text)
             };
-            ui.label(RichText::new(display_text)
-                .color(color)
-                .strong()
-                .size(FontSize::MD));
+            ui.label(
+                RichText::new(display_text)
+                    .color(color)
+                    .strong()
+                    .size(FontSize::MD),
+            );
         });
 }
 
@@ -50,29 +50,28 @@ pub fn tab_bar(ui: &mut Ui, tabs: &[&str], selected: &mut usize) {
             } else {
                 Colors::TEXT_MUTED
             };
-            
+
             let response = ui.add(
-                egui::Button::new(RichText::new(*tab).size(FontSize::MD).color(color))
-                    .frame(false)
+                egui::Button::new(RichText::new(*tab).size(FontSize::MD).color(color)).frame(false),
             );
-            
+
             if response.clicked() {
                 *selected = i;
             }
-            
+
             // Underline indicator for selected tab
             if is_selected {
                 let rect = response.rect;
                 ui.painter().rect_filled(
                     egui::Rect::from_min_size(
                         egui::pos2(rect.left(), rect.bottom() - 2.0),
-                        egui::vec2(rect.width(), 2.0)
+                        egui::vec2(rect.width(), 2.0),
                     ),
                     0.0,
-                    Colors::PRIMARY
+                    Colors::PRIMARY,
                 );
             }
-            
+
             if i < tabs.len() - 1 {
                 ui.add_space(Spacing::MD);
             }
@@ -90,25 +89,37 @@ pub fn method_badge(ui: &mut Ui, method: &str) -> egui::Response {
         "DELETE" => Colors::METHOD_DELETE,
         _ => Colors::TEXT_SECONDARY,
     };
-    
+
     egui::Frame::none()
         .fill(color.gamma_multiply(0.15))
         .rounding(Radius::SM)
         .inner_margin(egui::Margin::symmetric(Spacing::SM, Spacing::XS))
         .show(ui, |ui| {
-            ui.label(RichText::new(method).color(color).strong().size(FontSize::SM));
-        }).response
+            ui.label(
+                RichText::new(method)
+                    .color(color)
+                    .strong()
+                    .size(FontSize::SM),
+            );
+        })
+        .response
 }
-
-
 
 /// Empty state placeholder
 pub fn empty_state(ui: &mut Ui, title: &str, subtitle: &str) {
     ui.vertical_centered(|ui| {
         ui.add_space(Spacing::XXL);
-        ui.label(RichText::new(title).size(FontSize::LG).color(Colors::TEXT_SECONDARY));
+        ui.label(
+            RichText::new(title)
+                .size(FontSize::LG)
+                .color(Colors::TEXT_SECONDARY),
+        );
         ui.add_space(Spacing::XS);
-        ui.label(RichText::new(subtitle).size(FontSize::SM).color(Colors::TEXT_MUTED));
+        ui.label(
+            RichText::new(subtitle)
+                .size(FontSize::SM)
+                .color(Colors::TEXT_MUTED),
+        );
     });
 }
 
@@ -118,7 +129,11 @@ pub fn loading_state(ui: &mut Ui, message: &str) {
         ui.add_space(Spacing::XXL);
         ui.spinner();
         ui.add_space(Spacing::SM);
-        ui.label(RichText::new(message).size(FontSize::MD).color(Colors::TEXT_SECONDARY));
+        ui.label(
+            RichText::new(message)
+                .size(FontSize::MD)
+                .color(Colors::TEXT_SECONDARY),
+        );
     });
 }
 
@@ -126,15 +141,25 @@ pub fn loading_state(ui: &mut Ui, message: &str) {
 pub fn error_state(ui: &mut Ui, error: &str) {
     ui.vertical_centered(|ui| {
         ui.add_space(Spacing::XL);
-        ui.label(RichText::new("Request Failed").size(FontSize::LG).color(Colors::ERROR).strong());
+        ui.label(
+            RichText::new("Request Failed")
+                .size(FontSize::LG)
+                .color(Colors::ERROR)
+                .strong(),
+        );
         ui.add_space(Spacing::SM);
-        
+
         egui::Frame::none()
             .fill(Colors::ERROR_BG)
             .rounding(Radius::SM)
             .inner_margin(Spacing::SM)
             .show(ui, |ui| {
-                ui.label(RichText::new(error).color(Color32::from_rgb(255, 180, 180)).monospace().size(FontSize::SM));
+                ui.label(
+                    RichText::new(error)
+                        .color(Colors::ERROR)
+                        .monospace()
+                        .size(FontSize::SM),
+                );
             });
     });
 }
@@ -146,11 +171,13 @@ pub fn variable_indicator(ui: &mut Ui, name: &str, is_defined: bool) {
     } else {
         ("✗", Colors::ERROR)
     };
-    
-    ui.label(RichText::new(format!("{} {{{{{}}}}}", icon, name))
-        .color(color)
-        .size(FontSize::SM)
-        .monospace());
+
+    ui.label(
+        RichText::new(format!("{} {{{{{}}}}}", icon, name))
+            .color(color)
+            .size(FontSize::SM)
+            .monospace(),
+    );
 }
 
 /// Minimal copy icon button - returns true if clicked
@@ -159,32 +186,34 @@ pub fn copy_icon_button(ui: &mut Ui) -> bool {
         egui::Label::new(
             RichText::new("Copy")
                 .size(FontSize::XS)
-                .color(Colors::TEXT_MUTED)
-        ).sense(egui::Sense::click())
+                .color(Colors::TEXT_MUTED),
+        )
+        .sense(egui::Sense::click()),
     );
-    
+
     if response.hovered() {
         ui.painter().rect_stroke(
             response.rect.expand(2.0),
             2.0,
-            egui::Stroke::new(1.0, Colors::PRIMARY)
+            egui::Stroke::new(crate::theme::StrokeWidth::THIN, Colors::PRIMARY),
         );
     }
-    
+
     response.on_hover_text("Copy to clipboard").clicked()
 }
 
 /// Animated send button with pulsing glow when executing
 pub fn animated_send_button(ui: &mut Ui, executing: bool, time: f64) -> egui::Response {
     use crate::theme::Animation;
-    
+
     // Calculate pulse effect (0.0 to 1.0)
     let pulse = if executing {
-        ((time * Animation::PULSE_SPEED as f64 * std::f64::consts::PI * 2.0).sin() * 0.5 + 0.5) as f32
+        ((time * Animation::PULSE_SPEED as f64 * std::f64::consts::PI * 2.0).sin() * 0.5 + 0.5)
+            as f32
     } else {
         0.0
     };
-    
+
     // Base color with pulse intensity
     let base_color = if executing {
         // Interpolate between primary and brighter version
@@ -195,17 +224,14 @@ pub fn animated_send_button(ui: &mut Ui, executing: bool, time: f64) -> egui::Re
     } else {
         Colors::PRIMARY
     };
-    
+
     let icon = if executing { "◌" } else { "▶" };
-    
+
     let response = ui.add(
-        egui::Label::new(
-            RichText::new(icon)
-                .size(FontSize::ICON)
-                .color(base_color)
-        ).sense(egui::Sense::click())
+        egui::Label::new(RichText::new(icon).size(FontSize::ICON).color(base_color))
+            .sense(egui::Sense::click()),
     );
-    
+
     // Draw glow effect when executing
     if executing {
         let rect = response.rect;
@@ -213,27 +239,28 @@ pub fn animated_send_button(ui: &mut Ui, executing: bool, time: f64) -> egui::Re
             Colors::PRIMARY.r(),
             Colors::PRIMARY.g(),
             Colors::PRIMARY.b(),
-            (pulse * Animation::GLOW_INTENSITY * 255.0) as u8
+            (pulse * Animation::GLOW_INTENSITY * 255.0) as u8,
         );
-        ui.painter().circle_filled(rect.center(), rect.width() * 0.8, glow_color);
+        ui.painter()
+            .circle_filled(rect.center(), rect.width() * 0.8, glow_color);
     }
-    
+
     response
 }
 
 /// Render JSON with syntax highlighting
 pub fn json_syntax_highlight(ui: &mut Ui, json: &str) {
     use egui::text::{LayoutJob, TextFormat};
-    
+
     let mut job = LayoutJob::default();
     let font_id = egui::FontId::monospace(FontSize::SM);
-    
-    let mut chars = json.chars().peekable();
+
+    let chars = json.chars().peekable();
     let mut current_token = String::new();
     let mut in_string = false;
     let mut is_key = true; // Track if we're parsing a key or value
-    
-    while let Some(ch) = chars.next() {
+
+    for ch in chars {
         match ch {
             '"' if !in_string => {
                 // Start of string
@@ -243,65 +270,97 @@ pub fn json_syntax_highlight(ui: &mut Ui, json: &str) {
             '"' if in_string => {
                 // End of string
                 current_token.push(ch);
-                let color = if is_key { Colors::JSON_KEY } else { Colors::JSON_STRING };
-                job.append(&current_token, 0.0, TextFormat { 
-                    font_id: font_id.clone(), 
-                    color,
-                    ..Default::default() 
-                });
+                let color = if is_key {
+                    Colors::JSON_KEY
+                } else {
+                    Colors::JSON_STRING
+                };
+                job.append(
+                    &current_token,
+                    0.0,
+                    TextFormat {
+                        font_id: font_id.clone(),
+                        color,
+                        ..Default::default()
+                    },
+                );
                 current_token.clear();
                 in_string = false;
             }
             ':' if !in_string => {
                 is_key = false;
-                job.append(":", 0.0, TextFormat { 
-                    font_id: font_id.clone(), 
-                    color: Colors::TEXT_MUTED,
-                    ..Default::default() 
-                });
+                job.append(
+                    ":",
+                    0.0,
+                    TextFormat {
+                        font_id: font_id.clone(),
+                        color: Colors::TEXT_MUTED,
+                        ..Default::default()
+                    },
+                );
             }
             ',' if !in_string => {
                 is_key = true; // Next token is a key
-                job.append(",", 0.0, TextFormat { 
-                    font_id: font_id.clone(), 
-                    color: Colors::TEXT_MUTED,
-                    ..Default::default() 
-                });
+                job.append(
+                    ",",
+                    0.0,
+                    TextFormat {
+                        font_id: font_id.clone(),
+                        color: Colors::TEXT_MUTED,
+                        ..Default::default()
+                    },
+                );
             }
             '{' | '}' | '[' | ']' if !in_string => {
                 // Flush any pending token first
                 if !current_token.is_empty() {
                     let color = detect_json_value_color(&current_token);
-                    job.append(&current_token, 0.0, TextFormat { 
-                        font_id: font_id.clone(), 
-                        color,
-                        ..Default::default() 
-                    });
+                    job.append(
+                        &current_token,
+                        0.0,
+                        TextFormat {
+                            font_id: font_id.clone(),
+                            color,
+                            ..Default::default()
+                        },
+                    );
                     current_token.clear();
                 }
                 is_key = ch == '{'; // After { we expect a key
-                job.append(&ch.to_string(), 0.0, TextFormat { 
-                    font_id: font_id.clone(), 
-                    color: Colors::JSON_BRACKET,
-                    ..Default::default() 
-                });
+                job.append(
+                    &ch.to_string(),
+                    0.0,
+                    TextFormat {
+                        font_id: font_id.clone(),
+                        color: Colors::JSON_BRACKET,
+                        ..Default::default()
+                    },
+                );
             }
             '\n' if !in_string => {
                 // Flush token before newline
                 if !current_token.is_empty() {
                     let color = detect_json_value_color(&current_token);
-                    job.append(&current_token, 0.0, TextFormat { 
-                        font_id: font_id.clone(), 
-                        color,
-                        ..Default::default() 
-                    });
+                    job.append(
+                        &current_token,
+                        0.0,
+                        TextFormat {
+                            font_id: font_id.clone(),
+                            color,
+                            ..Default::default()
+                        },
+                    );
                     current_token.clear();
                 }
-                job.append("\n", 0.0, TextFormat { 
-                    font_id: font_id.clone(), 
-                    color: Colors::TEXT_PRIMARY,
-                    ..Default::default() 
-                });
+                job.append(
+                    "\n",
+                    0.0,
+                    TextFormat {
+                        font_id: font_id.clone(),
+                        color: Colors::TEXT_PRIMARY,
+                        ..Default::default()
+                    },
+                );
             }
             _ if in_string => {
                 current_token.push(ch);
@@ -311,18 +370,26 @@ pub fn json_syntax_highlight(ui: &mut Ui, json: &str) {
                 if ch.is_whitespace() {
                     if !current_token.is_empty() {
                         let color = detect_json_value_color(&current_token);
-                        job.append(&current_token, 0.0, TextFormat { 
-                            font_id: font_id.clone(), 
-                            color,
-                            ..Default::default() 
-                        });
+                        job.append(
+                            &current_token,
+                            0.0,
+                            TextFormat {
+                                font_id: font_id.clone(),
+                                color,
+                                ..Default::default()
+                            },
+                        );
                         current_token.clear();
                     }
-                    job.append(&ch.to_string(), 0.0, TextFormat { 
-                        font_id: font_id.clone(), 
-                        color: Colors::TEXT_PRIMARY,
-                        ..Default::default() 
-                    });
+                    job.append(
+                        &ch.to_string(),
+                        0.0,
+                        TextFormat {
+                            font_id: font_id.clone(),
+                            color: Colors::TEXT_PRIMARY,
+                            ..Default::default()
+                        },
+                    );
                 } else {
                     current_token.push(ch);
                 }
@@ -332,17 +399,21 @@ pub fn json_syntax_highlight(ui: &mut Ui, json: &str) {
             }
         }
     }
-    
+
     // Flush remaining token
     if !current_token.is_empty() {
         let color = detect_json_value_color(&current_token);
-        job.append(&current_token, 0.0, TextFormat { 
-            font_id: font_id.clone(), 
-            color,
-            ..Default::default() 
-        });
+        job.append(
+            &current_token,
+            0.0,
+            TextFormat {
+                font_id: font_id.clone(),
+                color,
+                ..Default::default()
+            },
+        );
     }
-    
+
     ui.label(job);
 }
 
@@ -363,42 +434,46 @@ fn detect_json_value_color(token: &str) -> Color32 {
 /// Create a LayoutJob for JSON syntax highlighting - for use with TextEdit.layouter()
 pub fn json_layout_job(text: &str, wrap_width: f32) -> egui::text::LayoutJob {
     use egui::text::{LayoutJob, TextFormat};
-    
+
     let mut job = LayoutJob::default();
     job.wrap.max_width = wrap_width;
-    
+
     let font_id = egui::FontId::monospace(FontSize::SM);
-    
+
     // If not JSON-like, just return plain text
     let trimmed = text.trim_start();
     if !trimmed.starts_with('{') && !trimmed.starts_with('[') {
-        job.append(text, 0.0, TextFormat {
-            font_id,
-            color: Colors::TEXT_PRIMARY,
-            ..Default::default()
-        });
+        job.append(
+            text,
+            0.0,
+            TextFormat {
+                font_id,
+                color: Colors::TEXT_PRIMARY,
+                ..Default::default()
+            },
+        );
         return job;
     }
-    
-    let mut chars = text.chars().peekable();
+
+    let chars = text.chars().peekable();
     let mut current_token = String::new();
     let mut in_string = false;
     let mut escape_next = false;
     let mut is_key = true;
-    
-    while let Some(ch) = chars.next() {
+
+    for ch in chars {
         if escape_next {
             current_token.push(ch);
             escape_next = false;
             continue;
         }
-        
+
         if ch == '\\' && in_string {
             current_token.push(ch);
             escape_next = true;
             continue;
         }
-        
+
         match ch {
             '"' if !in_string => {
                 in_string = true;
@@ -406,57 +481,85 @@ pub fn json_layout_job(text: &str, wrap_width: f32) -> egui::text::LayoutJob {
             }
             '"' if in_string => {
                 current_token.push(ch);
-                let color = if is_key { Colors::JSON_KEY } else { Colors::JSON_STRING };
-                job.append(&current_token, 0.0, TextFormat { 
-                    font_id: font_id.clone(), 
-                    color,
-                    ..Default::default() 
-                });
+                let color = if is_key {
+                    Colors::JSON_KEY
+                } else {
+                    Colors::JSON_STRING
+                };
+                job.append(
+                    &current_token,
+                    0.0,
+                    TextFormat {
+                        font_id: font_id.clone(),
+                        color,
+                        ..Default::default()
+                    },
+                );
                 current_token.clear();
                 in_string = false;
             }
             ':' if !in_string => {
                 is_key = false;
-                job.append(":", 0.0, TextFormat { 
-                    font_id: font_id.clone(), 
-                    color: Colors::TEXT_MUTED,
-                    ..Default::default() 
-                });
+                job.append(
+                    ":",
+                    0.0,
+                    TextFormat {
+                        font_id: font_id.clone(),
+                        color: Colors::TEXT_MUTED,
+                        ..Default::default()
+                    },
+                );
             }
             ',' if !in_string => {
                 // Flush pending token
                 if !current_token.is_empty() {
                     let color = detect_json_value_color(&current_token);
-                    job.append(&current_token, 0.0, TextFormat { 
-                        font_id: font_id.clone(), 
-                        color,
-                        ..Default::default() 
-                    });
+                    job.append(
+                        &current_token,
+                        0.0,
+                        TextFormat {
+                            font_id: font_id.clone(),
+                            color,
+                            ..Default::default()
+                        },
+                    );
                     current_token.clear();
                 }
                 is_key = true;
-                job.append(",", 0.0, TextFormat { 
-                    font_id: font_id.clone(), 
-                    color: Colors::TEXT_MUTED,
-                    ..Default::default() 
-                });
+                job.append(
+                    ",",
+                    0.0,
+                    TextFormat {
+                        font_id: font_id.clone(),
+                        color: Colors::TEXT_MUTED,
+                        ..Default::default()
+                    },
+                );
             }
             '{' | '}' | '[' | ']' if !in_string => {
                 if !current_token.is_empty() {
                     let color = detect_json_value_color(&current_token);
-                    job.append(&current_token, 0.0, TextFormat { 
-                        font_id: font_id.clone(), 
-                        color,
-                        ..Default::default() 
-                    });
+                    job.append(
+                        &current_token,
+                        0.0,
+                        TextFormat {
+                            font_id: font_id.clone(),
+                            color,
+                            ..Default::default()
+                        },
+                    );
                     current_token.clear();
                 }
                 is_key = ch == '{';
-                job.append(&ch.to_string(), 0.0, TextFormat { 
-                    font_id: font_id.clone(), 
-                    color: Colors::JSON_BRACKET,
-                    ..Default::default() 
-                });
+                job.append(
+                    &ch.to_string(),
+                    0.0,
+                    TextFormat {
+                        font_id: font_id.clone(),
+                        color: Colors::JSON_BRACKET,
+                        ..Default::default()
+                    },
+                );
             }
             _ if in_string => {
                 current_token.push(ch);
@@ -465,18 +568,26 @@ pub fn json_layout_job(text: &str, wrap_width: f32) -> egui::text::LayoutJob {
                 if ch.is_whitespace() {
                     if !current_token.is_empty() {
                         let color = detect_json_value_color(&current_token);
-                        job.append(&current_token, 0.0, TextFormat { 
-                            font_id: font_id.clone(), 
-                            color,
-                            ..Default::default() 
-                        });
+                        job.append(
+                            &current_token,
+                            0.0,
+                            TextFormat {
+                                font_id: font_id.clone(),
+                                color,
+                                ..Default::default()
+                            },
+                        );
                         current_token.clear();
                     }
-                    job.append(&ch.to_string(), 0.0, TextFormat { 
-                        font_id: font_id.clone(), 
-                        color: Colors::TEXT_PRIMARY,
-                        ..Default::default() 
-                    });
+                    job.append(
+                        &ch.to_string(),
+                        0.0,
+                        TextFormat {
+                            font_id: font_id.clone(),
+                            color: Colors::TEXT_PRIMARY,
+                            ..Default::default()
+                        },
+                    );
                 } else {
                     current_token.push(ch);
                 }
@@ -486,16 +597,20 @@ pub fn json_layout_job(text: &str, wrap_width: f32) -> egui::text::LayoutJob {
             }
         }
     }
-    
+
     // Flush remaining
     if !current_token.is_empty() {
         let color = detect_json_value_color(&current_token);
-        job.append(&current_token, 0.0, TextFormat { 
-            font_id: font_id.clone(), 
-            color,
-            ..Default::default() 
-        });
+        job.append(
+            &current_token,
+            0.0,
+            TextFormat {
+                font_id: font_id.clone(),
+                color,
+                ..Default::default()
+            },
+        );
     }
-    
+
     job
 }

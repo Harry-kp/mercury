@@ -1,13 +1,13 @@
-mod http_parser;
-mod request_executor;
-mod env_parser;
 mod app;
-mod insomnia_importer;
-mod curl_parser;
-mod theme;
 mod components;
-mod panels;
 mod constants;
+mod curl_parser;
+mod env_parser;
+mod http_parser;
+mod insomnia_importer;
+mod panels;
+mod request_executor;
+mod theme;
 
 use eframe::egui;
 
@@ -27,75 +27,116 @@ fn main() -> Result<(), eframe::Error> {
         Box::new(|cc| {
             // Custom theme - Warm grays with indigo accent
             let mut style = (*cc.egui_ctx.style()).clone();
-            
+
             style.visuals = egui::Visuals {
                 dark_mode: true,
-                override_text_color: Some(egui::Color32::from_rgb(232, 232, 237)),  // Warm white
-                window_fill: egui::Color32::from_rgb(26, 26, 30),    // #1a1a1e - warm dark
-                panel_fill: egui::Color32::from_rgb(33, 33, 38),     // #212126
-                faint_bg_color: egui::Color32::from_rgb(39, 39, 44), // #27272c
-                extreme_bg_color: egui::Color32::from_rgb(22, 22, 26),
-                code_bg_color: egui::Color32::from_rgb(30, 30, 34),  // #1e1e22
-                
-                window_stroke: egui::Stroke::new(theme::StrokeWidth::THIN, theme::Colors::BORDER_SUBTLE),
+                override_text_color: Some(theme::Colors::TEXT_PRIMARY),
+                window_fill: theme::Colors::BG_MODAL,
+                panel_fill: theme::Colors::BG_SURFACE,
+                faint_bg_color: theme::Colors::BG_CARD,
+                extreme_bg_color: theme::Colors::BG_INPUT,
+                code_bg_color: theme::Colors::BG_CODE,
+
+                window_stroke: egui::Stroke::new(
+                    theme::StrokeWidth::THIN,
+                    theme::Colors::BORDER_SUBTLE,
+                ),
+                popup_shadow: egui::epaint::Shadow {
+                    offset: egui::vec2(0.0, 2.0),
+                    blur: 8.0,
+                    spread: 0.0,
+                    color: egui::Color32::from_rgba_premultiplied(0, 0, 0, 60),
+                },
                 widgets: egui::style::Widgets {
                     noninteractive: egui::style::WidgetVisuals {
-                        bg_fill: egui::Color32::from_rgb(39, 39, 44),
-                        weak_bg_fill: egui::Color32::from_rgb(33, 33, 38),
-                        bg_stroke: egui::Stroke::new(theme::StrokeWidth::THIN, theme::Colors::BORDER_SUBTLE),
-                        fg_stroke: egui::Stroke::new(theme::StrokeWidth::THIN, theme::Colors::PLACEHOLDER),
+                        bg_fill: theme::Colors::BG_MODAL,
+                        weak_bg_fill: theme::Colors::BG_CARD,
+                        bg_stroke: egui::Stroke::new(
+                            theme::StrokeWidth::THIN,
+                            theme::Colors::BORDER_SUBTLE,
+                        ),
+                        fg_stroke: egui::Stroke::new(
+                            theme::StrokeWidth::THIN,
+                            theme::Colors::TEXT_SECONDARY,
+                        ),
                         rounding: egui::Rounding::same(theme::Radius::MD),
                         expansion: 0.0,
                     },
                     inactive: egui::style::WidgetVisuals {
-                        bg_fill: egui::Color32::from_rgb(46, 46, 52),
-                        weak_bg_fill: egui::Color32::from_rgb(39, 39, 44),
-                        bg_stroke: egui::Stroke::new(1.0, egui::Color32::from_rgb(61, 61, 71)),
-                        fg_stroke: egui::Stroke::new(theme::StrokeWidth::THIN, theme::Colors::TEXT_PRIMARY),
+                        bg_fill: theme::Colors::BG_WIDGET_INACTIVE,
+                        weak_bg_fill: theme::Colors::BG_CARD,
+                        bg_stroke: egui::Stroke::new(
+                            theme::StrokeWidth::THIN,
+                            theme::Colors::BORDER_WIDGET,
+                        ),
+                        fg_stroke: egui::Stroke::new(
+                            theme::StrokeWidth::THIN,
+                            theme::Colors::TEXT_PRIMARY,
+                        ),
                         rounding: egui::Rounding::same(theme::Radius::MD),
                         expansion: 0.0,
                     },
                     hovered: egui::style::WidgetVisuals {
-                        bg_fill: egui::Color32::from_rgb(55, 55, 62),
-                        weak_bg_fill: egui::Color32::from_rgb(50, 50, 56),
-                        bg_stroke: egui::Stroke::new(theme::StrokeWidth::THIN, theme::Colors::PRIMARY),
-                        fg_stroke: egui::Stroke::new(theme::StrokeWidth::MEDIUM, egui::Color32::from_rgb(245, 245, 250)),
+                        bg_fill: theme::Colors::BG_WIDGET_HOVER,
+                        weak_bg_fill: theme::Colors::BG_WIDGET_INACTIVE,
+                        bg_stroke: egui::Stroke::new(
+                            theme::StrokeWidth::THIN,
+                            theme::Colors::PRIMARY,
+                        ),
+                        fg_stroke: egui::Stroke::new(
+                            theme::StrokeWidth::MEDIUM,
+                            theme::Colors::TEXT_PRIMARY,
+                        ),
                         rounding: egui::Rounding::same(theme::Radius::MD),
                         expansion: 1.0,
                     },
                     active: egui::style::WidgetVisuals {
                         bg_fill: theme::Colors::PRIMARY,
-                        weak_bg_fill: egui::Color32::from_rgb(55, 55, 62),
-                        bg_stroke: egui::Stroke::new(theme::StrokeWidth::THIN, theme::Colors::PRIMARY),
-                        fg_stroke: egui::Stroke::new(theme::StrokeWidth::THICK, egui::Color32::from_rgb(255, 255, 255)),
+                        weak_bg_fill: theme::Colors::BG_WIDGET_INACTIVE,
+                        bg_stroke: egui::Stroke::new(
+                            theme::StrokeWidth::THIN,
+                            theme::Colors::PRIMARY,
+                        ),
+                        fg_stroke: egui::Stroke::new(
+                            theme::StrokeWidth::THICK,
+                            egui::Color32::WHITE,
+                        ),
                         rounding: egui::Rounding::same(theme::Radius::MD),
                         expansion: 1.0,
                     },
                     open: egui::style::WidgetVisuals {
-                        bg_fill: egui::Color32::from_rgb(46, 46, 52),
-                        weak_bg_fill: egui::Color32::from_rgb(39, 39, 44),
-                        bg_stroke: egui::Stroke::new(theme::StrokeWidth::THIN, theme::Colors::PRIMARY),
-                        fg_stroke: egui::Stroke::new(theme::StrokeWidth::THIN, egui::Color32::from_rgb(210, 210, 215)),
+                        bg_fill: theme::Colors::BG_WIDGET_INACTIVE,
+                        weak_bg_fill: theme::Colors::BG_CARD,
+                        bg_stroke: egui::Stroke::new(
+                            theme::StrokeWidth::THIN,
+                            theme::Colors::PRIMARY,
+                        ),
+                        fg_stroke: egui::Stroke::new(
+                            theme::StrokeWidth::THIN,
+                            theme::Colors::TEXT_PRIMARY,
+                        ),
                         rounding: egui::Rounding::same(theme::Radius::MD),
                         expansion: 0.0,
                     },
                 },
                 selection: egui::style::Selection {
-                    bg_fill: egui::Color32::from_rgba_premultiplied(99, 102, 241, 80),
+                    bg_fill: egui::Color32::from_rgba_premultiplied(99, 102, 241, 80), // PRIMARY with alpha
                     stroke: egui::Stroke::new(theme::StrokeWidth::THIN, theme::Colors::PRIMARY),
                 },
-                hyperlink_color: egui::Color32::from_rgb(99, 102, 241), // Indigo links
+                hyperlink_color: theme::Colors::PRIMARY,
                 ..egui::Visuals::dark()
             };
-            
+
             // Better spacing and sizing
-            style.spacing.item_spacing = egui::vec2(theme::Spacing::SM, theme::Indent::ITEM_SPACING);
-            style.spacing.button_padding = egui::vec2(theme::Spacing::MD, theme::Indent::ITEM_SPACING);
+            style.spacing.item_spacing =
+                egui::vec2(theme::Spacing::SM, theme::Indent::ITEM_SPACING);
+            style.spacing.button_padding =
+                egui::vec2(theme::Spacing::MD, theme::Indent::ITEM_SPACING);
             style.spacing.window_margin = egui::Margin::same(theme::Spacing::SM);
             style.spacing.menu_margin = egui::Margin::same(theme::Radius::MD);
-            
+
             cc.egui_ctx.set_style(style);
-            
+
             Ok(Box::new(app::MercuryApp::new(cc)))
         }),
     )
@@ -111,7 +152,7 @@ fn load_icon() -> egui::IconData {
         let rgba = image.into_raw();
         (rgba, width, height)
     };
-    
+
     egui::IconData {
         rgba: icon_rgba,
         width: icon_width,
