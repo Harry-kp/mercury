@@ -2,11 +2,13 @@ use crate::env_parser::{parse_env_file, substitute_variables};
 use crate::http_parser::{parse_http_file, HttpMethod, HttpRequest};
 use crate::request_executor::{execute_request, HttpResponse};
 use eframe::egui;
+use notify_debouncer_mini::new_debouncer;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{channel, Receiver, Sender};
+use std::time::Duration;
 use walkdir::WalkDir;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -119,6 +121,12 @@ pub struct MercuryApp {
     pub has_unsaved_changes: bool,
     last_save_time: f64,
     last_saved_content: Option<String>, // Content at last save for comparison
+
+    // File system watcher
+    watcher_rx: Receiver<()>,
+    #[allow(dead_code)]
+    watcher_tx: Sender<()>,
+    expanded_folders: HashSet<PathBuf>,
 }
 
 // Timeline entry for request history
@@ -139,6 +147,7 @@ impl MercuryApp {
     pub fn new(_cc: &eframe::CreationContext<'_>) -> Self {
         let (response_tx, response_rx) = channel();
         let (folder_tx, folder_rx) = channel();
+        let (watcher_tx, watcher_rx) = channel();
 
         // Load saved state
         let saved_state = Self::load_state();
@@ -202,6 +211,9 @@ impl MercuryApp {
             has_unsaved_changes: false,
             last_save_time: f64::MAX, // Start high so first auto-save waits for actual save/load
             last_saved_content: None,
+            watcher_rx,
+            watcher_tx,
+            expanded_folders: HashSet::new(),
         };
 
         // Restore saved state
@@ -267,6 +279,9 @@ impl MercuryApp {
 
         // Build collection tree
         self.build_collection_tree();
+
+        // Start file system watcher for external changes
+        self.start_file_watcher();
 
         // Scan for .http files (backward compatibility)
         for entry in WalkDir::new(&path).into_iter().filter_map(|e| e.ok()) {
@@ -396,13 +411,90 @@ impl MercuryApp {
     }
 
     fn build_collection_tree(&mut self) {
-        if let Some(workspace) = &self.workspace_path {
-            self.collection_tree = self.scan_directory(workspace, workspace);
+        if let Some(workspace) = self.workspace_path.clone() {
+            // Save current expanded state before rebuilding
+            let old_tree = std::mem::take(&mut self.collection_tree);
+            self.save_expanded_state(&old_tree);
+
+            // Rebuild tree
+            self.collection_tree = self.scan_directory(&workspace, &workspace);
+
             self.workspace_name = workspace
                 .file_name()
                 .unwrap_or_default()
                 .to_string_lossy()
                 .to_string();
+        }
+    }
+
+    /// Save the expanded state of all folders to the HashSet
+    fn save_expanded_state(&mut self, items: &[CollectionItem]) {
+        for item in items {
+            if let CollectionItem::Folder {
+                path,
+                expanded,
+                children,
+                ..
+            } = item
+            {
+                if *expanded {
+                    self.expanded_folders.insert(path.clone());
+                } else {
+                    self.expanded_folders.remove(path);
+                }
+                self.save_expanded_state(children);
+            }
+        }
+    }
+
+    /// Start file system watcher for the workspace directory
+    fn start_file_watcher(&mut self) {
+        if let Some(workspace) = &self.workspace_path {
+            let workspace_path = workspace.clone();
+            let tx = self.watcher_tx.clone();
+
+            std::thread::spawn(move || {
+                let (debouncer_tx, debouncer_rx) = std::sync::mpsc::channel();
+
+                // Create debounced watcher (500ms debounce to avoid rapid rebuilds)
+                let mut debouncer = match new_debouncer(Duration::from_millis(500), debouncer_tx) {
+                    Ok(d) => d,
+                    Err(e) => {
+                        eprintln!("Failed to create file watcher: {}", e);
+                        return;
+                    }
+                };
+
+                // Watch the workspace directory recursively
+                if let Err(e) = debouncer
+                    .watcher()
+                    .watch(&workspace_path, notify::RecursiveMode::Recursive)
+                {
+                    eprintln!("Failed to watch directory: {}", e);
+                    return;
+                }
+
+                // Listen for events and signal main thread
+                loop {
+                    match debouncer_rx.recv() {
+                        Ok(Ok(events)) => {
+                            // Any file change in workspace triggers rebuild
+                            // The debouncer already batches events, just signal rebuild if any events
+                            if !events.is_empty() {
+                                let _ = tx.send(());
+                            }
+                        }
+                        Ok(Err(error)) => {
+                            // Log watcher error but continue
+                            eprintln!("File watcher error: {:?}", error);
+                        }
+                        Err(_) => {
+                            // Channel closed, exit watcher thread
+                            break;
+                        }
+                    }
+                }
+            });
         }
     }
 
@@ -430,10 +522,12 @@ impl MercuryApp {
 
                 if path.is_dir() {
                     let children = self.scan_directory(&path, workspace_root);
+                    // Default to expanded for new folders, will be overwritten by restore_expanded_state
+                    let is_expanded = self.expanded_folders.contains(&path);
                     folders.push(CollectionItem::Folder {
                         name,
                         path: path.clone(),
-                        expanded: true,
+                        expanded: is_expanded || self.expanded_folders.is_empty(), // Expand by default on first load
                         children,
                     });
                 } else if path.extension().and_then(|s| s.to_str()) == Some("http") {
@@ -1120,6 +1214,29 @@ impl eframe::App for MercuryApp {
             ctx.request_repaint();
         }
 
+        // Check for file system changes from watcher
+        if self.watcher_rx.try_recv().is_ok() {
+            // Rebuild tree while preserving expanded state
+            self.build_collection_tree();
+
+            // Handle edge case: current file was deleted externally
+            if let Some(ref current_path) = self.current_file {
+                if !current_path.exists() {
+                    self.current_file = None;
+                    self.url.clear();
+                    self.headers_text.clear();
+                    self.body_text.clear();
+                    self.response = None;
+                    self.last_action_message = Some((
+                        "File was deleted externally".to_string(),
+                        ctx.input(|i| i.time),
+                        true,
+                    ));
+                }
+            }
+            ctx.request_repaint();
+        }
+
         // Execute deferred actions (after keyboard input processing)
         if self.should_create_new_request {
             self.should_create_new_request = false;
@@ -1224,6 +1341,8 @@ impl eframe::App for MercuryApp {
             self.load_workspace(path);
             ctx.request_repaint();
         }
+        // Drain any pending watcher events (handled above, but drain to avoid buildup)
+        while self.watcher_rx.try_recv().is_ok() {}
 
         // Top panel with breadcrumb navigation
         egui::TopBottomPanel::top("top_panel")
