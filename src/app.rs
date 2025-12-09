@@ -114,6 +114,11 @@ pub struct MercuryApp {
 
     folder_rx: Receiver<PathBuf>,
     folder_tx: Sender<PathBuf>,
+
+    // Auto-save tracking
+    pub has_unsaved_changes: bool,
+    last_save_time: f64,
+    last_saved_content: Option<String>, // Content at last save for comparison
 }
 
 // Timeline entry for request history
@@ -194,6 +199,9 @@ impl MercuryApp {
             response_tx,
             folder_rx,
             folder_tx,
+            has_unsaved_changes: false,
+            last_save_time: 0.0,
+            last_saved_content: None,
         };
 
         // Restore saved state
@@ -279,6 +287,11 @@ impl MercuryApp {
     }
 
     fn load_file(&mut self, path: &Path) {
+        // Save current file before loading new one
+        if self.has_unsaved_changes {
+            self.save_current_file();
+        }
+
         if let Ok(content) = fs::read_to_string(path) {
             if let Ok(request) = parse_http_file(&content) {
                 self.current_file = Some(path.to_path_buf());
@@ -295,7 +308,49 @@ impl MercuryApp {
 
                 self.body_text = request.body.unwrap_or_default();
                 self.response = None;
+
+                // Track the loaded content for change detection
+                self.last_saved_content = Some(self.get_current_content());
+                self.has_unsaved_changes = false;
             }
+        }
+    }
+
+    /// Get the current request content as an .http file string
+    fn get_current_content(&self) -> String {
+        let mut content = format!("{} {}", self.method.as_str(), self.url);
+
+        if !self.headers_text.is_empty() {
+            content.push('\n');
+            content.push_str(&self.headers_text);
+        }
+
+        if !self.body_text.is_empty() {
+            content.push_str("\n\n");
+            content.push_str(&self.body_text);
+        }
+
+        content
+    }
+
+    /// Save current file to disk
+    pub fn save_current_file(&mut self) -> bool {
+        if let Some(ref path) = self.current_file {
+            let content = self.get_current_content();
+            if fs::write(path, &content).is_ok() {
+                self.last_saved_content = Some(content);
+                self.has_unsaved_changes = false;
+                return true;
+            }
+        }
+        false
+    }
+
+    /// Check if current content differs from last saved content
+    pub fn check_for_changes(&mut self) {
+        if self.current_file.is_some() {
+            let current = self.get_current_content();
+            self.has_unsaved_changes = self.last_saved_content.as_ref() != Some(&current);
         }
     }
 
@@ -785,6 +840,17 @@ impl MercuryApp {
                             self.show_delete_confirm = true;
                             ui.close_menu();
                         }
+                        ui.separator();
+                        if ui.button("📋 Copy Path").clicked() {
+                            if let Some(path_str) = path.to_str() {
+                                ui.ctx().copy_text(path_str.to_string());
+                            }
+                            ui.close_menu();
+                        }
+                        if ui.button("📂 Reveal in Finder").clicked() {
+                            let _ = open::that(path);
+                            ui.close_menu();
+                        }
                     });
 
                     if *expanded || !search.is_empty() {
@@ -865,6 +931,19 @@ impl MercuryApp {
                         if ui.button("🗑 Delete").clicked() {
                             self.delete_target = Some(path.clone());
                             self.show_delete_confirm = true;
+                            ui.close_menu();
+                        }
+                        ui.separator();
+                        if ui.button("📋 Copy Path").clicked() {
+                            if let Some(path_str) = path.to_str() {
+                                ui.ctx().copy_text(path_str.to_string());
+                            }
+                            ui.close_menu();
+                        }
+                        if ui.button("📂 Reveal in Finder").clicked() {
+                            if let Some(parent) = path.parent() {
+                                let _ = open::that(parent);
+                            }
                             ui.close_menu();
                         }
                     });
@@ -974,6 +1053,16 @@ impl MercuryApp {
 
 impl eframe::App for MercuryApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        // Check for changes and auto-save (every 5 seconds)
+        let current_time = ctx.input(|i| i.time);
+        self.check_for_changes();
+        if self.has_unsaved_changes
+            && current_time - self.last_save_time > 5.0
+            && self.save_current_file()
+        {
+            self.last_save_time = current_time;
+        }
+
         if let Ok(result) = self.response_rx.try_recv() {
             self.executing = false;
             match result {
@@ -1229,6 +1318,15 @@ impl eframe::App for MercuryApp {
                                     .strong()
                                     .color(crate::theme::Colors::TEXT_PRIMARY),
                             );
+
+                            // Unsaved changes indicator
+                            if self.has_unsaved_changes {
+                                ui.label(
+                                    egui::RichText::new("●")
+                                        .size(crate::theme::FontSize::SM)
+                                        .color(crate::theme::Colors::WARNING),
+                                );
+                            }
                         } else {
                             ui.label(
                                 egui::RichText::new("/")
@@ -1987,6 +2085,16 @@ impl eframe::App for MercuryApp {
                 }
             }
 
+            // Cmd/Ctrl + S: Save current file (if already saved)
+            if i.key_pressed(egui::Key::S)
+                && i.modifiers.command
+                && self.current_file.is_some()
+                && self.has_unsaved_changes
+                && self.save_current_file()
+            {
+                self.last_action_message = Some(("Saved".to_string(), i.time, false));
+            }
+
             // Cmd/Ctrl + Enter: Send request
             if i.key_pressed(egui::Key::Enter) && i.modifiers.command && !self.executing {
                 self.should_execute_request = true;
@@ -2043,7 +2151,11 @@ impl eframe::App for MercuryApp {
     }
 
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
-        // Save state when app closes
+        // Save current file if there are unsaved changes
+        if self.has_unsaved_changes {
+            self.save_current_file();
+        }
+        // Save app state when app closes
         self.save_state();
     }
 }
