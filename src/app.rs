@@ -200,7 +200,7 @@ impl MercuryApp {
             folder_rx,
             folder_tx,
             has_unsaved_changes: false,
-            last_save_time: 0.0,
+            last_save_time: f64::MAX, // Start high so first auto-save waits for actual save/load
             last_saved_content: None,
         };
 
@@ -2082,6 +2082,7 @@ impl eframe::App for MercuryApp {
                 && self.has_unsaved_changes
                 && self.save_current_file()
             {
+                self.last_save_time = i.time;
                 self.last_action_message = Some(("Saved".to_string(), i.time, false));
             }
 
