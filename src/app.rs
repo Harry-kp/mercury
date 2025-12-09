@@ -847,10 +847,6 @@ impl MercuryApp {
                             }
                             ui.close_menu();
                         }
-                        if ui.button("📂 Reveal in Finder").clicked() {
-                            let _ = open::that(path);
-                            ui.close_menu();
-                        }
                     });
 
                     if *expanded || !search.is_empty() {
@@ -937,12 +933,6 @@ impl MercuryApp {
                         if ui.button("📋 Copy Path").clicked() {
                             if let Some(path_str) = path.to_str() {
                                 ui.ctx().copy_text(path_str.to_string());
-                            }
-                            ui.close_menu();
-                        }
-                        if ui.button("📂 Reveal in Finder").clicked() {
-                            if let Some(parent) = path.parent() {
-                                let _ = open::that(parent);
                             }
                             ui.close_menu();
                         }
