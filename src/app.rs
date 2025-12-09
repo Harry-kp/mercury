@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::mpsc::{channel, Receiver, Sender};
+use std::sync::mpsc::{channel, Receiver, RecvTimeoutError, Sender};
 use std::time::Duration;
 use walkdir::WalkDir;
 
@@ -126,7 +126,10 @@ pub struct MercuryApp {
     watcher_rx: Receiver<Result<(), String>>,
     #[allow(dead_code)]
     watcher_tx: Sender<Result<(), String>>,
+    watcher_shutdown: Option<Sender<()>>,
+    watched_path: Option<PathBuf>,
     expanded_folders: HashSet<PathBuf>,
+    file_watcher_error: Option<String>,
 }
 
 // Timeline entry for request history
@@ -213,7 +216,10 @@ impl MercuryApp {
             last_saved_content: None,
             watcher_rx,
             watcher_tx,
+            watcher_shutdown: None,
+            watched_path: None,
             expanded_folders: HashSet::new(),
+            file_watcher_error: None,
         };
 
         // Restore saved state
@@ -448,10 +454,27 @@ impl MercuryApp {
     }
 
     /// Start file system watcher for the workspace directory
+    /// Start file system watcher for the workspace directory
     fn start_file_watcher(&mut self) {
         if let Some(workspace) = &self.workspace_path {
+            // Avoid restarting if path implementation hasn't changed
+            if self.watched_path.as_ref() == Some(workspace) {
+                return;
+            }
+
+            // Shutdown existing watcher if running
+            if let Some(shutdown_tx) = self.watcher_shutdown.take() {
+                let _ = shutdown_tx.send(());
+            }
+
+            // Update watched path
+            self.watched_path = Some(workspace.clone());
+            self.file_watcher_error = None;
+
             let workspace_path = workspace.clone();
             let tx = self.watcher_tx.clone();
+            let (shutdown_tx, shutdown_rx) = channel();
+            self.watcher_shutdown = Some(shutdown_tx);
 
             std::thread::spawn(move || {
                 // Initial delay to avoid race condition with workspace loading
@@ -479,20 +502,26 @@ impl MercuryApp {
 
                 // Listen for events and signal main thread
                 loop {
-                    match debouncer_rx.recv() {
+                    // Check for shutdown signal
+                    if let Ok(_) | Err(std::sync::mpsc::TryRecvError::Disconnected) = shutdown_rx.try_recv() {
+                        break;
+                    }
+
+                    match debouncer_rx.recv_timeout(Duration::from_millis(200)) {
                         Ok(Ok(events)) => {
-                            // Any file change in workspace triggers rebuild
-                            // The debouncer already batches events, just signal rebuild if any events
                             if !events.is_empty() {
                                 let _ = tx.send(Ok(()));
                             }
                         }
                         Ok(Err(error)) => {
-                             // Report watcher error
                              let _ = tx.send(Err(format!("File watcher error: {:?}", error)));
                         }
-                        Err(_) => {
-                            // Channel closed, exit watcher thread
+                        Err(RecvTimeoutError::Timeout) => {
+                            // Timeout hit, loop back to check shutdown
+                            continue;
+                        }
+                        Err(RecvTimeoutError::Disconnected) => {
+                            // Debouncer channel closed
                             break;
                         }
                     }
@@ -525,12 +554,12 @@ impl MercuryApp {
 
                 if path.is_dir() {
                     let children = self.scan_directory(&path, workspace_root);
-                    // Default to expanded for new folders, will be overwritten by restore_expanded_state
+                    // Check saved state; expand all folders on first load (when expanded_folders is empty)
                     let is_expanded = self.expanded_folders.contains(&path);
                     folders.push(CollectionItem::Folder {
                         name,
                         path: path.clone(),
-                        expanded: is_expanded || self.expanded_folders.is_empty(), // Expand by default on first load
+                        expanded: is_expanded || self.expanded_folders.is_empty(),
                         children,
                     });
                 } else if path.extension().and_then(|s| s.to_str()) == Some("http") {
@@ -1356,7 +1385,7 @@ impl eframe::App for MercuryApp {
             self.load_workspace(path);
             ctx.request_repaint();
         }
-        // Drain any pending watcher events (handled above, but drain to avoid buildup)
+
 
 
         // Top panel with breadcrumb navigation
