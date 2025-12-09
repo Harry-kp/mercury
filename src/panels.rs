@@ -307,7 +307,9 @@ impl MercuryApp {
     
     /// Response body with proper scroll
     fn render_response_body(&mut self, ui: &mut Ui) {
-        if let Some(response) = &self.response {
+        if self.executing {
+            loading_state(ui, "Sending request...");
+        } else if let Some(response) = &self.response {
             // Status row
             ui.horizontal(|ui| {
                 status_badge(ui, response.status, &response.status_text);
@@ -401,8 +403,6 @@ impl MercuryApp {
                     }
                 });
                 
-        } else if self.executing {
-            loading_state(ui, "Sending request...");
         } else if let Some(error) = &self.request_error {
             error_state(ui, error);
         } else {
