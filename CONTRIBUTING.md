@@ -155,10 +155,7 @@ When in doubt, prefer:
 
 ## Code of Conduct
 
-- Be respectful and constructive
-- Focus on the code, not the person
-- Assume good intentions
-- Help others learn
+Please note that this project is released with a [Contributor Code of Conduct](CODE_OF_CONDUCT.md). By participating in this project you agree to abide by its terms.
 
 ## License
 
