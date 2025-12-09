@@ -674,8 +674,24 @@
             padding: 8px 16px;
             border-radius: 6px;
             color: var(--accent);
-            display: inline-block;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
             margin-top: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: 1px solid transparent;
+        }
+
+        .download-alt code:hover {
+            border-color: var(--accent-dim);
+            background: var(--surface-hover);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        }
+
+        .download-alt code:active {
+            transform: translateY(0);
         }
 
         /* Footer */
@@ -957,7 +973,10 @@
 
                 <div class="download-alt">
                     Or build from source:<br>
-                    <code>cargo install mercury</code>
+                    <code onclick="copyInstallCommand()" title="Click to copy">
+                        cargo install mercury
+                        <span style="opacity: 0.5; font-size: 0.8em">📋</span>
+                    </code>
                 </div>
             </div>
         </section>
@@ -975,6 +994,28 @@
     </footer>
 
     <script>
+        // Copy install command
+        function copyInstallCommand() {
+            const codeBlock = document.querySelector('.download-alt code');
+            // Store original content including the span
+            if (!codeBlock.dataset.original) {
+                codeBlock.dataset.original = codeBlock.innerHTML;
+            }
+
+            const command = 'cargo install mercury';
+            navigator.clipboard.writeText(command).then(() => {
+                codeBlock.innerHTML = 'Copied to clipboard! ⚡';
+                codeBlock.style.borderColor = 'var(--accent)';
+                codeBlock.style.color = '#fff';
+
+                setTimeout(() => {
+                    codeBlock.innerHTML = codeBlock.dataset.original;
+                    codeBlock.style.borderColor = 'transparent';
+                    codeBlock.style.color = '';
+                }, 2000);
+            });
+        }
+
         // Fetch latest release from GitHub
         async function fetchLatestRelease() {
             try {
