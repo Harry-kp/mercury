@@ -24,6 +24,9 @@ rfd = "0.15"
 image = "0.24"
 open = "5"
 
+[dev-dependencies]
+tempfile = "3"
+
 # Release optimizations
 [profile.release]
 opt-level = 3

@@ -73,10 +73,10 @@ pub fn import_insomnia_collection(json_path: &Path, output_dir: &Path) -> Result
     
     let export: InsomniaExport = match serde_json::from_str(&content) {
         Ok(json) => json,
-        Err(_) => {
+        Err(json_err) => {
             // Try parsing as YAML if JSON fails
             serde_yaml::from_str(&content)
-                .map_err(|e| format!("Failed to parse as JSON or YAML: {}", e))?
+                .map_err(|yaml_err| format!("Failed to parse as JSON ({}) or YAML ({})", json_err, yaml_err))?
         }
     };
     
@@ -161,4 +161,82 @@ pub fn import_insomnia_collection(json_path: &Path, output_dir: &Path) -> Result
     }
     
     Ok((request_count, env_count))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Write;
+    use tempfile::TempDir;
+
+    fn create_temp_file(dir: &Path, name: &str, content: &str) -> std::path::PathBuf {
+        let path = dir.join(name);
+        let mut file = fs::File::create(&path).unwrap();
+        file.write_all(content.as_bytes()).unwrap();
+        path
+    }
+
+    #[test]
+    fn test_import_json() {
+        let dir = TempDir::new().unwrap();
+        let json_content = r#"{
+            "resources": [
+                {
+                    "_type": "request",
+                    "name": "Test Request",
+                    "method": "GET",
+                    "url": "https://example.com",
+                    "headers": [],
+                    "body": {},
+                    "parentId": "wrk_1"
+                }
+            ]
+        }"#;
+        let file_path = create_temp_file(dir.path(), "export.json", json_content);
+        let output_dir = dir.path().join("output");
+        fs::create_dir(&output_dir).unwrap();
+
+        let result = import_insomnia_collection(&file_path, &output_dir);
+        assert!(result.is_ok());
+        let (req_count, _) = result.unwrap();
+        assert_eq!(req_count, 1);
+    }
+
+    #[test]
+    fn test_import_yaml() {
+        let dir = TempDir::new().unwrap();
+        let yaml_content = r#"
+            resources:
+              - _type: request
+                name: Test YAML Request
+                method: POST
+                url: https://example.com/api
+                headers: []
+                body: {}
+                parentId: wrk_1
+        "#;
+        let file_path = create_temp_file(dir.path(), "export.yaml", yaml_content);
+        let output_dir = dir.path().join("output_yaml");
+        fs::create_dir(&output_dir).unwrap();
+
+        let result = import_insomnia_collection(&file_path, &output_dir);
+        assert!(result.is_ok());
+        let (req_count, _) = result.unwrap();
+        assert_eq!(req_count, 1);
+    }
+
+    #[test]
+    fn test_import_invalid() {
+        let dir = TempDir::new().unwrap();
+        let invalid_content = "NOT JSON OR YAML";
+        let file_path = create_temp_file(dir.path(), "invalid.txt", invalid_content);
+        let output_dir = dir.path().join("output_invalid");
+        fs::create_dir(&output_dir).unwrap();
+
+        let result = import_insomnia_collection(&file_path, &output_dir);
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err();
+        assert!(err_msg.contains("Failed to parse as JSON"));
+        assert!(err_msg.contains("or YAML"));
+    }
 }
