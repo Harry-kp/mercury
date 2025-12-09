@@ -1,7 +1,6 @@
 use crate::env_parser::{parse_env_file, substitute_variables};
 use crate::http_parser::{parse_http_file, HttpMethod, HttpRequest};
 use crate::request_executor::{execute_request, HttpResponse};
-use crate::insomnia_importer::import_insomnia_collection;
 use eframe::egui;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -1016,59 +1015,43 @@ impl eframe::App for MercuryApp {
         
         if self.should_open_insomnia_import {
             self.should_open_insomnia_import = false;
+            let current_workspace = self.workspace_path.clone();
+            let folder_tx = self.folder_tx.clone();
             
-            if self.workspace_path.is_none() {
-                // No workspace - pick JSON first, then folder
-                let folder_tx = self.folder_tx.clone();
-                std::thread::spawn(move || {
-                    if let Some(json_path) = rfd::FileDialog::new()
-                        .add_filter("JSON", &["json"])
-                        .set_title("Select Insomnia Export JSON")
-                        .pick_file()
-                    {
-                        // Now pick folder to save
-                        if let Some(folder_path) = rfd::FileDialog::new()
+            std::thread::spawn(move || {
+                if let Some(file_path) = rfd::FileDialog::new()
+                    .add_filter("Insomnia Export", &["json", "yaml", "yml"])
+                    .set_title("Select Insomnia Export File")
+                    .pick_file()
+                {
+                    // Determine where to save:
+                    // 1. If we have a workspace, use it.
+                    // 2. If not, ask user to pick a folder.
+                    let target_folder = if let Some(ws_path) = current_workspace {
+                        Some(ws_path)
+                    } else {
+                        rfd::FileDialog::new()
                             .set_title("Choose where to save imported collection")
                             .set_directory(dirs::document_dir().unwrap_or_else(|| std::path::PathBuf::from("~")))
                             .set_file_name("Mercury")
                             .pick_folder()
-                        {
-                            // Import
-                            match crate::insomnia_importer::import_insomnia_collection(&json_path, &folder_path) {
-                                Ok((req_count, env_count)) => {
-                                    println!("✅ Imported {} requests and {} environments to {}", 
-                                        req_count, env_count, folder_path.display());
-                                    // Send folder path back to set as workspace
-                                    let _ = folder_tx.send(folder_path);
-                                }
-                                Err(e) => {
-                                    eprintln!("❌ Import failed: {}", e);
-                                }
+                    };
+
+                    if let Some(folder_path) = target_folder {
+                        match crate::insomnia_importer::import_insomnia_collection(&file_path, &folder_path) {
+                            Ok((req_count, env_count)) => {
+                                println!("✅ Imported {} requests and {} environments to {}", 
+                                    req_count, env_count, folder_path.display());
+                                // Always reload workspace (if we picked a new one, or just refreshed current)
+                                let _ = folder_tx.send(folder_path);
+                            }
+                            Err(e) => {
+                                eprintln!("❌ Import failed: {}", e);
                             }
                         }
                     }
-                });
-            } else {
-                // Has workspace - just pick JSON and import
-                if let Some(workspace) = self.workspace_path.clone() {
-                    std::thread::spawn(move || {
-                        if let Some(file_path) = rfd::FileDialog::new()
-                            .add_filter("JSON", &["json"])
-                            .set_title("Select Insomnia Export JSON")
-                            .pick_file()
-                        {
-                            match crate::insomnia_importer::import_insomnia_collection(&file_path, &workspace) {
-                                Ok((req_count, env_count)) => {
-                                    println!("✅ Imported {} requests and {} environments", req_count, env_count);
-                                }
-                                Err(e) => {
-                                    eprintln!("❌ Import failed: {}", e);
-                                }
-                            }
-                        }
-                    });
                 }
-            }
+            });
         }
         
         if self.should_focus_search {
@@ -1267,24 +1250,7 @@ impl eframe::App for MercuryApp {
                             ui.memory_mut(|mem| mem.close_popup());
                         }
                         if ui.selectable_label(false, "Import Insomnia...").clicked() {
-                            if let Some(workspace) = &self.workspace_path {
-                                let workspace_clone = workspace.clone();
-                                std::thread::spawn(move || {
-                                    if let Some(file_path) = rfd::FileDialog::new()
-                                        .add_filter("JSON", &["json"])
-                                        .pick_file() 
-                                    {
-                                        match import_insomnia_collection(&file_path, &workspace_clone) {
-                                            Ok((req_count, env_count)) => {
-                                                println!("Imported {} requests and {} environments", req_count, env_count);
-                                            }
-                                            Err(e) => {
-                                                eprintln!("Import failed: {}", e);
-                                            }
-                                        }
-                                    }
-                                });
-                            }
+                            self.should_open_insomnia_import = true;
                             ui.memory_mut(|mem| mem.close_popup());
                         }
                     });
