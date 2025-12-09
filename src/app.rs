@@ -506,7 +506,9 @@ impl MercuryApp {
                 let _debouncer = debouncer;
                 loop {
                     // Check for shutdown signal
-                    if let Ok(_) | Err(std::sync::mpsc::TryRecvError::Disconnected) = shutdown_rx.try_recv() {
+                    if let Ok(_) | Err(std::sync::mpsc::TryRecvError::Disconnected) =
+                        shutdown_rx.try_recv()
+                    {
                         break;
                     }
 
@@ -517,7 +519,7 @@ impl MercuryApp {
                             }
                         }
                         Ok(Err(error)) => {
-                             let _ = tx.send(Err(format!("File watcher error: {:?}", error)));
+                            let _ = tx.send(Err(format!("File watcher error: {:?}", error)));
                         }
                         Err(RecvTimeoutError::Timeout) => {
                             // Timeout hit, loop back to check shutdown
@@ -1388,8 +1390,6 @@ impl eframe::App for MercuryApp {
             self.load_workspace(path);
             ctx.request_repaint();
         }
-
-
 
         // Top panel with breadcrumb navigation
         egui::TopBottomPanel::top("top_panel")
