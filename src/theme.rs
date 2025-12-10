@@ -56,6 +56,9 @@ impl Colors {
     pub const JSON_BOOLEAN: Color32 = Color32::from_rgb(244, 114, 182); // Pink
     pub const JSON_NULL: Color32 = Color32::from_rgb(148, 163, 184); // Slate
     pub const JSON_BRACKET: Color32 = Color32::from_rgb(161, 161, 170); // Muted gray
+
+    // XML Syntax Highlighting
+    pub const XML_TAG: Color32 = Color32::from_rgb(129, 140, 248); // Indigo (same as JSON_KEY)
 }
 
 /// Animation timing constants

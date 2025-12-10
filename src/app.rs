@@ -170,6 +170,7 @@ impl MercuryApp {
             response_view_raw: false,
             show_response_headers: false,
             show_response_diff: false,
+
             env_files: vec!["None".to_string()],
             selected_env: 0,
             env_variables: HashMap::new(),

@@ -4,7 +4,7 @@
 use crate::app::MercuryApp;
 use crate::components::*;
 use crate::http_parser::HttpMethod;
-use crate::request_executor::format_json;
+use crate::request_executor::{format_json, format_xml, ResponseType};
 use crate::theme::{Colors, FontSize, Layout, Radius, Spacing};
 use egui::{self, Context, ScrollArea, Ui};
 
@@ -389,7 +389,7 @@ impl MercuryApp {
             ui.horizontal(|ui| {
                 status_badge(ui, response.status, &response.status_text);
                 ui.add_space(Spacing::SM);
-                metric(ui, &format!("{}ms", response.duration_ms), None);
+                response_time_metric(ui, response.duration_ms);
                 metric(
                     ui,
                     &format!(
@@ -402,15 +402,56 @@ impl MercuryApp {
 
             ui.add_space(Spacing::SM);
 
-            // Options
+            // Extract response type info BEFORE we use closures that need &mut self
+            let is_text_response = matches!(
+                response.response_type,
+                ResponseType::Json
+                    | ResponseType::Xml
+                    | ResponseType::Html
+                    | ResponseType::PlainText
+            );
+            let needs_save_button = matches!(
+                response.response_type,
+                ResponseType::Binary | ResponseType::Image | ResponseType::LargeText
+            );
+            let has_previous = self.previous_response.is_some();
+            let headers_count = response.headers.len();
+
+            // Track if save was clicked (can't call method inside borrow)
+            let mut save_clicked = false;
+
             ui.horizontal(|ui| {
-                ui.checkbox(&mut self.show_response_headers, "Headers");
-                ui.checkbox(&mut self.response_view_raw, "Raw");
-                if self.previous_response.is_some() {
-                    ui.checkbox(&mut self.show_response_diff, "Diff");
+                // Headers checkbox for all response types
+                let headers_label = format!("Headers ({})", headers_count);
+                ui.checkbox(&mut self.show_response_headers, headers_label);
+
+                // Raw and Diff only make sense for text responses
+                if is_text_response {
+                    ui.checkbox(&mut self.response_view_raw, "Raw");
+                    if has_previous {
+                        ui.checkbox(&mut self.show_response_diff, "Diff");
+                    }
                 }
 
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    // Save button for non-displayable content
+                    if needs_save_button {
+                        if ui
+                            .add(
+                                egui::Label::new(
+                                    egui::RichText::new("💾 Save")
+                                        .size(FontSize::SM)
+                                        .color(Colors::PRIMARY),
+                                )
+                                .sense(egui::Sense::click()),
+                            )
+                            .clicked()
+                        {
+                            save_clicked = true;
+                        }
+                        ui.add_space(Spacing::SM);
+                    }
+
                     if ui
                         .add(
                             egui::Label::new(
@@ -427,22 +468,32 @@ impl MercuryApp {
                 });
             });
 
+            // Handle save after borrow is released
+            if save_clicked {
+                self.save_response_to_file();
+            }
+
             ui.add_space(Spacing::SM);
             ui.separator();
             ui.add_space(Spacing::SM);
 
-            // Headers section (collapsible)
+            // Headers section (collapsible) - constrained width to prevent panel expansion
             if self.show_response_headers {
                 ui.label(egui::RichText::new("Headers").size(FontSize::SM).strong());
 
-                ScrollArea::vertical()
+                ScrollArea::both()
                     .id_salt("response_headers")
                     .max_height(Layout::HEADERS_MAX_HEIGHT)
                     .show(ui, |ui| {
+                        // Constrain width to prevent panel expansion
+                        let max_width = ui.available_width();
+                        ui.set_max_width(max_width);
+                        ui.set_min_width(max_width);
+
                         for (name, value) in &response.headers {
                             ui.horizontal(|ui| {
                                 ui.label(
-                                    egui::RichText::new(name)
+                                    egui::RichText::new(format!("{}: ", name))
                                         .size(FontSize::XS)
                                         .color(Colors::PRIMARY)
                                         .monospace(),
@@ -458,43 +509,78 @@ impl MercuryApp {
                     });
 
                 ui.add_space(Spacing::SM);
-                ui.separator();
-                ui.add_space(Spacing::SM);
             }
 
-            // Body with scroll
-            ui.horizontal(|ui| {
-                ui.label(egui::RichText::new("Body").size(FontSize::SM).strong());
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if copy_icon_button(ui) {
-                        ui.output_mut(|o| o.copied_text = response.body.clone());
-                    }
-                });
-            });
+            ui.separator();
+            ui.add_space(Spacing::SM);
 
-            let body = if self.response_view_raw {
-                response.body.clone()
-            } else {
-                format_json(&response.body)
-            };
+            // Body rendering based on ResponseType
+            match &response.response_type {
+                ResponseType::Empty => {
+                    empty_response_placeholder(ui, response.status);
+                }
+                ResponseType::TooLarge => {
+                    too_large_placeholder(ui, response.size_bytes);
+                }
+                ResponseType::LargeText => {
+                    // Large text - show honest placeholder with Save option
+                    large_text_placeholder(ui, &response.content_type, response.size_bytes);
+                }
+                ResponseType::Binary | ResponseType::Image => {
+                    // Binary content placeholder with Save option
+                    binary_placeholder(ui, &response.content_type, response.size_bytes);
+                }
+                ResponseType::Json
+                | ResponseType::Xml
+                | ResponseType::Html
+                | ResponseType::PlainText => {
+                    // Body header with copy button
+                    ui.horizontal(|ui| {
+                        ui.label(egui::RichText::new("Body").size(FontSize::SM).strong());
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            if copy_icon_button(ui) {
+                                ui.output_mut(|o| o.copied_text = response.body.clone());
+                            }
+                        });
+                    });
 
-            ScrollArea::both()
-                .id_salt("response_body")
-                .auto_shrink([false, false])
-                .show(ui, |ui| {
-                    // Use syntax highlighting for JSON, fallback to plain text
-                    if !self.response_view_raw && body.trim_start().starts_with('{')
-                        || body.trim_start().starts_with('[')
-                    {
-                        json_syntax_highlight(ui, &body);
+                    let body = if self.response_view_raw {
+                        response.body.clone()
                     } else {
-                        ui.add(
-                            egui::TextEdit::multiline(&mut body.as_str())
-                                .desired_width(ui.available_width())
-                                .code_editor(),
-                        );
-                    }
-                });
+                        match &response.response_type {
+                            ResponseType::Json => format_json(&response.body),
+                            ResponseType::Xml => format_xml(&response.body),
+                            _ => response.body.clone(),
+                        }
+                    };
+
+                    ScrollArea::both()
+                        .id_salt("response_body")
+                        .auto_shrink([false, false])
+                        .show(ui, |ui| {
+                            if self.response_view_raw {
+                                ui.add(
+                                    egui::TextEdit::multiline(&mut body.as_str())
+                                        .desired_width(ui.available_width())
+                                        .code_editor(),
+                                );
+                            } else {
+                                match &response.response_type {
+                                    ResponseType::Json => json_syntax_highlight(ui, &body),
+                                    ResponseType::Xml => xml_syntax_highlight(ui, &body),
+                                    ResponseType::Html => html_syntax_highlight(ui, &body),
+                                    _ => {
+                                        ui.add(
+                                            egui::TextEdit::multiline(&mut body.as_str())
+                                                .desired_width(ui.available_width())
+                                                .code_editor(),
+                                        );
+                                    }
+                                }
+                            }
+                        });
+                }
+            }
         } else if let Some(error) = &self.request_error {
             error_state(ui, error);
         } else {
@@ -584,6 +670,32 @@ impl MercuryApp {
                     );
                 }
             });
+        }
+    }
+
+    /// Save the current response to a file with smart filename
+    fn save_response_to_file(&self) {
+        if let Some(response) = &self.response {
+            // Generate smart filename based on content type
+            let extension =
+                crate::components::get_extension_for_content_type(&response.content_type);
+            let default_filename = format!("response{}", extension);
+
+            if let Some(path) = rfd::FileDialog::new()
+                .set_title("Save Response")
+                .set_file_name(&default_filename)
+                .save_file()
+            {
+                let data = if let Some(bytes) = &response.raw_bytes {
+                    bytes.clone()
+                } else {
+                    response.body.as_bytes().to_vec()
+                };
+
+                if let Err(e) = std::fs::write(&path, data) {
+                    eprintln!("Failed to save response: {}", e);
+                }
+            }
         }
     }
 
