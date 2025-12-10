@@ -902,20 +902,10 @@ impl MercuryApp {
             .show(ui, |ui| {
                 match self.selected_tab {
                     0 => {
-                        // Overlay Format Button (Top Right)
+                        // Save cursor for overlay
                         let top_right = ui.cursor().min + egui::vec2(ui.available_width(), 0.0);
-                        let button_rect = egui::Rect::from_min_size(top_right - egui::vec2(30.0, 0.0), egui::vec2(30.0, 20.0));
-                        if ui.put(button_rect, egui::Label::new(
-                                egui::RichText::new("{ }").size(FontSize::LG).strong().color(Colors::PRIMARY)
-                            ).sense(egui::Sense::click())).on_hover_text("Format JSON").clicked() {
-                            if let Ok(value) = serde_json::from_str::<serde_json::Value>(&self.body_text) {
-                                if let Ok(pretty) = serde_json::to_string_pretty(&value) {
-                                    self.body_text = pretty;
-                                }
-                            }
-                        }
 
-                        // Body editor with syntax highlighting
+                        // Body editor check syntax highlighting
                         let mut layouter = |ui: &egui::Ui, text: &str, wrap_width: f32| {
                             let job = json_layout_job(text, wrap_width);
                             ui.fonts(|f| f.layout_job(job))
@@ -932,6 +922,18 @@ impl MercuryApp {
                                 .frame(false) // Transparent background
                                 .layouter(&mut layouter),
                         );
+
+                        // Overlay Format Button (Draw ON TOP of TextEdit)
+                        let button_rect = egui::Rect::from_min_size(top_right - egui::vec2(30.0, 0.0), egui::vec2(30.0, 20.0));
+                        if ui.put(button_rect, egui::Label::new(
+                                egui::RichText::new("{ }").size(FontSize::LG).strong().color(Colors::PRIMARY)
+                            ).sense(egui::Sense::click())).on_hover_text("Format JSON").clicked() {
+                            if let Ok(value) = serde_json::from_str::<serde_json::Value>(&self.body_text) {
+                                if let Ok(pretty) = serde_json::to_string_pretty(&value) {
+                                    self.body_text = pretty;
+                                }
+                            }
+                        }
                     }
                     1 => {
                         // Headers with smart variables
@@ -1016,27 +1018,15 @@ impl MercuryApp {
 
     /// Headers tab with variable indicators
     fn render_smart_headers(&mut self, ui: &mut Ui) {
-        // Overlay Bulk Edit Button
+        // Save cursor for overlay
         let top_right = ui.cursor().min + egui::vec2(ui.available_width(), 0.0);
-        let button_rect = egui::Rect::from_min_size(top_right - egui::vec2(60.0, 0.0), egui::vec2(60.0, 20.0));
+        let start_pos = ui.cursor().min;
 
-        let mode_text = if self.headers_bulk_edit { "Key-Value" } else { "Bulk Edit" };
-        if ui.put(button_rect, egui::Label::new(
-                egui::RichText::new(mode_text).size(FontSize::XS).color(Colors::PRIMARY)
-            ).sense(egui::Sense::click())).on_hover_text("Toggle edit mode").clicked() {
-            self.headers_bulk_edit = !self.headers_bulk_edit;
-        }
-
-        // Undefined vars warning (overlay left)
         let undefined = Self::extract_variables(&self.headers_text)
                 .iter()
                 .filter(|v| !self.env_variables.contains_key(*v))
                 .count();
 
-        if undefined > 0 {
-            let warn_rect = egui::Rect::from_min_size(ui.cursor().min, egui::vec2(100.0, 20.0));
-            ui.put(warn_rect, egui::Label::new(egui::RichText::new(format!("{} undefined", undefined)).size(FontSize::XS).color(Colors::ERROR)));
-        }
 
         if self.headers_bulk_edit {
             // Bulk edit mode - raw text
@@ -1171,6 +1161,21 @@ impl MercuryApp {
                     .collect::<Vec<_>>()
                     .join("\n");
             }
+        }
+
+        // Overlay Bulk Edit Button (Rendered Last)
+        let button_rect = egui::Rect::from_min_size(top_right - egui::vec2(60.0, 0.0), egui::vec2(60.0, 20.0));
+        let mode_text = if self.headers_bulk_edit { "Key-Value" } else { "Bulk Edit" };
+        if ui.put(button_rect, egui::Label::new(
+                egui::RichText::new(mode_text).size(FontSize::XS).color(Colors::PRIMARY)
+            ).sense(egui::Sense::click())).on_hover_text("Toggle edit mode").clicked() {
+            self.headers_bulk_edit = !self.headers_bulk_edit;
+        }
+
+        // Overlay Undefined Warning (Rendered Last)
+        if undefined > 0 {
+            let warn_rect = egui::Rect::from_min_size(start_pos, egui::vec2(100.0, 20.0));
+            ui.put(warn_rect, egui::Label::new(egui::RichText::new(format!("{} undefined", undefined)).size(FontSize::XS).color(Colors::ERROR)));
         }
 
         // Variable status
