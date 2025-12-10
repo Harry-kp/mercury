@@ -806,6 +806,11 @@ pub fn get_extension_for_content_type(content_type: &str) -> &'static str {
     // JSON/XML (in case they're treated as binary)
     if ct.contains("json") { return ".json"; }
     if ct.contains("xml") { return ".xml"; }
+    // Text formats
+    if ct.contains("text/html") { return ".html"; }
+    if ct.contains("text/plain") { return ".txt"; }
+    if ct.contains("text/css") { return ".css"; }
+    if ct.contains("javascript") { return ".js"; }
     // Default
     ".bin"
 }
@@ -912,3 +917,65 @@ fn format_bytes(bytes: usize) -> String {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_extension_for_json() {
+        assert_eq!(get_extension_for_content_type("application/json"), ".json");
+    }
+
+    #[test]
+    fn test_extension_for_xml() {
+        assert_eq!(get_extension_for_content_type("application/xml"), ".xml");
+        assert_eq!(get_extension_for_content_type("text/xml"), ".xml");
+    }
+
+    #[test]
+    fn test_extension_for_html() {
+        assert_eq!(get_extension_for_content_type("text/html"), ".html");
+    }
+
+    #[test]
+    fn test_extension_for_images() {
+        assert_eq!(get_extension_for_content_type("image/jpeg"), ".jpg");
+        assert_eq!(get_extension_for_content_type("image/png"), ".png");
+        assert_eq!(get_extension_for_content_type("image/gif"), ".gif");
+        assert_eq!(get_extension_for_content_type("image/webp"), ".webp");
+        assert_eq!(get_extension_for_content_type("image/svg+xml"), ".svg");
+    }
+
+    #[test]
+    fn test_extension_for_pdf() {
+        assert_eq!(get_extension_for_content_type("application/pdf"), ".pdf");
+    }
+
+    #[test]
+    fn test_extension_for_plain_text() {
+        assert_eq!(get_extension_for_content_type("text/plain"), ".txt");
+    }
+
+    #[test]
+    fn test_extension_for_css_js() {
+        assert_eq!(get_extension_for_content_type("text/css"), ".css");
+        assert_eq!(get_extension_for_content_type("application/javascript"), ".js");
+        assert_eq!(get_extension_for_content_type("text/javascript"), ".js");
+    }
+
+    #[test]
+    fn test_extension_for_unknown() {
+        assert_eq!(get_extension_for_content_type("application/octet-stream"), ".bin");
+        assert_eq!(get_extension_for_content_type("some/unknown"), ".bin");
+        assert_eq!(get_extension_for_content_type(""), ".bin");
+    }
+
+    #[test]
+    fn test_format_bytes() {
+        assert_eq!(format_bytes(500), "500 bytes");
+        assert_eq!(format_bytes(1024), "1.0 KB");
+        assert_eq!(format_bytes(2048), "2.0 KB");
+        assert_eq!(format_bytes(1_048_576), "1.0 MB");
+        assert_eq!(format_bytes(5_242_880), "5.0 MB");
+    }
+}

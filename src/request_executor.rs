@@ -366,4 +366,63 @@ mod tests {
         let result = detect_response_type("", body, 200);
         assert_eq!(result, ResponseType::Xml);
     }
+
+    #[test]
+    fn test_detect_image_jpeg() {
+        let body = b"\xFF\xD8\xFF"; // JPEG magic bytes
+        let result = detect_response_type("image/jpeg", body, 200);
+        assert!(matches!(result, ResponseType::Image(_)));
+    }
+
+    #[test]
+    fn test_detect_image_png() {
+        let body = b"\x89PNG\r\n\x1a\n"; // PNG magic bytes
+        let result = detect_response_type("image/png", body, 200);
+        assert!(matches!(result, ResponseType::Image(_)));
+    }
+
+    #[test]
+    fn test_detect_large_text() {
+        // Create body larger than MAX_TEXT_DISPLAY_SIZE (1MB)
+        let large_body: Vec<u8> = vec![b'a'; 1_100_000]; // 1.1MB
+        let result = detect_response_type("application/json", &large_body, 200);
+        assert_eq!(result, ResponseType::LargeText);
+    }
+
+    #[test]
+    fn test_text_below_limit() {
+        // Body smaller than MAX_TEXT_DISPLAY_SIZE should render normally
+        let small_body: Vec<u8> = vec![b'{'; 100]; // 100 bytes
+        let result = detect_response_type("application/json", &small_body, 200);
+        // Should be Json, not LargeText
+        assert_eq!(result, ResponseType::Json);
+    }
+
+    #[test]
+    fn test_detect_plain_text() {
+        let body = b"Hello, World!";
+        let result = detect_response_type("text/plain", body, 200);
+        assert_eq!(result, ResponseType::PlainText);
+    }
+
+    #[test]
+    fn test_empty_204_no_content() {
+        let body = b"";
+        let result = detect_response_type("", body, 204);
+        assert_eq!(result, ResponseType::Empty);
+    }
+
+    #[test]
+    fn test_pdf_as_binary() {
+        let body = b"%PDF-1.4";
+        let result = detect_response_type("application/pdf", body, 200);
+        assert_eq!(result, ResponseType::Binary);
+    }
+
+    #[test]
+    fn test_octet_stream_binary() {
+        let body = b"\x00\x01\x02\x03binary data";
+        let result = detect_response_type("application/octet-stream", body, 200);
+        assert_eq!(result, ResponseType::Binary);
+    }
 }
