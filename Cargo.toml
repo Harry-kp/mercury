@@ -25,6 +25,7 @@ image = { version = "0.24", default-features = false, features = ["png"] }
 open = "5"
 notify = "7"
 notify-debouncer-mini = "0.5"
+base64 = "0.22.1"
 
 [dev-dependencies]
 tempfile = "3"

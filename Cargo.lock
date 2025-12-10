@@ -2123,6 +2123,7 @@ dependencies = [
 name = "mercury"
 version = "0.1.0-beta"
 dependencies = [
+ "base64",
  "dirs",
  "eframe",
  "egui",

@@ -59,6 +59,10 @@ pub struct MercuryApp {
     pub headers_text: String,
     pub body_text: String,
     pub auth_text: String,
+    // Auth helpers (ephemeral)
+    pub auth_username: String,
+    pub auth_password: String,
+    pub auth_token: String,
 
     pub response: Option<HttpResponse>,
     pub previous_response: Option<HttpResponse>,
@@ -165,6 +169,9 @@ impl MercuryApp {
             headers_text: String::new(),
             body_text: String::new(),
             auth_text: String::new(),
+            auth_username: String::new(),
+            auth_password: String::new(),
+            auth_token: String::new(),
             response: None,
             previous_response: None,
             response_view_raw: false,
@@ -735,6 +742,22 @@ impl MercuryApp {
     }
 
     pub fn execute_request(&mut self, ctx: &egui::Context) {
+        // Auto-prefix http:// if missing
+        if !self.url.is_empty() && !self.url.starts_with("http://") && !self.url.starts_with("https://") {
+            self.url.insert_str(0, "http://");
+        }
+
+        // Auto-add Content-Type for JSON
+        let body_trimmed = self.body_text.trim();
+        if (body_trimmed.starts_with('{') || body_trimmed.starts_with('['))
+            && !self.headers_text.to_lowercase().contains("content-type")
+        {
+            if !self.headers_text.is_empty() && !self.headers_text.ends_with('\n') {
+                self.headers_text.push('\n');
+            }
+            self.headers_text.push_str("Content-Type: application/json");
+        }
+
         let url = substitute_variables(&self.url, &self.env_variables);
         let headers_text = substitute_variables(&self.headers_text, &self.env_variables);
         let body = substitute_variables(&self.body_text, &self.env_variables);
@@ -2261,6 +2284,11 @@ impl eframe::App for MercuryApp {
             // Cmd/Ctrl + K: Focus search
             if i.key_pressed(egui::Key::K) && i.modifiers.command {
                 self.should_focus_search = true;
+            }
+
+            // Cmd/Ctrl + L: Focus URL bar
+            if i.key_pressed(egui::Key::L) && i.modifiers.command {
+                self.should_focus_url_bar = true;
             }
 
             // Cmd/Ctrl + Shift + C: Copy as cURL

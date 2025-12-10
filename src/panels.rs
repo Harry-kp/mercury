@@ -6,6 +6,7 @@ use crate::components::*;
 use crate::http_parser::HttpMethod;
 use crate::request_executor::{format_json, format_xml, ResponseType};
 use crate::theme::{Colors, FontSize, Layout, Radius, Spacing};
+use base64::prelude::*;
 use egui::{self, Context, ScrollArea, Ui};
 
 impl MercuryApp {
@@ -324,6 +325,8 @@ impl MercuryApp {
                 .max_height(ui.available_height())
                 .show(ui, |ui| {
                     let search = self.timeline_search.to_lowercase();
+
+
 
                     for entry in self.timeline.iter().rev() {
                         if !search.is_empty() && !entry.url.to_lowercase().contains(&search) {
@@ -897,6 +900,33 @@ impl MercuryApp {
             .show(ui, |ui| {
                 match self.selected_tab {
                     0 => {
+                        // Toolbar
+                        ui.horizontal(|ui| {
+                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                if ui
+                                    .add(
+                                        egui::Label::new(
+                                            egui::RichText::new("Format JSON")
+                                                .size(FontSize::XS)
+                                                .color(Colors::PRIMARY),
+                                        )
+                                        .sense(egui::Sense::click()),
+                                    )
+                                    .on_hover_text("Prettify JSON body")
+                                    .clicked()
+                                {
+                                    if let Ok(value) =
+                                        serde_json::from_str::<serde_json::Value>(&self.body_text)
+                                    {
+                                        if let Ok(pretty) = serde_json::to_string_pretty(&value) {
+                                            self.body_text = pretty;
+                                        }
+                                    }
+                                }
+                            });
+                        });
+                        ui.add_space(Spacing::XS);
+
                         // Body editor with syntax highlighting
                         let mut layouter = |ui: &egui::Ui, text: &str, wrap_width: f32| {
                             let job = json_layout_job(text, wrap_width);
@@ -920,9 +950,47 @@ impl MercuryApp {
                         self.render_smart_headers(ui);
                     }
                     2 => {
-                        // Auth
+                        // Auth Helpers
+                        ui.group(|ui| {
+                            ui.label(egui::RichText::new("Helpers").strong().size(FontSize::SM));
+                            ui.add_space(Spacing::XS);
+                            
+                            ui.collapsing("Basic Auth", |ui| {
+                                egui::Grid::new("basic_auth_grid").num_columns(2).show(ui, |ui| {
+                                    ui.label("Username:");
+                                    ui.text_edit_singleline(&mut self.auth_username);
+                                    ui.end_row();
+                                    ui.label("Password:");
+                                    ui.add(egui::TextEdit::singleline(&mut self.auth_password).password(true));
+                                    ui.end_row();
+                                });
+                                ui.add_space(Spacing::XS);
+                                if ui.button("Generate & Insert Header").clicked() {
+                                    let creds = format!("{}:{}", self.auth_username, self.auth_password);
+                                    let encoded = BASE64_STANDARD.encode(creds);
+                                    self.auth_text = format!("Basic {}", encoded);
+                                }
+                            });
+
+                            ui.collapsing("Bearer Token", |ui| {
+                                ui.horizontal(|ui| {
+                                    ui.label("Token:");
+                                    ui.text_edit_singleline(&mut self.auth_token);
+                                });
+                                ui.add_space(Spacing::XS);
+                                if ui.button("Generate & Insert Header").clicked() {
+                                    self.auth_text = format!("Bearer {}", self.auth_token);
+                                }
+                            });
+                        });
+                        
+                        ui.add_space(Spacing::SM);
+                        ui.separator();
+                        ui.add_space(Spacing::SM);
+
+                        // Auth text area
                         ui.label(
-                            egui::RichText::new("Authorization")
+                            egui::RichText::new("Authorization Header Value")
                                 .size(FontSize::MD)
                                 .strong(),
                         );
@@ -940,7 +1008,7 @@ impl MercuryApp {
                         );
                         ui.add_space(Spacing::SM);
                         ui.label(
-                            egui::RichText::new("This will be added as Authorization header")
+                            egui::RichText::new("This value will be set as the 'Authorization' header")
                                 .size(FontSize::XS)
                                 .color(Colors::TEXT_MUTED),
                         );
