@@ -742,16 +742,11 @@ impl MercuryApp {
     }
 
     pub fn execute_request(&mut self, ctx: &egui::Context) {
-        // Auto-prefix http:// if missing
-        if !self.url.is_empty() && !self.url.starts_with("http://") && !self.url.starts_with("https://") {
-            self.url.insert_str(0, "http://");
-        }
+        // Auto-prefix http://
+        self.url = crate::utils::sanitize_url(&self.url);
 
         // Auto-add Content-Type for JSON
-        let body_trimmed = self.body_text.trim();
-        if (body_trimmed.starts_with('{') || body_trimmed.starts_with('['))
-            && !self.headers_text.to_lowercase().contains("content-type")
-        {
+        if crate::utils::should_add_json_header(&self.body_text, &self.headers_text) {
             if !self.headers_text.is_empty() && !self.headers_text.ends_with('\n') {
                 self.headers_text.push('\n');
             }

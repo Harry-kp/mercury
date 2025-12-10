@@ -8,6 +8,7 @@ mod insomnia_importer;
 mod panels;
 mod request_executor;
 mod theme;
+mod utils;
 
 use eframe::egui;
 

@@ -6,7 +6,6 @@ use crate::components::*;
 use crate::http_parser::HttpMethod;
 use crate::request_executor::{format_json, format_xml, ResponseType};
 use crate::theme::{Colors, FontSize, Layout, Radius, Spacing};
-use base64::prelude::*;
 use egui::{self, Context, ScrollArea, Ui};
 
 impl MercuryApp {
@@ -966,9 +965,10 @@ impl MercuryApp {
                                 });
                                 ui.add_space(Spacing::XS);
                                 if ui.button("Generate & Insert Header").clicked() {
-                                    let creds = format!("{}:{}", self.auth_username, self.auth_password);
-                                    let encoded = BASE64_STANDARD.encode(creds);
-                                    self.auth_text = format!("Basic {}", encoded);
+                                    self.auth_text = crate::utils::generate_basic_auth(
+                                        &self.auth_username,
+                                        &self.auth_password,
+                                    );
                                 }
                             });
 
