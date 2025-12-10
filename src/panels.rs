@@ -887,7 +887,17 @@ impl MercuryApp {
     /// Request body with tabs
     fn render_request_body_new(&mut self, ui: &mut Ui) {
         // Tabs
-        let tabs = ["Body", "Headers", "Auth"];
+        let header_count = self
+            .headers_text
+            .lines()
+            .filter(|l| !l.trim().is_empty() && !l.trim().starts_with('#'))
+            .count();
+        let headers_label = if header_count > 0 {
+            format!("Headers ({})", header_count)
+        } else {
+            "Headers".to_string()
+        };
+        let tabs = ["Body", headers_label.as_str(), "Auth"];
         tab_bar(ui, &tabs, &mut self.selected_tab);
 
         ui.add_space(Spacing::SM);
