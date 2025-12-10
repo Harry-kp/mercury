@@ -152,13 +152,7 @@ pub struct TimelineEntry {
     pub _response_body: String,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum AuthMode {
-    None,
-    Basic,
-    Bearer,
-    Custom,
-}
+pub use crate::utils::AuthMode;
 
 impl MercuryApp {
     pub fn new(_cc: &eframe::CreationContext<'_>) -> Self {
@@ -258,25 +252,15 @@ impl MercuryApp {
             app.body_text = state.body_text;
             app.auth_text = state.auth_text;
             
+            
             // Infer auth mode from text
-            if app.auth_text.starts_with("Basic ") {
-                app.auth_mode = AuthMode::Basic;
-                // Try to decode username:password if it's base64
-                if let Some(encoded) = app.auth_text.strip_prefix("Basic ") {
-                    if let Ok(decoded_bytes) = base64::prelude::BASE64_STANDARD.decode(encoded.trim()) {
-                        if let Ok(decoded) = String::from_utf8(decoded_bytes) {
-                            if let Some((u, p)) = decoded.split_once(':') {
-                                app.auth_username = u.to_string();
-                                app.auth_password = p.to_string();
-                            }
-                        }
-                    }
-                }
-            } else if app.auth_text.starts_with("Bearer ") {
-                app.auth_mode = AuthMode::Bearer;
-                app.auth_token = app.auth_text.trim_start_matches("Bearer ").to_string();
-            } else if !app.auth_text.is_empty() {
-                app.auth_mode = AuthMode::Custom;
+            let (mode, username, password, token) = crate::utils::infer_auth_config(&app.auth_text);
+            app.auth_mode = mode;
+            if mode == AuthMode::Basic {
+                app.auth_username = username;
+                app.auth_password = password;
+            } else if mode == AuthMode::Bearer {
+                app.auth_token = token;
             }
 
             app.selected_tab = state.selected_tab;

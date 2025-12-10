@@ -887,11 +887,7 @@ impl MercuryApp {
     /// Request body with tabs
     fn render_request_body_new(&mut self, ui: &mut Ui) {
         // Tabs
-        let header_count = self
-            .headers_text
-            .lines()
-            .filter(|l| !l.trim().is_empty() && !l.trim().starts_with('#'))
-            .count();
+        let header_count = crate::utils::count_active_headers(&self.headers_text);
         let headers_label = if header_count > 0 {
             format!("Headers ({})", header_count)
         } else {

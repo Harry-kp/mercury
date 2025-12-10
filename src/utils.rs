@@ -1,5 +1,52 @@
 use base64::prelude::*;
 
+// Public Enum for Auth Mode
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AuthMode {
+    None,
+    Basic,
+    Bearer,
+    Custom,
+}
+
+/// Infer Auth state from existing header text
+pub fn infer_auth_config(auth_text: &str) -> (AuthMode, String, String, String) {
+    let mut mode = AuthMode::None;
+    let mut username = String::new();
+    let mut password = String::new();
+    let mut token = String::new();
+
+    let text = auth_text.trim();
+    if text.starts_with("Basic ") {
+        mode = AuthMode::Basic;
+        if let Some(encoded) = text.strip_prefix("Basic ") {
+            if let Ok(decoded_bytes) = BASE64_STANDARD.decode(encoded.trim()) {
+                if let Ok(decoded) = String::from_utf8(decoded_bytes) {
+                    if let Some((u, p)) = decoded.split_once(':') {
+                        username = u.to_string();
+                        password = p.to_string();
+                    }
+                }
+            }
+        }
+    } else if text.starts_with("Bearer ") {
+        mode = AuthMode::Bearer;
+        token = text.trim_start_matches("Bearer ").to_string();
+    } else if !text.is_empty() {
+        mode = AuthMode::Custom;
+    }
+
+    (mode, username, password, token)
+}
+
+/// Count non-empty, non-comment header lines
+pub fn count_active_headers(headers_text: &str) -> usize {
+    headers_text
+        .lines()
+        .filter(|l| !l.trim().is_empty() && !l.trim().starts_with('#'))
+        .count()
+}
+
 /// Prepend http:// to url if protocol is missing
 pub fn sanitize_url(url: &str) -> String {
     if !url.is_empty() && !url.starts_with("http://") && !url.starts_with("https://") {
@@ -52,5 +99,42 @@ mod tests {
         // user:pass -> dXNlcjpwYXNz
         assert_eq!(generate_basic_auth("user", "pass"), "Basic dXNlcjpwYXNz");
         assert_eq!(generate_basic_auth("admin", "1234"), "Basic YWRtaW46MTIzNA==");
+        assert_eq!(generate_basic_auth("admin", "1234"), "Basic YWRtaW46MTIzNA==");
+    }
+
+    #[test]
+    fn test_infer_auth_config() {
+        // Basic
+        let (mode, u, p, t) = infer_auth_config("Basic dXNlcjpwYXNz");
+        assert_eq!(mode, AuthMode::Basic);
+        assert_eq!(u, "user");
+        assert_eq!(p, "pass");
+        assert_eq!(t, "");
+
+        // Bearer
+        let (mode, u, p, t) = infer_auth_config("Bearer secret_token");
+        assert_eq!(mode, AuthMode::Bearer);
+        assert_eq!(u, "");
+        assert_eq!(p, "");
+        assert_eq!(t, "secret_token");
+
+        // Custom
+        let (mode, u, p, t) = infer_auth_config("X-Custom: Value");
+        assert_eq!(mode, AuthMode::Custom);
+        assert_eq!(u, "");
+        assert_eq!(p, "");
+        assert_eq!(t, "");
+
+        // None
+        let (mode, _u, _p, _t) = infer_auth_config("");
+        assert_eq!(mode, AuthMode::None);
+    }
+
+    #[test]
+    fn test_count_active_headers() {
+        assert_eq!(count_active_headers("H: V"), 1);
+        assert_eq!(count_active_headers("H: V\nH2: V2"), 2);
+        assert_eq!(count_active_headers("# Comment\n\n"), 0);
+        assert_eq!(count_active_headers("H: V\n# Disabled\nH3: V3"), 2);
     }
 }
