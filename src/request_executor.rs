@@ -13,7 +13,7 @@ pub enum ResponseType {
     Image(Vec<u8>), // Raw image bytes for display
     Binary,         // Non-displayable binary data
     TooLarge,       // Exceeded MAX_RESPONSE_SIZE
-    LargeText,      // Text content too large for inline display (>100KB)
+    LargeText,      // Text content too large for inline display (>1000KB)
     Empty,          // 204 No Content or empty body
 }
 
@@ -42,7 +42,7 @@ fn detect_response_type(content_type: &str, body: &[u8], status: u16) -> Respons
         return ResponseType::TooLarge;
     }
 
-    // Large responses (>100KB) are treated as LargeText to prevent UI hangs
+    // Large responses (>1000KB) are treated as LargeText to prevent UI hangs
     // The clone() + format_json() + syntax_highlight() is too expensive for large text
     if body.len() > crate::constants::MAX_TEXT_DISPLAY_SIZE {
         return ResponseType::LargeText;
