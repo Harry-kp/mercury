@@ -1,0 +1,40 @@
+name: Welcome New Contributors
+
+on:
+  pull_request_target:
+    types: [opened]
+  issues:
+    types: [opened]
+
+jobs:
+  welcome:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      pull-requests: write
+    steps:
+      - uses: actions/first-interaction@v1
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          issue-message: |
+            👋 **Welcome to Mercury!** Thanks for opening your first issue.
+            
+            A maintainer will respond soon. In the meantime:
+            - 📖 Check our [Contributing Guide](https://github.com/Harry-kp/mercury/blob/main/CONTRIBUTING.md)
+            - 💬 Join [Discussions](https://github.com/Harry-kp/mercury/discussions) for Q&A
+            - 🎯 See our [Q1 2026 Roadmap](https://github.com/Harry-kp/mercury/blob/main/Q1_2026_ROADMAP.md)
+            - 🐛 Browse [good first issues](https://github.com/Harry-kp/mercury/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22)
+            
+            We're excited to have you here! 🚀
+            
+          pr-message: |
+            🎉 **Thanks for your first Pull Request!**
+            
+            Please ensure:
+            - [ ] All tests pass (`cargo test`)
+            - [ ] Code is formatted (`cargo fmt`)
+            - [ ] No clippy warnings (`cargo clippy`)
+            - [ ] PR description links to an issue (e.g., "Fixes #123")
+            - [ ] All acceptance criteria from the linked issue are met
+            
+            A maintainer will review within 48 hours. Thanks for contributing to Mercury! 💜

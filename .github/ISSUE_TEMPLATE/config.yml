@@ -1,0 +1,14 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 💬 GitHub Discussions
+    url: https://github.com/Harry-kp/mercury/discussions
+    about: Ask questions, share ideas, or discuss features before creating an issue
+  - name: 📖 Documentation
+    url: https://github.com/Harry-kp/mercury/blob/main/README.md
+    about: Read the documentation and quickstart guide
+  - name: 🎯 Q1 2026 Roadmap
+    url: https://github.com/Harry-kp/mercury/blob/main/Q1_2026_ROADMAP.md
+    about: See what features are planned for the next quarter
+  - name: 🚀 Project Board
+    url: https://github.com/users/Harry-kp/projects/4
+    about: Track progress on current features and issues
