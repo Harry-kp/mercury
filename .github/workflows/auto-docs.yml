@@ -1,0 +1,102 @@
+name: Auto-Update Documentation
+
+on:
+  pull_request:
+    types: [closed]
+    branches:
+      - main
+      - master
+
+jobs:
+  trigger-docs-update:
+    # Only run if PR was merged (not just closed)
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    
+    permissions:
+      issues: write
+      pull-requests: write
+      contents: read
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for better context
+      
+      - name: Check if code changes affect documentation
+        id: check_changes
+        run: |
+          # Get changed files from the merged PR
+          FILES=$(gh pr view ${{ github.event.pull_request.number }} --json files --jq '.files[].path' || echo "")
+          
+          # Check if changes are in source code (not just docs)
+          CODE_CHANGES=$(echo "$FILES" | grep -E '^(src/|lib/|app/|components/)' || echo "")
+          
+          # Skip if PR has skip-docs label
+          LABELS=$(gh pr view ${{ github.event.pull_request.number }} --json labels --jq '.labels[].name' || echo "")
+          
+          if echo "$LABELS" | grep -q "skip-docs"; then
+            echo "PR has skip-docs label, skipping documentation update"
+            echo "should_update=false" >> $GITHUB_OUTPUT
+          elif [ -z "$CODE_CHANGES" ]; then
+            echo "No source code changes detected, skipping docs update"
+            echo "should_update=false" >> $GITHUB_OUTPUT
+          else
+            echo "Source code changes detected, will update docs"
+            echo "should_update=true" >> $GITHUB_OUTPUT
+            echo "changed_files<<EOF" >> $GITHUB_OUTPUT
+            echo "$FILES" >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+          fi
+        env:
+          GH_TOKEN: ${{ github.token }}
+      
+      - name: Create documentation update issue
+        if: steps.check_changes.outputs.should_update == 'true'
+        run: |
+          # Create issue for Copilot to work on
+          gh issue create \
+            --title "📚 Update documentation for PR #${{ github.event.pull_request.number }}" \
+            --body "$(cat <<EOF
+          This PR merged code changes that may require documentation updates.
+          
+          **Source PR:** #${{ github.event.pull_request.number }}
+          **Title:** ${{ github.event.pull_request.title }}
+          **Author:** @${{ github.event.pull_request.user.login }}
+          
+          ## Changes Summary
+          ${{ github.event.pull_request.body }}
+          
+          ## Files Changed
+          \`\`\`
+          ${{ steps.check_changes.outputs.changed_files }}
+          \`\`\`
+          
+          ## Task
+          @docusaurus-agent Please review the code changes from PR #${{ github.event.pull_request.number }} and:
+          
+          1. Identify which documentation needs updating
+          2. Update relevant documentation files in \`docs/\`
+          3. Update \`sidebars.js\` if new pages are added
+          4. Ensure code examples reflect the new changes
+          5. Add migration notes if there are breaking changes
+          
+          Create a PR with your documentation updates for review.
+          
+          ---
+          
+          **Note:** If no documentation changes are needed, please close this issue with a comment explaining why.
+          EOF
+          )" \
+            --label "documentation,automated"
+        env:
+          GH_TOKEN: ${{ github.token }}
+      
+      - name: Comment on original PR
+        if: steps.check_changes.outputs.should_update == 'true'
+        run: |
+          gh pr comment ${{ github.event.pull_request.number }} \
+            --body "📚 Documentation update has been triggered. Check the [documentation issues](https://github.com/${{ github.repository }}/issues?q=is%3Aissue+is%3Aopen+label%3Adocumentation+label%3Aautomated+sort%3Acreated-desc) for the auto-generated task."
+        env:
+          GH_TOKEN: ${{ github.token }}
