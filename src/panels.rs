@@ -905,13 +905,14 @@ impl MercuryApp {
                                 if ui
                                     .add(
                                         egui::Label::new(
-                                            egui::RichText::new("Format JSON")
-                                                .size(FontSize::XS)
+                                            egui::RichText::new("{ }")
+                                                .size(FontSize::ICON)
+                                                .strong()
                                                 .color(Colors::PRIMARY),
                                         )
                                         .sense(egui::Sense::click()),
                                     )
-                                    .on_hover_text("Prettify JSON body")
+                                    .on_hover_text("Format JSON")
                                     .clicked()
                                 {
                                     if let Ok(value) =
