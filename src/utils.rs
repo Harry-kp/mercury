@@ -91,15 +91,24 @@ mod tests {
         assert!(should_add_json_header("[1,2]", "Header: Value"));
         assert!(!should_add_json_header("not json", ""));
         assert!(!should_add_json_header("{}", "Content-Type: text/plain"));
-        assert!(!should_add_json_header("{}", "content-type: application/json"));
+        assert!(!should_add_json_header(
+            "{}",
+            "content-type: application/json"
+        ));
     }
 
     #[test]
     fn test_generate_basic_auth() {
         // user:pass -> dXNlcjpwYXNz
         assert_eq!(generate_basic_auth("user", "pass"), "Basic dXNlcjpwYXNz");
-        assert_eq!(generate_basic_auth("admin", "1234"), "Basic YWRtaW46MTIzNA==");
-        assert_eq!(generate_basic_auth("admin", "1234"), "Basic YWRtaW46MTIzNA==");
+        assert_eq!(
+            generate_basic_auth("admin", "1234"),
+            "Basic YWRtaW46MTIzNA=="
+        );
+        assert_eq!(
+            generate_basic_auth("admin", "1234"),
+            "Basic YWRtaW46MTIzNA=="
+        );
     }
 
     #[test]

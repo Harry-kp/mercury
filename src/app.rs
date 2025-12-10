@@ -1,8 +1,8 @@
 use crate::env_parser::{parse_env_file, substitute_variables};
 use crate::http_parser::{parse_http_file, HttpMethod, HttpRequest};
 use crate::request_executor::{execute_request, HttpResponse};
-use eframe::egui;
 use base64::Engine;
+use eframe::egui;
 use notify_debouncer_mini::new_debouncer;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -251,8 +251,7 @@ impl MercuryApp {
             app.headers_text = state.headers_text;
             app.body_text = state.body_text;
             app.auth_text = state.auth_text;
-            
-            
+
             // Infer auth mode from text
             let (mode, username, password, token) = crate::utils::infer_auth_config(&app.auth_text);
             app.auth_mode = mode;

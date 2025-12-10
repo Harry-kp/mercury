@@ -147,7 +147,7 @@ impl Layout {
     pub const POPUP_WIDE_WIDTH: f32 = 160.0;
     pub const METHOD_POPUP_WIDTH: f32 = 80.0;
     pub const INPUT_FIELD_WIDTH: f32 = 100.0;
-    
+
     // UI Scaling
     pub const DEFAULT_ZOOM_FACTOR: f32 = 1.25;
 }
