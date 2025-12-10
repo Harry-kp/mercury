@@ -149,9 +149,7 @@ pub fn execute_request(request: &HttpRequest) -> Result<HttpResponse, String> {
         req_builder = req_builder.body(body.clone());
     }
 
-    let response = req_builder
-        .send()
-        .map_err(|e| format_request_error(e))?;
+    let response = req_builder.send().map_err(format_request_error)?;
 
     let status = response.status().as_u16();
     let status_text = response.status().to_string();

@@ -52,9 +52,10 @@ pub fn response_time_metric(ui: &mut Ui, duration_ms: u128) {
     };
 
     let text = format!("{}ms", duration_ms);
-    ui.add(
-        egui::Label::new(RichText::new(&text).color(color).size(FontSize::SM))
-    ).on_hover_text(tooltip);
+    ui.add(egui::Label::new(
+        RichText::new(&text).color(color).size(FontSize::SM),
+    ))
+    .on_hover_text(tooltip);
 }
 
 /// Tab bar component
@@ -768,7 +769,11 @@ fn get_content_type_info(content_type: &str) -> (&'static str, &'static str) {
         ("🎬", "Video Content")
     } else if ct.contains("pdf") {
         ("📄", "PDF Document")
-    } else if ct.contains("zip") || ct.contains("tar") || ct.contains("gz") || ct.contains("archive") {
+    } else if ct.contains("zip")
+        || ct.contains("tar")
+        || ct.contains("gz")
+        || ct.contains("archive")
+    {
         ("📦", "Archive File")
     } else if ct.contains("octet-stream") {
         ("💾", "Binary Data")
@@ -781,36 +786,86 @@ fn get_content_type_info(content_type: &str) -> (&'static str, &'static str) {
 pub fn get_extension_for_content_type(content_type: &str) -> &'static str {
     let ct = content_type.to_lowercase();
     // Images
-    if ct.contains("image/jpeg") || ct.contains("image/jpg") { return ".jpg"; }
-    if ct.contains("image/png") { return ".png"; }
-    if ct.contains("image/gif") { return ".gif"; }
-    if ct.contains("image/webp") { return ".webp"; }
-    if ct.contains("image/svg") { return ".svg"; }
-    if ct.contains("image/bmp") { return ".bmp"; }
-    if ct.contains("image/ico") { return ".ico"; }
+    if ct.contains("image/jpeg") || ct.contains("image/jpg") {
+        return ".jpg";
+    }
+    if ct.contains("image/png") {
+        return ".png";
+    }
+    if ct.contains("image/gif") {
+        return ".gif";
+    }
+    if ct.contains("image/webp") {
+        return ".webp";
+    }
+    if ct.contains("image/svg") {
+        return ".svg";
+    }
+    if ct.contains("image/bmp") {
+        return ".bmp";
+    }
+    if ct.contains("image/ico") {
+        return ".ico";
+    }
     // Audio
-    if ct.contains("audio/mpeg") || ct.contains("audio/mp3") { return ".mp3"; }
-    if ct.contains("audio/wav") { return ".wav"; }
-    if ct.contains("audio/ogg") { return ".ogg"; }
-    if ct.contains("audio/flac") { return ".flac"; }
+    if ct.contains("audio/mpeg") || ct.contains("audio/mp3") {
+        return ".mp3";
+    }
+    if ct.contains("audio/wav") {
+        return ".wav";
+    }
+    if ct.contains("audio/ogg") {
+        return ".ogg";
+    }
+    if ct.contains("audio/flac") {
+        return ".flac";
+    }
     // Video
-    if ct.contains("video/mp4") { return ".mp4"; }
-    if ct.contains("video/webm") { return ".webm"; }
-    if ct.contains("video/avi") { return ".avi"; }
-    if ct.contains("video/quicktime") { return ".mov"; }
+    if ct.contains("video/mp4") {
+        return ".mp4";
+    }
+    if ct.contains("video/webm") {
+        return ".webm";
+    }
+    if ct.contains("video/avi") {
+        return ".avi";
+    }
+    if ct.contains("video/quicktime") {
+        return ".mov";
+    }
     // Documents
-    if ct.contains("application/pdf") { return ".pdf"; }
-    if ct.contains("application/zip") { return ".zip"; }
-    if ct.contains("application/gzip") { return ".gz"; }
-    if ct.contains("application/x-tar") { return ".tar"; }
+    if ct.contains("application/pdf") {
+        return ".pdf";
+    }
+    if ct.contains("application/zip") {
+        return ".zip";
+    }
+    if ct.contains("application/gzip") {
+        return ".gz";
+    }
+    if ct.contains("application/x-tar") {
+        return ".tar";
+    }
     // JSON/XML (in case they're treated as binary)
-    if ct.contains("json") { return ".json"; }
-    if ct.contains("xml") { return ".xml"; }
+    if ct.contains("json") {
+        return ".json";
+    }
+    if ct.contains("xml") {
+        return ".xml";
+    }
     // Text formats
-    if ct.contains("text/html") { return ".html"; }
-    if ct.contains("text/plain") { return ".txt"; }
-    if ct.contains("text/css") { return ".css"; }
-    if ct.contains("javascript") { return ".js"; }
+    if ct.contains("text/html") {
+        return ".html";
+    }
+    if ct.contains("text/plain") {
+        return ".txt";
+    }
+    if ct.contains("text/css") {
+        return ".css";
+    }
+    if ct.contains("javascript") {
+        return ".js";
+    }
     // Default
     ".bin"
 }
@@ -886,7 +941,11 @@ pub fn large_text_placeholder(ui: &mut Ui, content_type: &str, size_bytes: usize
 pub fn empty_response_placeholder(ui: &mut Ui, status: u16) {
     ui.vertical_centered(|ui| {
         ui.add_space(Spacing::XL);
-        ui.label(RichText::new("✓").size(FontSize::HERO).color(Colors::SUCCESS));
+        ui.label(
+            RichText::new("✓")
+                .size(FontSize::HERO)
+                .color(Colors::SUCCESS),
+        );
         ui.add_space(Spacing::SM);
         ui.label(
             RichText::new(format!("{} No Content", status))
@@ -959,13 +1018,19 @@ mod tests {
     #[test]
     fn test_extension_for_css_js() {
         assert_eq!(get_extension_for_content_type("text/css"), ".css");
-        assert_eq!(get_extension_for_content_type("application/javascript"), ".js");
+        assert_eq!(
+            get_extension_for_content_type("application/javascript"),
+            ".js"
+        );
         assert_eq!(get_extension_for_content_type("text/javascript"), ".js");
     }
 
     #[test]
     fn test_extension_for_unknown() {
-        assert_eq!(get_extension_for_content_type("application/octet-stream"), ".bin");
+        assert_eq!(
+            get_extension_for_content_type("application/octet-stream"),
+            ".bin"
+        );
         assert_eq!(get_extension_for_content_type("some/unknown"), ".bin");
         assert_eq!(get_extension_for_content_type(""), ".bin");
     }

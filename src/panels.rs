@@ -405,7 +405,10 @@ impl MercuryApp {
             // Extract response type info BEFORE we use closures that need &mut self
             let is_text_response = matches!(
                 response.response_type,
-                ResponseType::Json | ResponseType::Xml | ResponseType::Html | ResponseType::PlainText
+                ResponseType::Json
+                    | ResponseType::Xml
+                    | ResponseType::Html
+                    | ResponseType::PlainText
             );
             let needs_save_button = matches!(
                 response.response_type,
@@ -527,7 +530,10 @@ impl MercuryApp {
                     // Binary content placeholder with Save option
                     binary_placeholder(ui, &response.content_type, response.size_bytes);
                 }
-                ResponseType::Json | ResponseType::Xml | ResponseType::Html | ResponseType::PlainText => {
+                ResponseType::Json
+                | ResponseType::Xml
+                | ResponseType::Html
+                | ResponseType::PlainText => {
                     // Body header with copy button
                     ui.horizontal(|ui| {
                         ui.label(egui::RichText::new("Body").size(FontSize::SM).strong());
@@ -671,7 +677,8 @@ impl MercuryApp {
     fn save_response_to_file(&self) {
         if let Some(response) = &self.response {
             // Generate smart filename based on content type
-            let extension = crate::components::get_extension_for_content_type(&response.content_type);
+            let extension =
+                crate::components::get_extension_for_content_type(&response.content_type);
             let default_filename = format!("response{}", extension);
 
             if let Some(path) = rfd::FileDialog::new()
