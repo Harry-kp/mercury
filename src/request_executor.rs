@@ -10,11 +10,11 @@ pub enum ResponseType {
     Xml,
     Html,
     PlainText,
-    Image,          // Raw image bytes stored in raw_bytes
-    Binary,         // Non-displayable binary data
-    TooLarge,       // Exceeded MAX_RESPONSE_SIZE
-    LargeText,      // Text content too large for inline display (>1000KB)
-    Empty,          // 204 No Content or empty body
+    Image,     // Raw image bytes stored in raw_bytes
+    Binary,    // Non-displayable binary data
+    TooLarge,  // Exceeded MAX_RESPONSE_SIZE
+    LargeText, // Text content too large for inline display (>1000KB)
+    Empty,     // 204 No Content or empty body
 }
 
 #[derive(Debug, Clone)]

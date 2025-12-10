@@ -66,7 +66,6 @@ pub struct MercuryApp {
     pub show_response_headers: bool,
     pub show_response_diff: bool,
 
-
     pub env_files: Vec<String>,
     pub selected_env: usize,
     pub env_variables: HashMap<String, String>,
