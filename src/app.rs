@@ -2,6 +2,7 @@ use crate::env_parser::{parse_env_file, substitute_variables};
 use crate::http_parser::{parse_http_file, HttpMethod, HttpRequest};
 use crate::request_executor::{execute_request, HttpResponse};
 use eframe::egui;
+use base64::Engine;
 use notify_debouncer_mini::new_debouncer;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -59,6 +60,7 @@ pub struct MercuryApp {
     pub headers_text: String,
     pub body_text: String,
     pub auth_text: String,
+    pub auth_mode: AuthMode,
     // Auth helpers (ephemeral)
     pub auth_username: String,
     pub auth_password: String,
@@ -150,6 +152,14 @@ pub struct TimelineEntry {
     pub _response_body: String,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AuthMode {
+    None,
+    Basic,
+    Bearer,
+    Custom,
+}
+
 impl MercuryApp {
     pub fn new(_cc: &eframe::CreationContext<'_>) -> Self {
         let (response_tx, response_rx) = channel();
@@ -169,6 +179,7 @@ impl MercuryApp {
             headers_text: String::new(),
             body_text: String::new(),
             auth_text: String::new(),
+            auth_mode: AuthMode::None,
             auth_username: String::new(),
             auth_password: String::new(),
             auth_token: String::new(),
@@ -246,6 +257,28 @@ impl MercuryApp {
             app.headers_text = state.headers_text;
             app.body_text = state.body_text;
             app.auth_text = state.auth_text;
+            
+            // Infer auth mode from text
+            if app.auth_text.starts_with("Basic ") {
+                app.auth_mode = AuthMode::Basic;
+                // Try to decode username:password if it's base64
+                if let Some(encoded) = app.auth_text.strip_prefix("Basic ") {
+                    if let Ok(decoded_bytes) = base64::prelude::BASE64_STANDARD.decode(encoded.trim()) {
+                        if let Ok(decoded) = String::from_utf8(decoded_bytes) {
+                            if let Some((u, p)) = decoded.split_once(':') {
+                                app.auth_username = u.to_string();
+                                app.auth_password = p.to_string();
+                            }
+                        }
+                    }
+                }
+            } else if app.auth_text.starts_with("Bearer ") {
+                app.auth_mode = AuthMode::Bearer;
+                app.auth_token = app.auth_text.trim_start_matches("Bearer ").to_string();
+            } else if !app.auth_text.is_empty() {
+                app.auth_mode = AuthMode::Custom;
+            }
+
             app.selected_tab = state.selected_tab;
 
             // Restore workspace if it exists
