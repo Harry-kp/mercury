@@ -10,7 +10,15 @@ permissions:
 
 jobs:
   build-macos:
-    runs-on: macos-latest
+    name: Build macOS (${{ matrix.target_name }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: macos-latest # Intel
+            target_name: x86_64
+          - os: macos-14 # Apple Silicon (M1)
+            target_name: arm64
     steps:
       - uses: actions/checkout@v3
       
@@ -20,6 +28,10 @@ jobs:
       - name: Build
         run: cargo build --release
         
+      - name: Get Version
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
       - name: Create DMG
         run: |
           mkdir -p Mercury.app/Contents/MacOS
@@ -39,22 +51,27 @@ jobs:
               <key>CFBundleName</key>
               <string>Mercury</string>
               <key>CFBundleVersion</key>
-              <string>1.0.0</string>
+              <string>${{ steps.version.outputs.VERSION }}</string>
               <key>CFBundleShortVersionString</key>
-              <string>1.0.0</string>
+              <string>${{ steps.version.outputs.VERSION }}</string>
           </dict>
           </plist>
           EOF
           
-          # Ad-hoc code signing (no Apple Developer account needed)
+          # Ad-hoc code signing (required for Apple Silicon)
           codesign --force --deep --sign - Mercury.app
           
-          hdiutil create -volname Mercury -srcfolder Mercury.app -ov -format UDZO mercury-macos.dmg
+          hdiutil create -volname Mercury -srcfolder Mercury.app -ov -format UDZO mercury-macos-${{ matrix.target_name }}.dmg
+          
+      - name: Generate Checksum
+        run: shasum -a 256 mercury-macos-${{ matrix.target_name }}.dmg > mercury-macos-${{ matrix.target_name }}.dmg.sha256
           
       - name: Upload Release Asset
         uses: softprops/action-gh-release@v1
         with:
-          files: mercury-macos.dmg
+          files: |
+            mercury-macos-${{ matrix.target_name }}.dmg
+            mercury-macos-${{ matrix.target_name }}.dmg.sha256
 
   build-windows:
     runs-on: windows-latest
@@ -67,10 +84,16 @@ jobs:
       - name: Build
         run: cargo build --release
         
+      - name: Generate Checksum
+        run: sha256sum target/release/mercury.exe > mercury-windows-x86_64.exe.sha256
+        shell: bash
+        
       - name: Upload Release Asset
         uses: softprops/action-gh-release@v1
         with:
-          files: target/release/mercury.exe
+          files: |
+            target/release/mercury.exe
+            mercury-windows-x86_64.exe.sha256
 
   build-linux:
     runs-on: ubuntu-latest
@@ -110,9 +133,14 @@ jobs:
           EOF
           
           ./linuxdeploy-x86_64.AppImage --appdir AppDir --output appimage
-          mv Mercury*.AppImage mercury-linux.AppImage
+          mv Mercury*.AppImage mercury-linux-x86_64.AppImage
+          
+      - name: Generate Checksum
+        run: sha256sum mercury-linux-x86_64.AppImage > mercury-linux-x86_64.AppImage.sha256
           
       - name: Upload Release Asset
         uses: softprops/action-gh-release@v1
         with:
-          files: mercury-linux.AppImage
+          files: |
+            mercury-linux-x86_64.AppImage
+            mercury-linux-x86_64.AppImage.sha256

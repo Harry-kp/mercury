@@ -1,6 +1,7 @@
 // panels.rs - Main panel layouts
 // Clean, scrollable panels with proper overflow handling
 
+use crate::app::AuthMode;
 use crate::app::MercuryApp;
 use crate::components::*;
 use crate::http_parser::HttpMethod;
@@ -882,7 +883,13 @@ impl MercuryApp {
     /// Request body with tabs
     fn render_request_body_new(&mut self, ui: &mut Ui) {
         // Tabs
-        let tabs = ["Body", "Headers", "Auth"];
+        let header_count = crate::utils::count_active_headers(&self.headers_text);
+        let headers_label = if header_count > 0 {
+            format!("Headers ({})", header_count)
+        } else {
+            "Headers".to_string()
+        };
+        let tabs = ["Body", headers_label.as_str(), "Auth"];
         tab_bar(ui, &tabs, &mut self.selected_tab);
 
         ui.add_space(Spacing::SM);
@@ -897,7 +904,10 @@ impl MercuryApp {
             .show(ui, |ui| {
                 match self.selected_tab {
                     0 => {
-                        // Body editor with syntax highlighting
+                        // Save cursor for overlay
+                        let top_right = ui.cursor().min + egui::vec2(ui.available_width(), 0.0);
+
+                        // Body editor check syntax highlighting
                         let mut layouter = |ui: &egui::Ui, text: &str, wrap_width: f32| {
                             let job = json_layout_job(text, wrap_width);
                             ui.fonts(|f| f.layout_job(job))
@@ -914,36 +924,169 @@ impl MercuryApp {
                                 .frame(false) // Transparent background
                                 .layouter(&mut layouter),
                         );
+
+                        // Overlay Format Button (Draw ON TOP of TextEdit)
+                        let button_rect = egui::Rect::from_min_size(
+                            top_right - egui::vec2(30.0, 0.0),
+                            egui::vec2(30.0, 20.0),
+                        );
+                        if ui
+                            .put(
+                                button_rect,
+                                egui::Label::new(
+                                    egui::RichText::new("{ }")
+                                        .size(FontSize::LG)
+                                        .strong()
+                                        .color(Colors::PRIMARY),
+                                )
+                                .sense(egui::Sense::click()),
+                            )
+                            .on_hover_text("Format JSON")
+                            .clicked()
+                        {
+                            if let Ok(value) =
+                                serde_json::from_str::<serde_json::Value>(&self.body_text)
+                            {
+                                if let Ok(pretty) = serde_json::to_string_pretty(&value) {
+                                    self.body_text = pretty;
+                                }
+                            }
+                        }
                     }
                     1 => {
                         // Headers with smart variables
                         self.render_smart_headers(ui);
                     }
                     2 => {
-                        // Auth
-                        ui.label(
-                            egui::RichText::new("Authorization")
-                                .size(FontSize::MD)
-                                .strong(),
-                        );
-                        ui.add_space(Spacing::XS);
-                        ui.add(
-                            egui::TextEdit::multiline(&mut self.auth_text)
-                                .hint_text(
-                                    egui::RichText::new("Bearer {{token}}")
-                                        .color(Colors::PLACEHOLDER),
-                                )
-                                .desired_width(ui.available_width())
-                                .desired_rows(4)
-                                .frame(false)
-                                .font(egui::TextStyle::Monospace),
-                        );
-                        ui.add_space(Spacing::SM);
-                        ui.label(
-                            egui::RichText::new("This will be added as Authorization header")
-                                .size(FontSize::XS)
-                                .color(Colors::TEXT_MUTED),
-                        );
+                        // Revamped Auth UI
+                        ui.horizontal(|ui| {
+                            ui.label("Auth Type:");
+                            egui::ComboBox::from_id_salt("auth_mode_selector")
+                                .selected_text(match self.auth_mode {
+                                    AuthMode::None => "None",
+                                    AuthMode::Basic => "Basic Auth",
+                                    AuthMode::Bearer => "Bearer Token",
+                                    AuthMode::Custom => "Custom Header",
+                                })
+                                .show_ui(ui, |ui| {
+                                    if ui
+                                        .selectable_value(
+                                            &mut self.auth_mode,
+                                            AuthMode::None,
+                                            "None",
+                                        )
+                                        .clicked()
+                                    {
+                                        self.auth_text.clear();
+                                    }
+                                    let basic = ui.selectable_value(
+                                        &mut self.auth_mode,
+                                        AuthMode::Basic,
+                                        "Basic Auth",
+                                    );
+                                    if basic.clicked() {
+                                        self.auth_text = crate::utils::generate_basic_auth(
+                                            &self.auth_username,
+                                            &self.auth_password,
+                                        );
+                                    }
+                                    let bearer = ui.selectable_value(
+                                        &mut self.auth_mode,
+                                        AuthMode::Bearer,
+                                        "Bearer Token",
+                                    );
+                                    if bearer.clicked() {
+                                        self.auth_text =
+                                            crate::utils::generate_bearer_auth(&self.auth_token);
+                                    }
+                                    ui.selectable_value(
+                                        &mut self.auth_mode,
+                                        AuthMode::Custom,
+                                        "Custom Header",
+                                    );
+                                });
+                        });
+
+                        ui.add_space(Spacing::MD);
+
+                        match self.auth_mode {
+                            AuthMode::None => {
+                                ui.label(
+                                    egui::RichText::new("No Authorization header will be sent.")
+                                        .color(Colors::TEXT_MUTED),
+                                );
+                            }
+                            AuthMode::Basic => {
+                                egui::Grid::new("basic_auth_inputs")
+                                    .num_columns(2)
+                                    .spacing([Spacing::MD, Spacing::SM])
+                                    .show(ui, |ui| {
+                                        ui.label("Username:");
+                                        if ui
+                                            .text_edit_singleline(&mut self.auth_username)
+                                            .changed()
+                                        {
+                                            self.auth_text = crate::utils::generate_basic_auth(
+                                                &self.auth_username,
+                                                &self.auth_password,
+                                            );
+                                        }
+                                        ui.end_row();
+
+                                        ui.label("Password:");
+                                        if ui
+                                            .add(
+                                                egui::TextEdit::singleline(&mut self.auth_password)
+                                                    .password(true),
+                                            )
+                                            .changed()
+                                        {
+                                            self.auth_text = crate::utils::generate_basic_auth(
+                                                &self.auth_username,
+                                                &self.auth_password,
+                                            );
+                                        }
+                                        ui.end_row();
+                                    });
+                                ui.add_space(Spacing::SM);
+                                ui.label(
+                                    egui::RichText::new(format!(
+                                        "Header Preview: Authorization: {}",
+                                        self.auth_text
+                                    ))
+                                    .size(FontSize::XS)
+                                    .color(Colors::TEXT_MUTED),
+                                );
+                            }
+                            AuthMode::Bearer => {
+                                ui.horizontal(|ui| {
+                                    ui.label("Token:");
+                                    if ui.text_edit_singleline(&mut self.auth_token).changed() {
+                                        self.auth_text =
+                                            crate::utils::generate_bearer_auth(&self.auth_token);
+                                    }
+                                });
+                                ui.add_space(Spacing::SM);
+                                ui.label(
+                                    egui::RichText::new(format!(
+                                        "Header Preview: Authorization: {}",
+                                        self.auth_text
+                                    ))
+                                    .size(FontSize::XS)
+                                    .color(Colors::TEXT_MUTED),
+                                );
+                            }
+                            AuthMode::Custom => {
+                                ui.label("Authorization Value:");
+                                ui.add(
+                                    egui::TextEdit::multiline(&mut self.auth_text)
+                                        .hint_text("Bearer <token>")
+                                        .desired_width(ui.available_width())
+                                        .desired_rows(4)
+                                        .font(egui::TextStyle::Monospace),
+                                );
+                            }
+                        }
                     }
                     _ => {}
                 }
@@ -952,45 +1095,14 @@ impl MercuryApp {
 
     /// Headers tab with variable indicators
     fn render_smart_headers(&mut self, ui: &mut Ui) {
-        // Mode toggle only (no redundant "Headers" label since tab name shows it)
-        ui.horizontal(|ui| {
-            let undefined = Self::extract_variables(&self.headers_text)
-                .iter()
-                .filter(|v| !self.env_variables.contains_key(*v))
-                .count();
+        // Save cursor for overlay
+        let top_right = ui.cursor().min + egui::vec2(ui.available_width(), 0.0);
+        let start_pos = ui.cursor().min;
 
-            if undefined > 0 {
-                ui.label(
-                    egui::RichText::new(format!("{} undefined", undefined))
-                        .size(FontSize::XS)
-                        .color(Colors::ERROR),
-                );
-            }
-
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                let mode_text = if self.headers_bulk_edit {
-                    "Key-Value"
-                } else {
-                    "Bulk Edit"
-                };
-                if ui
-                    .add(
-                        egui::Label::new(
-                            egui::RichText::new(mode_text)
-                                .size(FontSize::XS)
-                                .color(Colors::PRIMARY),
-                        )
-                        .sense(egui::Sense::click()),
-                    )
-                    .on_hover_text("Toggle edit mode")
-                    .clicked()
-                {
-                    self.headers_bulk_edit = !self.headers_bulk_edit;
-                }
-            });
-        });
-
-        ui.add_space(Spacing::XS);
+        let undefined = Self::extract_variables(&self.headers_text)
+            .iter()
+            .filter(|v| !self.env_variables.contains_key(*v))
+            .count();
 
         if self.headers_bulk_edit {
             // Bulk edit mode - raw text
@@ -1125,6 +1237,43 @@ impl MercuryApp {
                     .collect::<Vec<_>>()
                     .join("\n");
             }
+        }
+
+        // Overlay Bulk Edit Button (Rendered Last)
+        let button_rect =
+            egui::Rect::from_min_size(top_right - egui::vec2(60.0, 0.0), egui::vec2(60.0, 20.0));
+        let mode_text = if self.headers_bulk_edit {
+            "Key-Value"
+        } else {
+            "Bulk Edit"
+        };
+        if ui
+            .put(
+                button_rect,
+                egui::Label::new(
+                    egui::RichText::new(mode_text)
+                        .size(FontSize::XS)
+                        .color(Colors::PRIMARY),
+                )
+                .sense(egui::Sense::click()),
+            )
+            .on_hover_text("Toggle edit mode")
+            .clicked()
+        {
+            self.headers_bulk_edit = !self.headers_bulk_edit;
+        }
+
+        // Overlay Undefined Warning (Rendered Last)
+        if undefined > 0 {
+            let warn_rect = egui::Rect::from_min_size(start_pos, egui::vec2(100.0, 20.0));
+            ui.put(
+                warn_rect,
+                egui::Label::new(
+                    egui::RichText::new(format!("{} undefined", undefined))
+                        .size(FontSize::XS)
+                        .color(Colors::ERROR),
+                ),
+            );
         }
 
         // Variable status

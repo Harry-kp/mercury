@@ -1,0 +1,100 @@
+name: ✨ Feature Request
+description: Suggest an idea for Mercury
+title: "[Feature]: "
+labels: ["enhancement", "status: todo"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for suggesting a new feature! 🚀
+        
+        We follow the **37signals philosophy**: ship features that solve real problems, stay simple, and don't add bloat.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem Statement
+      description: What problem does this solve? Use the format "As a [user type], I want to [goal] so that [benefit]"
+      placeholder: "As an API developer, I want to save request templates so that I don't have to recreate common requests every time."
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed Solution
+      description: How should it work? Describe the user experience.
+      placeholder: |
+        Add a "Save as Template" button in the request panel.
+        When clicked, save the current request (URL, headers, body) to a templates folder.
+        Templates appear in a sidebar for quick access.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered
+      description: What other solutions did you think about?
+      placeholder: "I could use snippets in a text editor, but that's not as convenient..."
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      description: How important is this to you?
+      options:
+        - Low - Nice to have
+        - Medium - Would improve my workflow
+        - High - Blocking my productivity
+    validations:
+      required: true
+
+  - type: dropdown
+    id: effort
+    attributes:
+      label: Estimated Effort
+      description: If you're familiar with the codebase, how complex is this?
+      options:
+        - "Don't know"
+        - Small (1 day)
+        - Medium (2-3 days)
+        - Large (4+ days)
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: philosophy
+    attributes:
+      label: 37signals Philosophy Check
+      description: Does this feature align with Mercury's design principles?
+      options:
+        - label: Solves a real pain point (not just nice-to-have)
+          required: false
+        - label: Simple to use (doesn't require manual/tutorial)
+          required: false
+        - label: Fast to implement (< 5 days)
+          required: false
+        - label: No cloud/accounts needed (stays local)
+          required: false
+        - label: Doesn't bloat the app (< 1MB impact)
+          required: false
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional Context
+      description: Screenshots, mockups, or examples from other tools
+      placeholder: "Here's how Postman handles this..."
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Checklist
+      options:
+        - label: I have searched existing issues/discussions to avoid duplicates
+          required: true
+        - label: I agree to follow the [Code of Conduct](../CODE_OF_CONDUCT.md)
+          required: true
+        - label: I'm willing to help implement this (optional)
+          required: false

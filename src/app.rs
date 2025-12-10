@@ -1,6 +1,7 @@
 use crate::env_parser::{parse_env_file, substitute_variables};
 use crate::http_parser::{parse_http_file, HttpMethod, HttpRequest};
 use crate::request_executor::{execute_request, HttpResponse};
+
 use eframe::egui;
 use notify_debouncer_mini::new_debouncer;
 use serde::{Deserialize, Serialize};
@@ -59,6 +60,11 @@ pub struct MercuryApp {
     pub headers_text: String,
     pub body_text: String,
     pub auth_text: String,
+    pub auth_mode: AuthMode,
+    // Auth helpers (ephemeral)
+    pub auth_username: String,
+    pub auth_password: String,
+    pub auth_token: String,
 
     pub response: Option<HttpResponse>,
     pub previous_response: Option<HttpResponse>,
@@ -146,6 +152,8 @@ pub struct TimelineEntry {
     pub _response_body: String,
 }
 
+pub use crate::utils::AuthMode;
+
 impl MercuryApp {
     pub fn new(_cc: &eframe::CreationContext<'_>) -> Self {
         let (response_tx, response_rx) = channel();
@@ -165,6 +173,10 @@ impl MercuryApp {
             headers_text: String::new(),
             body_text: String::new(),
             auth_text: String::new(),
+            auth_mode: AuthMode::None,
+            auth_username: String::new(),
+            auth_password: String::new(),
+            auth_token: String::new(),
             response: None,
             previous_response: None,
             response_view_raw: false,
@@ -239,6 +251,17 @@ impl MercuryApp {
             app.headers_text = state.headers_text;
             app.body_text = state.body_text;
             app.auth_text = state.auth_text;
+
+            // Infer auth mode from text
+            let (mode, username, password, token) = crate::utils::infer_auth_config(&app.auth_text);
+            app.auth_mode = mode;
+            if mode == AuthMode::Basic {
+                app.auth_username = username;
+                app.auth_password = password;
+            } else if mode == AuthMode::Bearer {
+                app.auth_token = token;
+            }
+
             app.selected_tab = state.selected_tab;
 
             // Restore workspace if it exists
@@ -735,6 +758,17 @@ impl MercuryApp {
     }
 
     pub fn execute_request(&mut self, ctx: &egui::Context) {
+        // Auto-prefix http://
+        self.url = crate::utils::sanitize_url(&self.url);
+
+        // Auto-add Content-Type for JSON
+        if crate::utils::should_add_json_header(&self.body_text, &self.headers_text) {
+            if !self.headers_text.is_empty() && !self.headers_text.ends_with('\n') {
+                self.headers_text.push('\n');
+            }
+            self.headers_text.push_str("Content-Type: application/json");
+        }
+
         let url = substitute_variables(&self.url, &self.env_variables);
         let headers_text = substitute_variables(&self.headers_text, &self.env_variables);
         let body = substitute_variables(&self.body_text, &self.env_variables);
@@ -2261,6 +2295,11 @@ impl eframe::App for MercuryApp {
             // Cmd/Ctrl + K: Focus search
             if i.key_pressed(egui::Key::K) && i.modifiers.command {
                 self.should_focus_search = true;
+            }
+
+            // Cmd/Ctrl + L: Focus URL bar
+            if i.key_pressed(egui::Key::L) && i.modifiers.command {
+                self.should_focus_url_bar = true;
             }
 
             // Cmd/Ctrl + Shift + C: Copy as cURL

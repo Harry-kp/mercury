@@ -1,0 +1,65 @@
+name: Auto Label Issues
+
+on:
+  issues:
+    types: [opened, edited]
+
+jobs:
+  label:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - name: Label bugs
+        if: contains(github.event.issue.title, '[Bug]') || contains(github.event.issue.labels.*.name, 'bug')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh issue edit ${{ github.event.issue.number }} \
+            --repo ${{ github.repository }} \
+            --add-label "priority: high"
+      
+      - name: Label features
+        if: contains(github.event.issue.title, '[Feature]') || contains(github.event.issue.labels.*.name, 'enhancement')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh issue edit ${{ github.event.issue.number }} \
+            --repo ${{ github.repository }} \
+            --add-label "status: todo"
+      
+      - name: Label Postman-related
+        if: contains(github.event.issue.body, 'Postman') || contains(github.event.issue.title, 'Postman')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh issue edit ${{ github.event.issue.number }} \
+            --repo ${{ github.repository }} \
+            --add-label "category: critical-path"
+      
+      - name: Label cookie-related
+        if: contains(github.event.issue.body, 'cookie') || contains(github.event.issue.title, 'cookie')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh issue edit ${{ github.event.issue.number }} \
+            --repo ${{ github.repository }} \
+            --add-label "category: critical-path"
+      
+      - name: Label performance issues
+        if: contains(github.event.issue.body, 'slow') || contains(github.event.issue.body, 'performance') || contains(github.event.issue.body, 'crash')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh issue edit ${{ github.event.issue.number }} \
+            --repo ${{ github.repository }} \
+            --add-label "priority: high"
+      
+      - name: Label good first issues
+        if: contains(github.event.issue.body, 'good first issue') || contains(github.event.issue.labels.*.name, 'effort: small')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh issue edit ${{ github.event.issue.number }} \
+            --repo ${{ github.repository }} \
+            --add-label "good first issue"
