@@ -2147,6 +2147,16 @@ impl eframe::App for MercuryApp {
                             ui.end_row();
 
                             ui.label(
+                                egui::RichText::new("Focus URL Bar")
+                                    .color(crate::theme::Colors::TEXT_SECONDARY),
+                            );
+                            ui.label(
+                                egui::RichText::new("Cmd/Ctrl + L")
+                                    .color(crate::theme::Colors::TEXT_MUTED),
+                            );
+                            ui.end_row();
+
+                            ui.label(
                                 egui::RichText::new("Copy as cURL")
                                     .color(crate::theme::Colors::TEXT_SECONDARY),
                             );
