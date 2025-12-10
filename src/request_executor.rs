@@ -10,7 +10,7 @@ pub enum ResponseType {
     Xml,
     Html,
     PlainText,
-    Image(Vec<u8>), // Raw image bytes for display
+    Image,          // Raw image bytes stored in raw_bytes
     Binary,         // Non-displayable binary data
     TooLarge,       // Exceeded MAX_RESPONSE_SIZE
     LargeText,      // Text content too large for inline display (>1000KB)
@@ -70,7 +70,7 @@ fn detect_response_type(content_type: &str, body: &[u8], status: u16) -> Respons
 
     // Images - store raw bytes for display
     if ct_lower.starts_with("image/") {
-        return ResponseType::Image(body.to_vec());
+        return ResponseType::Image;
     }
 
     // Binary types that can't be displayed as text
@@ -193,7 +193,7 @@ pub fn execute_request(request: &HttpRequest) -> Result<HttpResponse, String> {
 
     // Convert to string (lossy for encoding errors)
     let body = match &response_type {
-        ResponseType::Image(_) | ResponseType::Binary => {
+        ResponseType::Image | ResponseType::Binary => {
             format!("[Binary data: {} bytes]", size_bytes)
         }
         ResponseType::TooLarge => {
@@ -205,8 +205,9 @@ pub fn execute_request(request: &HttpRequest) -> Result<HttpResponse, String> {
     let duration_ms = start.elapsed().as_millis();
 
     // Store raw bytes only for image type
-    let stored_bytes = match &response_type {
-        ResponseType::Image(bytes) => Some(bytes.clone()),
+    // Store raw bytes only for binary/image types to save memory
+    let stored_bytes = match response_type {
+        ResponseType::Image | ResponseType::Binary => Some(raw_bytes.to_vec()),
         _ => None,
     };
 
@@ -369,14 +370,14 @@ mod tests {
     fn test_detect_image_jpeg() {
         let body = b"\xFF\xD8\xFF"; // JPEG magic bytes
         let result = detect_response_type("image/jpeg", body, 200);
-        assert!(matches!(result, ResponseType::Image(_)));
+        assert!(matches!(result, ResponseType::Image));
     }
 
     #[test]
     fn test_detect_image_png() {
         let body = b"\x89PNG\r\n\x1a\n"; // PNG magic bytes
         let result = detect_response_type("image/png", body, 200);
-        assert!(matches!(result, ResponseType::Image(_)));
+        assert!(matches!(result, ResponseType::Image));
     }
 
     #[test]

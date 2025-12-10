@@ -412,7 +412,7 @@ impl MercuryApp {
             );
             let needs_save_button = matches!(
                 response.response_type,
-                ResponseType::Binary | ResponseType::Image(_) | ResponseType::LargeText
+                ResponseType::Binary | ResponseType::Image | ResponseType::LargeText
             );
             let has_previous = self.previous_response.is_some();
             let headers_count = response.headers.len();
@@ -526,7 +526,7 @@ impl MercuryApp {
                     // Large text - show honest placeholder with Save option
                     large_text_placeholder(ui, &response.content_type, response.size_bytes);
                 }
-                ResponseType::Binary | ResponseType::Image(_) => {
+                ResponseType::Binary | ResponseType::Image => {
                     // Binary content placeholder with Save option
                     binary_placeholder(ui, &response.content_type, response.size_bytes);
                 }
