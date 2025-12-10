@@ -42,34 +42,12 @@ fn detect_response_type(content_type: &str, body: &[u8], status: u16) -> Respons
         return ResponseType::TooLarge;
     }
 
-    // Large responses (>1000KB) are treated as LargeText to prevent UI hangs
-    // The clone() + format_json() + syntax_highlight() is too expensive for large text
-    if body.len() > crate::constants::MAX_TEXT_DISPLAY_SIZE {
-        return ResponseType::LargeText;
-    }
-
     let ct_lower = content_type.to_lowercase();
 
-    // JSON
-    if ct_lower.contains("application/json") || ct_lower.contains("+json") {
-        return ResponseType::Json;
-    }
-
-    // XML (including SOAP, RSS, Atom)
-    if ct_lower.contains("application/xml")
-        || ct_lower.contains("text/xml")
-        || ct_lower.contains("+xml")
-    {
-        return ResponseType::Xml;
-    }
-
-    // HTML
-    if ct_lower.contains("text/html") {
-        return ResponseType::Html;
-    }
-
     // Images - store raw bytes for display
-    if ct_lower.starts_with("image/") {
+    // EXCEPTION: SVG is text-based, so checking it here would block generic "Image" return
+    // allowing it to fall through to XML check or be caught as text.
+    if ct_lower.starts_with("image/") && !ct_lower.contains("svg") {
         return ResponseType::Image;
     }
 
@@ -83,6 +61,30 @@ fn detect_response_type(content_type: &str, body: &[u8], status: u16) -> Respons
         || ct_lower.contains("gzip")
     {
         return ResponseType::Binary;
+    }
+
+    // Large responses (>1MB) are treated as LargeText to prevent UI hangs
+    // Checked AFTER Image/Binary so large images are still classified as Image
+    if body.len() > crate::constants::MAX_TEXT_DISPLAY_SIZE {
+        return ResponseType::LargeText;
+    }
+
+    // JSON
+    if ct_lower.contains("application/json") || ct_lower.contains("+json") {
+        return ResponseType::Json;
+    }
+
+    // XML (including SOAP, RSS, Atom, SVG)
+    if ct_lower.contains("application/xml")
+        || ct_lower.contains("text/xml")
+        || ct_lower.contains("+xml")
+    {
+        return ResponseType::Xml;
+    }
+
+    // HTML
+    if ct_lower.contains("text/html") {
+        return ResponseType::Html;
     }
 
     // Plain text types
@@ -423,5 +425,21 @@ mod tests {
         let body = b"\x00\x01\x02\x03binary data";
         let result = detect_response_type("application/octet-stream", body, 200);
         assert_eq!(result, ResponseType::Binary);
+    }
+
+    #[test]
+    fn test_detect_large_image() {
+        // Large JPEG (>1MB) should be Image, not LargeText
+        let large_body = vec![0; 1_100_000];
+        let result = detect_response_type("image/jpeg", &large_body, 200);
+        assert!(matches!(result, ResponseType::Image));
+    }
+
+    #[test]
+    fn test_detect_large_svg() {
+        // Large SVG (>1MB) should be LargeText (since it's text-based and excluded from Image)
+        let large_body = vec![b'<'; 1_100_000];
+        let result = detect_response_type("image/svg+xml", &large_body, 200);
+        assert_eq!(result, ResponseType::LargeText);
     }
 }
