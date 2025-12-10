@@ -1,7 +1,7 @@
 use crate::env_parser::{parse_env_file, substitute_variables};
 use crate::http_parser::{parse_http_file, HttpMethod, HttpRequest};
 use crate::request_executor::{execute_request, HttpResponse};
-use base64::Engine;
+
 use eframe::egui;
 use notify_debouncer_mini::new_debouncer;
 use serde::{Deserialize, Serialize};
