@@ -66,6 +66,7 @@ pub struct MercuryApp {
     pub show_response_headers: bool,
     pub show_response_diff: bool,
 
+
     pub env_files: Vec<String>,
     pub selected_env: usize,
     pub env_variables: HashMap<String, String>,
@@ -170,6 +171,7 @@ impl MercuryApp {
             response_view_raw: false,
             show_response_headers: false,
             show_response_diff: false,
+
             env_files: vec!["None".to_string()],
             selected_env: 0,
             env_variables: HashMap::new(),
