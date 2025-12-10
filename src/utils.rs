@@ -31,7 +31,7 @@ pub fn infer_auth_config(auth_text: &str) -> (AuthMode, String, String, String) 
         }
     } else if text.starts_with("Bearer ") {
         mode = AuthMode::Bearer;
-        token = text.trim_start_matches("Bearer ").to_string();
+        token = text.strip_prefix("Bearer ").unwrap_or(text).to_string();
     } else if !text.is_empty() {
         mode = AuthMode::Custom;
     }
@@ -83,6 +83,7 @@ mod tests {
         assert_eq!(sanitize_url("http://test.com"), "http://test.com");
         assert_eq!(sanitize_url("https://secure.com"), "https://secure.com");
         assert_eq!(sanitize_url("localhost:3000"), "http://localhost:3000");
+        assert_eq!(sanitize_url(""), "");
     }
 
     #[test]
@@ -126,6 +127,11 @@ mod tests {
         assert_eq!(u, "");
         assert_eq!(p, "");
         assert_eq!(t, "secret_token");
+
+        // Bearer with "Bearer " in token (recurse check)
+        let (mode, _u, _p, t) = infer_auth_config("Bearer Bearer Token");
+        assert_eq!(mode, AuthMode::Bearer);
+        assert_eq!(t, "Bearer Token");
 
         // Custom
         let (mode, u, p, t) = infer_auth_config("X-Custom: Value");
