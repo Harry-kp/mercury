@@ -60,7 +60,10 @@ pub fn sanitize_url(url: &str) -> String {
 pub fn should_add_json_header(body: &str, headers: &str) -> bool {
     let body = body.trim();
     if body.starts_with('{') || body.starts_with('[') {
-        !headers.to_lowercase().contains("content-type")
+        !headers
+            .lines()
+            .filter(|l| !l.trim().is_empty() && !l.trim().starts_with('#'))
+            .any(|l| l.trim_start().to_lowercase().starts_with("content-type:"))
     } else {
         false
     }
@@ -71,6 +74,11 @@ pub fn generate_basic_auth(username: &str, password: &str) -> String {
     let creds = format!("{}:{}", username, password);
     let encoded = BASE64_STANDARD.encode(creds);
     format!("Basic {}", encoded)
+}
+
+/// Generate Bearer Auth header value (Bearer <token>)
+pub fn generate_bearer_auth(token: &str) -> String {
+    format!("Bearer {}", token)
 }
 
 #[cfg(test)]
@@ -96,20 +104,27 @@ mod tests {
             "{}",
             "content-type: application/json"
         ));
+        // Should add if Content-Type is only in comment
+        assert!(should_add_json_header(
+            "{}",
+            "# Content-Type: text/plain\nOther: Value"
+        ));
     }
 
     #[test]
     fn test_generate_basic_auth() {
         // user:pass -> dXNlcjpwYXNz
         assert_eq!(generate_basic_auth("user", "pass"), "Basic dXNlcjpwYXNz");
+
         assert_eq!(
             generate_basic_auth("admin", "1234"),
             "Basic YWRtaW46MTIzNA=="
         );
-        assert_eq!(
-            generate_basic_auth("admin", "1234"),
-            "Basic YWRtaW46MTIzNA=="
-        );
+    }
+
+    #[test]
+    fn test_generate_bearer_auth() {
+        assert_eq!(generate_bearer_auth("token123"), "Bearer token123");
     }
 
     #[test]

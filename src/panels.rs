@@ -996,7 +996,7 @@ impl MercuryApp {
                                         "Bearer Token",
                                     );
                                     if bearer.clicked() {
-                                        self.auth_text = format!("Bearer {}", self.auth_token);
+                                        self.auth_text = crate::utils::generate_bearer_auth(&self.auth_token);
                                     }
                                     ui.selectable_value(
                                         &mut self.auth_mode,
@@ -1061,7 +1061,7 @@ impl MercuryApp {
                                 ui.horizontal(|ui| {
                                     ui.label("Token:");
                                     if ui.text_edit_singleline(&mut self.auth_token).changed() {
-                                        self.auth_text = format!("Bearer {}", self.auth_token);
+                                        self.auth_text = crate::utils::generate_bearer_auth(&self.auth_token);
                                     }
                                 });
                                 ui.add_space(Spacing::SM);
