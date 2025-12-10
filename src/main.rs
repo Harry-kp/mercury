@@ -137,6 +137,7 @@ fn main() -> Result<(), eframe::Error> {
             style.spacing.menu_margin = egui::Margin::same(theme::Radius::MD);
 
             cc.egui_ctx.set_style(style);
+            cc.egui_ctx.set_pixels_per_point(theme::Layout::DEFAULT_ZOOM_FACTOR);
 
             Ok(Box::new(app::MercuryApp::new(cc)))
         }),
