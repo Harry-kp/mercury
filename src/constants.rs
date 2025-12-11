@@ -19,7 +19,7 @@ pub fn get_releases_url() -> String {
 
 pub fn get_docs_url() -> String {
     format!(
-        "https://{}.github.io/{}/",
+        "https://{}.github.io/{}/docs/getting-started",
         GITHUB_USERNAME.to_lowercase(),
         GITHUB_REPO
     )

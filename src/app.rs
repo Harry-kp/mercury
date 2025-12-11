@@ -2272,9 +2272,6 @@ impl eframe::App for MercuryApp {
                     ui.add_space(crate::theme::Spacing::MD);
 
                     ui.horizontal(|ui| {
-                        if ui.link("View Online Docs ↗").clicked() {
-                            let _ = open::that(crate::constants::get_docs_url());
-                        }
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                             if ui.button("Close").clicked() {
                                 self.show_shortcuts = false;
