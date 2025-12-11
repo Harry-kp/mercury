@@ -87,6 +87,16 @@ struct PostmanVariable {
     value: Value,
 }
 
+/// Reconstructs a URL string from Postman's URL format.
+///
+/// Postman URLs can be either:
+/// - A simple string (returned as-is)
+/// - An object with components (protocol, host, path, query)
+///
+/// When the URL is an object:
+/// - If `raw` field is present, it's used directly
+/// - Otherwise, the URL is reconstructed from protocol, host, path, and query components
+/// - Query parameters marked as disabled are excluded
 fn reconstruct_url(url: &PostmanUrl) -> String {
     match url {
         PostmanUrl::String(s) => s.clone(),
@@ -127,6 +137,20 @@ fn reconstruct_url(url: &PostmanUrl) -> String {
     }
 }
 
+/// Recursively processes a Postman collection item (request or folder).
+///
+/// # Arguments
+/// * `item` - The Postman item to process (can be a request or a folder)
+/// * `parent_dir` - The parent directory where this item should be created
+/// * `depth` - Current nesting depth (used for tracking recursion level)
+///
+/// # Returns
+/// The number of requests processed (0 for empty folders, 1 for requests, sum of children for folders)
+///
+/// # Behavior
+/// - If item contains a request: creates a .http file
+/// - If item contains sub-items: creates a folder and recursively processes children
+/// - If item is empty: returns 0
 fn process_item(
     item: &PostmanItem,
     parent_dir: &Path,
@@ -182,6 +206,27 @@ fn process_item(
     }
 }
 
+/// Imports a Postman Collection v2.1 file into Mercury's .http file format.
+///
+/// # Arguments
+/// * `json_path` - Path to the Postman collection JSON file
+/// * `output_dir` - Directory where imported files will be created
+///
+/// # Returns
+/// A tuple of (request_count, environment_count) on success, or an error message on failure
+///
+/// # Behavior
+/// - Parses the Postman collection JSON file
+/// - Creates .http files for each request, preserving folder structure
+/// - Extracts collection variables to a .env file (if any exist)
+/// - Handles nested folders with unlimited depth
+/// - Reconstructs URLs from Postman's object format
+///
+/// # Errors
+/// Returns an error if:
+/// - The file cannot be read
+/// - The JSON is invalid or not a valid Postman collection
+/// - File system operations fail (creating directories, writing files)
 pub fn import_postman_collection(
     json_path: &Path,
     output_dir: &Path,
@@ -453,6 +498,95 @@ mod tests {
         assert!(content.contains("Content-Type: application/json"));
         assert!(content.contains("Authorization: Bearer {{token}}"));
         assert!(content.contains("{\"name\": \"John Doe\"}"));
+    }
+
+    #[test]
+    fn test_import_comprehensive_collection() {
+        let dir = TempDir::new().unwrap();
+        let json_content = r#"{
+            "info": {
+                "name": "Comprehensive API",
+                "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+            },
+            "item": [
+                {
+                    "name": "Auth",
+                    "item": [
+                        {
+                            "name": "Login",
+                            "request": {
+                                "method": "POST",
+                                "header": [
+                                    {"key": "Content-Type", "value": "application/json"}
+                                ],
+                                "url": "{{host}}/auth/login",
+                                "body": {
+                                    "mode": "raw",
+                                    "raw": "{\"user\":\"test\"}"
+                                }
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "Users",
+                    "item": [
+                        {
+                            "name": "V1",
+                            "item": [
+                                {
+                                    "name": "List",
+                                    "request": {
+                                        "method": "GET",
+                                        "header": [],
+                                        "url": {
+                                            "raw": "{{host}}/v1/users?page=1",
+                                            "protocol": "https",
+                                            "host": ["{{host}}"],
+                                            "path": ["v1", "users"],
+                                            "query": [
+                                                {"key": "page", "value": "1"}
+                                            ]
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "name": "Health",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": "{{host}}/health"
+                    }
+                }
+            ],
+            "variable": [
+                {"key": "host", "value": "api.test.com"},
+                {"key": "token", "value": "secret123"}
+            ]
+        }"#;
+        let file_path = create_temp_file(dir.path(), "comprehensive.json", json_content);
+        let output_dir = dir.path().join("output");
+        fs::create_dir(&output_dir).unwrap();
+
+        let result = import_postman_collection(&file_path, &output_dir);
+        assert!(result.is_ok());
+        let (req_count, env_count) = result.unwrap();
+        assert_eq!(req_count, 3); // Login, List, Health
+        assert_eq!(env_count, 1);
+
+        // Verify folder structure
+        assert!(output_dir.join("auth/login.http").exists());
+        assert!(output_dir.join("users/v1/list.http").exists());
+        assert!(output_dir.join("health.http").exists());
+        assert!(output_dir.join(".env.comprehensive-api").exists());
+
+        // Verify URL with query params
+        let list_content = fs::read_to_string(output_dir.join("users/v1/list.http")).unwrap();
+        assert!(list_content.contains("?page=1"));
     }
 
     #[test]
