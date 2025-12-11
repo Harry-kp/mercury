@@ -1,6 +1,6 @@
 [package]
 name = "mercury"
-version = "0.1.0-beta"
+version = "0.2.0-beta"
 edition = "2021"
 description = "A fast, minimal API client for developers"
 authors = ["Harshit Chaudhary <harrykumar.kp@gmail.com>"]
