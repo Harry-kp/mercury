@@ -47,7 +47,9 @@ jobs:
           else
             echo "type=push" >> $GITHUB_OUTPUT
             echo "pr_number=N/A" >> $GITHUB_OUTPUT
-            echo "pr_title=${{ github.event.head_commit.message }}" >> $GITHUB_OUTPUT
+            # Use only first line of commit message to avoid multiline issues
+            COMMIT_TITLE=$(echo "${{ github.event.head_commit.message }}" | head -n 1)
+            echo "pr_title=$COMMIT_TITLE" >> $GITHUB_OUTPUT
             echo "author=${{ github.event.pusher.name }}" >> $GITHUB_OUTPUT
             echo "body=Direct push to master by @${{ github.event.pusher.name }}" >> $GITHUB_OUTPUT
           fi
