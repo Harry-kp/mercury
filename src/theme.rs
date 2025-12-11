@@ -13,7 +13,6 @@ impl Colors {
     pub const BG_MODAL: Color32 = Color32::from_rgb(48, 48, 54); // #303036 - Modal background (lighter for contrast)
     pub const BG_INPUT: Color32 = Color32::from_rgb(36, 36, 42); // #24242a - Text input background
     pub const BG_WIDGET_INACTIVE: Color32 = Color32::from_rgb(52, 52, 58); // Widget inactive state
-    pub const BG_WIDGET_HOVER: Color32 = Color32::from_rgb(60, 60, 68); // Widget hover state
     pub const BG_CODE: Color32 = Color32::from_rgb(30, 30, 34); // Code block background
 
     // Borders - Subtle with warmth
