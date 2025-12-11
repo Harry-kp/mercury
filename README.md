@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="website/assets/icon.png" alt="Mercury" width="80" height="80">
+  <img src="assets/icon.png" alt="Mercury" width="80" height="80">
 </p>
 
 <h1 align="center">Mercury</h1>
@@ -10,14 +10,13 @@
 </p>
 
 <p align="center">
+  <a href="https://harry-kp.github.io/mercury/">Documentation</a> •
   <a href="https://github.com/Harry-kp/mercury/releases">Download</a> •
-  <a href="#installation">Install</a> •
   <a href="#philosophy">Philosophy</a> •
   <a href="#shortcuts">Shortcuts</a>
 </p>
 
 
-<p align="center">
   <a href="https://github.com/Harry-kp/mercury/releases"><img src="https://img.shields.io/github/v/release/Harry-kp/mercury?style=flat-square&color=00ff88" alt="Release"></a>
   <a href="https://github.com/Harry-kp/mercury/actions"><img src="https://img.shields.io/github/actions/workflow/status/Harry-kp/mercury/ci.yml?branch=master&style=flat-square&label=build" alt="Build Status"></a>
   <a href="https://github.com/Harry-kp/mercury/blob/master/LICENSE"><img src="https://img.shields.io/github/license/Harry-kp/mercury?style=flat-square" alt="License"></a>
@@ -32,7 +31,7 @@
 </p>
 
 <p align="center">
-  <img src="website/assets/screenshot.png" alt="Mercury Screenshot" width="100%" style="border-radius: 8px; border: 1px solid #333;">
+  <img src="website/static/img/screenshot.png" alt="Mercury Screenshot" width="100%" style="border-radius: 8px; border: 1px solid #333;">
 </p>
 
 ## Why Mercury?
