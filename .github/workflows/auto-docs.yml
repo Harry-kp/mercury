@@ -30,8 +30,8 @@ jobs:
           # Get changed files from the merged PR
           FILES=$(gh pr view ${{ github.event.pull_request.number }} --json files --jq '.files[].path' || echo "")
           
-          # Check if changes are in source code (not just docs)
-          CODE_CHANGES=$(echo "$FILES" | grep -E '^(src/|lib/|app/|components/)' || echo "")
+          # Check if changes are in source code or dependencies (Rust-specific)
+          CODE_CHANGES=$(echo "$FILES" | grep -E '^(src/|Cargo\.toml)' || echo "")
           
           # Skip if PR has skip-docs label
           LABELS=$(gh pr view ${{ github.event.pull_request.number }} --json labels --jq '.labels[].name' || echo "")
@@ -76,11 +76,13 @@ jobs:
           ## Task
           @docusaurus-agent Please review the code changes from PR #${{ github.event.pull_request.number }} and:
           
-          1. Identify which documentation needs updating
+          1. Review changes in Rust source code (\`src/\`) and dependencies (\`Cargo.toml\`)
           2. Update relevant documentation files in \`docs/\`
-          3. Update \`sidebars.js\` if new pages are added
-          4. Ensure code examples reflect the new changes
-          5. Add migration notes if there are breaking changes
+          3. Update \`README.md\` if public APIs or installation changed
+          4. Update code examples in docs to reflect new Rust API changes
+          5. Add migration guide in docs if there are breaking changes
+          6. Update \`CHANGELOG.md\` with notable changes
+          7. Update \`sidebars.js\` if new documentation pages are added
           
           Create a PR with your documentation updates for review.
           
