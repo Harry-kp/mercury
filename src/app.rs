@@ -824,7 +824,7 @@ impl MercuryApp {
 
     fn copy_as_curl(&self, ctx: &egui::Context) {
         let curl = self.generate_curl();
-        ctx.output_mut(|o| o.copied_text = curl);
+        ctx.copy_text(curl);
     }
 }
 
@@ -986,32 +986,32 @@ impl MercuryApp {
                             self.context_menu_item = Some(path.clone());
                             self.show_new_request_dialog = true;
                             self.new_request_name = String::new();
-                            ui.close_menu();
+                            ui.close();
                         }
                         if ui.button("📁 New Folder").clicked() {
                             self.context_menu_item = Some(path.clone());
                             self.show_new_folder_dialog = true;
                             self.new_folder_name = String::new();
-                            ui.close_menu();
+                            ui.close();
                         }
                         ui.separator();
                         if ui.button("✏️ Rename").clicked() {
                             self.context_menu_item = Some(path.clone());
                             self.show_rename_dialog = true;
                             self.rename_text = name.clone();
-                            ui.close_menu();
+                            ui.close();
                         }
                         if ui.button("🗑 Delete").clicked() {
                             self.delete_target = Some(path.clone());
                             self.show_delete_confirm = true;
-                            ui.close_menu();
+                            ui.close();
                         }
                         ui.separator();
                         if ui.button("📋 Copy Path").clicked() {
                             if let Some(path_str) = path.to_str() {
                                 ui.ctx().copy_text(path_str.to_string());
                             }
-                            ui.close_menu();
+                            ui.close();
                         }
                     });
 
@@ -1082,25 +1082,25 @@ impl MercuryApp {
                     request_response.context_menu(|ui| {
                         if ui.button("📋 Duplicate").clicked() {
                             let _ = self.duplicate_request(path);
-                            ui.close_menu();
+                            ui.close();
                         }
                         if ui.button("✏️ Rename").clicked() {
                             self.context_menu_item = Some(path.clone());
                             self.show_rename_dialog = true;
                             self.rename_text = name.clone();
-                            ui.close_menu();
+                            ui.close();
                         }
                         if ui.button("🗑 Delete").clicked() {
                             self.delete_target = Some(path.clone());
                             self.show_delete_confirm = true;
-                            ui.close_menu();
+                            ui.close();
                         }
                         ui.separator();
                         if ui.button("📋 Copy Path").clicked() {
                             if let Some(path_str) = path.to_str() {
                                 ui.ctx().copy_text(path_str.to_string());
                             }
-                            ui.close_menu();
+                            ui.close();
                         }
                     });
                 }
@@ -1134,13 +1134,13 @@ impl MercuryApp {
         egui::TopBottomPanel::bottom("status_bar")
             .exact_height(crate::theme::Layout::STATUS_BAR_HEIGHT)
             .frame(
-                egui::Frame::none()
+                egui::Frame::NONE
                     .fill(crate::theme::Colors::BG_SURFACE)
                     .stroke(egui::Stroke::new(
                         crate::theme::StrokeWidth::THIN,
                         crate::theme::Colors::BORDER_SUBTLE,
                     ))
-                    .inner_margin(egui::Margin::symmetric(12.0, 0.0)),
+                    .inner_margin(egui::Margin::symmetric(12, 0)),
             )
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
@@ -1430,13 +1430,13 @@ impl eframe::App for MercuryApp {
         egui::TopBottomPanel::top("top_panel")
             .exact_height(crate::theme::Layout::TOPBAR_HEIGHT)
             .frame(
-                egui::Frame::none()
+                egui::Frame::NONE
                     .fill(crate::theme::Colors::BG_SURFACE)
                     .stroke(egui::Stroke::new(
                         crate::theme::StrokeWidth::THIN,
                         crate::theme::Colors::BORDER_SUBTLE,
                     ))
-                    .inner_margin(egui::Margin::symmetric(crate::theme::Spacing::MD, 0.0)),
+                    .inner_margin(egui::Margin::symmetric(crate::theme::Spacing::MD as i8, 0)),
             )
             .show(ctx, |ui| {
                 ui.horizontal_centered(|ui| {
@@ -1570,7 +1570,6 @@ impl eframe::App for MercuryApp {
                             &env_name.to_string()
                         };
 
-                        let env_id = egui::Id::new("env_popup");
                         let env_response = ui.add_enabled(
                             self.workspace_path.is_some(),
                             egui::Label::new(
@@ -1580,22 +1579,31 @@ impl eframe::App for MercuryApp {
                             )
                             .sense(egui::Sense::click()),
                         );
-                        if env_response.clicked() && self.workspace_path.is_some() {
-                            ui.memory_mut(|mem| mem.toggle_popup(env_id));
-                        }
-
                         // Clone env_files to avoid borrow issues
                         let env_files_clone: Vec<_> = self.env_files.clone();
                         let current_selection = self.selected_env;
                         let mut new_selection = None;
 
-                        egui::popup_below_widget(
-                            ui,
-                            env_id,
-                            &env_response,
-                            egui::PopupCloseBehavior::CloseOnClickOutside,
-                            |ui| {
-                                ui.set_min_width(crate::theme::Layout::POPUP_MIN_WIDTH);
+                        egui::Popup::menu(&env_response)
+                            .width(crate::theme::Layout::POPUP_MIN_WIDTH)
+                            .gap(4.0)
+                            .frame(
+                                egui::Frame::popup(&ui.ctx().style())
+                                    .fill(crate::theme::Colors::BG_MODAL)
+                                    .corner_radius(crate::theme::Radius::MD)
+                                    .stroke(egui::Stroke::new(
+                                        crate::theme::StrokeWidth::THIN,
+                                        crate::theme::Colors::BORDER_SUBTLE,
+                                    ))
+                                    .inner_margin(crate::theme::Spacing::SM),
+                            )
+                            .style(|style: &mut egui::Style| {
+                                style.visuals.selection.bg_fill =
+                                    crate::theme::Colors::popup_selection_bg();
+                                style.visuals.widgets.hovered.bg_fill =
+                                    crate::theme::Colors::popup_hover_bg();
+                            })
+                            .show(|ui| {
                                 ui.set_min_height(100.0);
                                 for (i, env) in env_files_clone.iter().enumerate() {
                                     let color = if env.contains("prod") {
@@ -1613,11 +1621,10 @@ impl eframe::App for MercuryApp {
                                         .clicked()
                                     {
                                         new_selection = Some(i);
-                                        ui.memory_mut(|mem| mem.close_popup());
+                                        ui.close();
                                     }
                                 }
-                            },
-                        );
+                            });
 
                         // Apply selection change after popup closes
                         if let Some(i) = new_selection {
@@ -1628,7 +1635,6 @@ impl eframe::App for MercuryApp {
                         ui.add_space(crate::theme::Spacing::XL);
 
                         // Open - borderless, just text
-                        let open_id = egui::Id::new("open_popup");
                         let open_response = ui.add(
                             egui::Label::new(
                                 egui::RichText::new("Open")
@@ -1637,17 +1643,27 @@ impl eframe::App for MercuryApp {
                             )
                             .sense(egui::Sense::click()),
                         );
-                        if open_response.clicked() {
-                            ui.memory_mut(|mem| mem.toggle_popup(open_id));
-                        }
 
-                        egui::popup_below_widget(
-                            ui,
-                            open_id,
-                            &open_response,
-                            egui::PopupCloseBehavior::CloseOnClickOutside,
-                            |ui| {
-                                ui.set_min_width(crate::theme::Layout::POPUP_WIDE_WIDTH);
+                        egui::Popup::menu(&open_response)
+                            .width(crate::theme::Layout::POPUP_WIDE_WIDTH)
+                            .gap(4.0)
+                            .frame(
+                                egui::Frame::popup(&ui.ctx().style())
+                                    .fill(crate::theme::Colors::BG_MODAL)
+                                    .corner_radius(crate::theme::Radius::MD)
+                                    .stroke(egui::Stroke::new(
+                                        crate::theme::StrokeWidth::THIN,
+                                        crate::theme::Colors::BORDER_SUBTLE,
+                                    ))
+                                    .inner_margin(crate::theme::Spacing::SM),
+                            )
+                            .style(|style: &mut egui::Style| {
+                                style.visuals.selection.bg_fill =
+                                    crate::theme::Colors::popup_selection_bg();
+                                style.visuals.widgets.hovered.bg_fill =
+                                    crate::theme::Colors::popup_hover_bg();
+                            })
+                            .show(|ui| {
                                 if ui.selectable_label(false, "Open Folder...").clicked() {
                                     let tx = self.folder_tx.clone();
                                     std::thread::spawn(move || {
@@ -1655,19 +1671,17 @@ impl eframe::App for MercuryApp {
                                             let _ = tx.send(path);
                                         }
                                     });
-                                    ui.memory_mut(|mem| mem.close_popup());
+                                    ui.close();
                                 }
                                 if ui.selectable_label(false, "Import Insomnia...").clicked() {
                                     self.should_open_insomnia_import = true;
-                                    ui.memory_mut(|mem| mem.close_popup());
+                                    ui.close();
                                 }
-                            },
-                        );
+                            });
 
                         ui.add_space(crate::theme::Spacing::XL);
 
                         // Help - borderless
-                        let help_id = egui::Id::new("help_popup");
                         let help_response = ui.add(
                             egui::Label::new(
                                 egui::RichText::new("Help")
@@ -1676,40 +1690,49 @@ impl eframe::App for MercuryApp {
                             )
                             .sense(egui::Sense::click()),
                         );
-                        if help_response.clicked() {
-                            ui.memory_mut(|mem| mem.toggle_popup(help_id));
-                        }
 
-                        egui::popup_below_widget(
-                            ui,
-                            help_id,
-                            &help_response,
-                            egui::PopupCloseBehavior::CloseOnClickOutside,
-                            |ui| {
-                                ui.set_min_width(crate::theme::Layout::POPUP_MIN_WIDTH);
+                        egui::Popup::menu(&help_response)
+                            .width(crate::theme::Layout::POPUP_MIN_WIDTH)
+                            .gap(4.0)
+                            .frame(
+                                egui::Frame::popup(&ui.ctx().style())
+                                    .fill(crate::theme::Colors::BG_MODAL)
+                                    .corner_radius(crate::theme::Radius::MD)
+                                    .stroke(egui::Stroke::new(
+                                        crate::theme::StrokeWidth::THIN,
+                                        crate::theme::Colors::BORDER_SUBTLE,
+                                    ))
+                                    .inner_margin(crate::theme::Spacing::SM),
+                            )
+                            .style(|style: &mut egui::Style| {
+                                style.visuals.selection.bg_fill =
+                                    crate::theme::Colors::popup_selection_bg();
+                                style.visuals.widgets.hovered.bg_fill =
+                                    crate::theme::Colors::popup_hover_bg();
+                            })
+                            .show(|ui| {
                                 if ui.selectable_label(false, "Keyboard Shortcuts").clicked() {
                                     self.show_shortcuts = true;
-                                    ui.memory_mut(|mem| mem.close_popup());
+                                    ui.close();
                                 }
                                 if ui.selectable_label(false, "About Mercury").clicked() {
                                     self.show_about = true;
-                                    ui.memory_mut(|mem| mem.close_popup());
+                                    ui.close();
                                 }
                                 ui.separator();
                                 if ui.selectable_label(false, "Check for Updates").clicked() {
                                     let _ = open::that(crate::constants::get_releases_url());
-                                    ui.memory_mut(|mem| mem.close_popup());
+                                    ui.close();
                                 }
                                 if ui.selectable_label(false, "Documentation").clicked() {
                                     let _ = open::that(crate::constants::get_repo_url());
-                                    ui.memory_mut(|mem| mem.close_popup());
+                                    ui.close();
                                 }
                                 if ui.selectable_label(false, "Report Issue").clicked() {
                                     let _ = open::that(crate::constants::get_issues_url());
-                                    ui.memory_mut(|mem| mem.close_popup());
+                                    ui.close();
                                 }
-                            },
-                        );
+                            });
                     });
                 });
             });
@@ -1724,9 +1747,9 @@ impl eframe::App for MercuryApp {
         // Center: Request editor
         egui::CentralPanel::default()
             .frame(
-                egui::Frame::none()
+                egui::Frame::NONE
                     .fill(crate::theme::Colors::BG_BASE)
-                    .inner_margin(egui::Margin::same(crate::theme::Spacing::MD)),
+                    .inner_margin(egui::Margin::same(crate::theme::Spacing::MD as i8)),
             )
             .show(ctx, |ui| {
                 self.render_request_panel(ui, ctx);
@@ -1746,13 +1769,13 @@ impl eframe::App for MercuryApp {
                 .resizable(false)
                 .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
                 .frame(
-                    egui::Frame::none()
+                    egui::Frame::NONE
                         .fill(crate::theme::Colors::BG_MODAL)
                         .stroke(egui::Stroke::new(
                             crate::theme::StrokeWidth::THIN,
                             crate::theme::Colors::BORDER_SUBTLE,
                         ))
-                        .rounding(crate::theme::Radius::MD)
+                        .corner_radius(crate::theme::Radius::MD)
                         .inner_margin(crate::theme::Spacing::MD),
                 )
                 .show(ctx, |ui| {
@@ -1810,13 +1833,13 @@ impl eframe::App for MercuryApp {
                 .resizable(false)
                 .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
                 .frame(
-                    egui::Frame::none()
+                    egui::Frame::NONE
                         .fill(crate::theme::Colors::BG_MODAL)
                         .stroke(egui::Stroke::new(
                             crate::theme::StrokeWidth::THIN,
                             crate::theme::Colors::BORDER_SUBTLE,
                         ))
-                        .rounding(crate::theme::Radius::MD)
+                        .corner_radius(crate::theme::Radius::MD)
                         .inner_margin(crate::theme::Spacing::MD),
                 )
                 .show(ctx, |ui| {
@@ -1874,13 +1897,13 @@ impl eframe::App for MercuryApp {
                 .resizable(false)
                 .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
                 .frame(
-                    egui::Frame::none()
+                    egui::Frame::NONE
                         .fill(crate::theme::Colors::BG_MODAL)
                         .stroke(egui::Stroke::new(
                             crate::theme::StrokeWidth::THIN,
                             crate::theme::Colors::BORDER_SUBTLE,
                         ))
-                        .rounding(crate::theme::Radius::MD)
+                        .corner_radius(crate::theme::Radius::MD)
                         .inner_margin(crate::theme::Spacing::MD),
                 )
                 .show(ctx, |ui| {
@@ -1938,13 +1961,13 @@ impl eframe::App for MercuryApp {
                 .resizable(false)
                 .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
                 .frame(
-                    egui::Frame::none()
+                    egui::Frame::NONE
                         .fill(crate::theme::Colors::BG_MODAL)
                         .stroke(egui::Stroke::new(
                             crate::theme::StrokeWidth::THIN,
                             crate::theme::Colors::BORDER_SUBTLE,
                         ))
-                        .rounding(crate::theme::Radius::MD)
+                        .corner_radius(crate::theme::Radius::MD)
                         .inner_margin(crate::theme::Spacing::MD),
                 )
                 .show(ctx, |ui| {
@@ -2021,13 +2044,13 @@ impl eframe::App for MercuryApp {
                 .resizable(false)
                 .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
                 .frame(
-                    egui::Frame::none()
+                    egui::Frame::NONE
                         .fill(crate::theme::Colors::BG_MODAL)
                         .stroke(egui::Stroke::new(
                             crate::theme::StrokeWidth::THIN,
                             crate::theme::Colors::BORDER_SUBTLE,
                         ))
-                        .rounding(crate::theme::Radius::MD)
+                        .corner_radius(crate::theme::Radius::MD)
                         .inner_margin(crate::theme::Spacing::MD),
                 )
                 .show(ctx, |ui| {
@@ -2087,13 +2110,13 @@ impl eframe::App for MercuryApp {
                 .default_width(crate::theme::Layout::MODAL_WIDTH)
                 .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
                 .frame(
-                    egui::Frame::none()
+                    egui::Frame::NONE
                         .fill(crate::theme::Colors::BG_MODAL)
                         .stroke(egui::Stroke::new(
                             crate::theme::StrokeWidth::THIN,
                             crate::theme::Colors::BORDER_SUBTLE,
                         ))
-                        .rounding(crate::theme::Radius::MD)
+                        .corner_radius(crate::theme::Radius::MD)
                         .inner_margin(crate::theme::Spacing::MD),
                 )
                 .show(ctx, |ui| {

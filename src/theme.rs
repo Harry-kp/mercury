@@ -13,7 +13,6 @@ impl Colors {
     pub const BG_MODAL: Color32 = Color32::from_rgb(48, 48, 54); // #303036 - Modal background (lighter for contrast)
     pub const BG_INPUT: Color32 = Color32::from_rgb(36, 36, 42); // #24242a - Text input background
     pub const BG_WIDGET_INACTIVE: Color32 = Color32::from_rgb(52, 52, 58); // Widget inactive state
-    pub const BG_WIDGET_HOVER: Color32 = Color32::from_rgb(60, 60, 68); // Widget hover state
     pub const BG_CODE: Color32 = Color32::from_rgb(30, 30, 34); // Code block background
 
     // Borders - Subtle with warmth
@@ -37,6 +36,17 @@ impl Colors {
     pub const WARNING_BG: Color32 = Color32::from_rgb(45, 40, 28); // Dark amber bg
     pub const ERROR: Color32 = Color32::from_rgb(239, 68, 68); // #ef4444 - Red
     pub const ERROR_BG: Color32 = Color32::from_rgb(45, 30, 30); // Dark red bg
+
+    // Popup/Menu Colors - Subtle selection and hover states (runtime functions due to alpha)
+    #[inline]
+    pub fn popup_selection_bg() -> Color32 {
+        Color32::from_rgba_unmultiplied(70, 70, 80, 100) // ~40% opacity gray
+    }
+
+    #[inline]
+    pub fn popup_hover_bg() -> Color32 {
+        Color32::from_rgba_unmultiplied(70, 70, 80, 120) // ~47% opacity gray
+    }
 
     // HTTP Methods - Muted, semantic
     pub const METHOD_GET: Color32 = Color32::from_rgb(34, 197, 94); // Green - safe read
@@ -143,9 +153,9 @@ impl Layout {
 
     // Modal/Popup widths
     pub const MODAL_WIDTH: f32 = 420.0;
-    pub const POPUP_MIN_WIDTH: f32 = 140.0;
+    pub const POPUP_MIN_WIDTH: f32 = 180.0;
     pub const POPUP_WIDE_WIDTH: f32 = 160.0;
-    pub const METHOD_POPUP_WIDTH: f32 = 80.0;
+    pub const METHOD_POPUP_WIDTH: f32 = 100.0;
     pub const INPUT_FIELD_WIDTH: f32 = 100.0;
 
     // UI Scaling

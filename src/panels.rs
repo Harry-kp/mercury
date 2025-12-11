@@ -6,7 +6,7 @@ use crate::app::MercuryApp;
 use crate::components::*;
 use crate::http_parser::HttpMethod;
 use crate::request_executor::{format_json, format_xml, ResponseType};
-use crate::theme::{Colors, FontSize, Layout, Radius, Spacing};
+use crate::theme::{Colors, FontSize, Layout, Radius, Spacing, StrokeWidth};
 use egui::{self, Context, ScrollArea, Ui};
 
 impl MercuryApp {
@@ -18,7 +18,7 @@ impl MercuryApp {
             .default_width(Layout::SIDEBAR_DEFAULT)
             .resizable(true)
             .frame(
-                egui::Frame::none()
+                egui::Frame::NONE
                     .fill(Colors::BG_SURFACE)
                     .stroke(egui::Stroke::new(
                         crate::theme::StrokeWidth::THIN,
@@ -259,7 +259,7 @@ impl MercuryApp {
             .default_width(Layout::RESPONSE_DEFAULT)
             .resizable(true)
             .frame(
-                egui::Frame::none()
+                egui::Frame::NONE
                     .fill(Colors::BG_CARD)
                     .stroke(egui::Stroke::new(
                         crate::theme::StrokeWidth::THIN,
@@ -540,7 +540,7 @@ impl MercuryApp {
                         ui.label(egui::RichText::new("Body").size(FontSize::SM).strong());
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                             if copy_icon_button(ui) {
-                                ui.output_mut(|o| o.copied_text = response.body.clone());
+                                ui.ctx().copy_text(response.body.clone());
                             }
                         });
                     });
@@ -614,10 +614,13 @@ impl MercuryApp {
                 // Keyboard shortcut hint - centered
                 ui.horizontal(|ui| {
                     ui.add_space((ui.available_width() - 150.0) / 2.0); // Center manually
-                    egui::Frame::none()
+                    egui::Frame::NONE
                         .fill(Colors::BG_SURFACE)
-                        .rounding(Radius::SM)
-                        .inner_margin(egui::Margin::symmetric(Spacing::MD, Spacing::SM))
+                        .corner_radius(Radius::SM)
+                        .inner_margin(egui::Margin::symmetric(
+                            Spacing::MD as i8,
+                            Spacing::SM as i8,
+                        ))
                         .show(ui, |ui| {
                             ui.horizontal(|ui| {
                                 ui.label(
@@ -704,10 +707,13 @@ impl MercuryApp {
     pub fn render_request_panel(&mut self, ui: &mut Ui, ctx: &Context) {
         // Focus mode banner
         if self.focus_mode {
-            egui::Frame::none()
+            egui::Frame::NONE
                 .fill(Colors::PRIMARY_MUTED)
-                .rounding(Radius::SM)
-                .inner_margin(egui::Margin::symmetric(Spacing::MD, Spacing::XS))
+                .corner_radius(Radius::SM)
+                .inner_margin(egui::Margin::symmetric(
+                    Spacing::MD as i8,
+                    Spacing::XS as i8,
+                ))
                 .show(ui, |ui| {
                     ui.horizontal(|ui| {
                         ui.label(
@@ -726,19 +732,19 @@ impl MercuryApp {
         }
 
         // URL bar card
-        egui::Frame::none()
+        egui::Frame::NONE
             .fill(Colors::BG_CARD)
-            .rounding(Radius::MD)
+            .corner_radius(Radius::MD)
             .stroke(egui::Stroke::new(
                 crate::theme::StrokeWidth::THIN,
                 Colors::BORDER_SUBTLE,
             ))
             .inner_margin(Spacing::MD)
             .outer_margin(egui::Margin {
-                left: 0.0,
-                right: Spacing::SM,
-                top: 0.0,
-                bottom: 0.0,
+                left: 0,
+                right: Spacing::SM as i8,
+                top: 0,
+                bottom: 0,
             })
             .show(ui, |ui| {
                 self.render_url_bar_new(ui, ctx);
@@ -747,19 +753,19 @@ impl MercuryApp {
         ui.add_space(Spacing::XS);
 
         // Request body card with scroll
-        egui::Frame::none()
+        egui::Frame::NONE
             .fill(Colors::BG_CARD)
-            .rounding(Radius::MD)
+            .corner_radius(Radius::MD)
             .stroke(egui::Stroke::new(
                 crate::theme::StrokeWidth::THIN,
                 Colors::BORDER_SUBTLE,
             ))
             .inner_margin(Spacing::MD)
             .outer_margin(egui::Margin {
-                left: 0.0,
-                right: Spacing::SM,
-                top: 0.0,
-                bottom: 0.0,
+                left: 0,
+                right: Spacing::SM as i8,
+                top: 0,
+                bottom: 0,
             })
             .show(ui, |ui| {
                 self.render_request_body_new(ui);
@@ -792,17 +798,22 @@ impl MercuryApp {
                 .sense(egui::Sense::click()),
             );
 
-            if method_response.clicked() {
-                ui.memory_mut(|mem| mem.toggle_popup(egui::Id::new("method_popup")));
-            }
-
-            egui::popup_below_widget(
-                ui,
-                egui::Id::new("method_popup"),
-                &method_response,
-                egui::PopupCloseBehavior::CloseOnClickOutside,
-                |ui| {
-                    ui.set_min_width(Layout::METHOD_POPUP_WIDTH);
+            egui::Popup::menu(&method_response)
+                .width(Layout::METHOD_POPUP_WIDTH)
+                .gap(4.0)
+                .frame(
+                    egui::Frame::popup(&ui.ctx().style())
+                        .fill(Colors::BG_MODAL)
+                        .corner_radius(Radius::MD)
+                        .stroke(egui::Stroke::new(StrokeWidth::THIN, Colors::BORDER_SUBTLE))
+                        .inner_margin(Spacing::SM),
+                )
+                .style(|style: &mut egui::Style| {
+                    // Use subtle selection colors for menu items
+                    style.visuals.selection.bg_fill = Colors::popup_selection_bg();
+                    style.visuals.widgets.hovered.bg_fill = Colors::popup_hover_bg();
+                })
+                .show(|ui| {
                     for method in [
                         HttpMethod::GET,
                         HttpMethod::POST,
@@ -826,11 +837,10 @@ impl MercuryApp {
                             .clicked()
                         {
                             self.method = method;
-                            ui.memory_mut(|mem| mem.toggle_popup(egui::Id::new("method_popup")));
+                            ui.close();
                         }
                     }
-                },
-            );
+                });
 
             // URL input - fills remaining space
             let available = ui.available_width() - crate::theme::Indent::SEND_BUTTON_RESERVE;
@@ -908,10 +918,11 @@ impl MercuryApp {
                         let top_right = ui.cursor().min + egui::vec2(ui.available_width(), 0.0);
 
                         // Body editor check syntax highlighting
-                        let mut layouter = |ui: &egui::Ui, text: &str, wrap_width: f32| {
-                            let job = json_layout_job(text, wrap_width);
-                            ui.fonts(|f| f.layout_job(job))
-                        };
+                        let mut layouter =
+                            |ui: &egui::Ui, text: &dyn egui::TextBuffer, wrap_width: f32| {
+                                let job = json_layout_job(text.as_str(), wrap_width);
+                                ui.fonts_mut(|f| f.layout_job(job))
+                            };
 
                         ui.add(
                             egui::TextEdit::multiline(&mut self.body_text)

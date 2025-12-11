@@ -43,9 +43,9 @@ fn main() -> Result<(), eframe::Error> {
                     theme::Colors::BORDER_SUBTLE,
                 ),
                 popup_shadow: egui::epaint::Shadow {
-                    offset: egui::vec2(0.0, 2.0),
-                    blur: 8.0,
-                    spread: 0.0,
+                    offset: [0, 2],
+                    blur: 8,
+                    spread: 0,
                     color: egui::Color32::from_rgba_premultiplied(0, 0, 0, 60),
                 },
                 widgets: egui::style::Widgets {
@@ -60,7 +60,7 @@ fn main() -> Result<(), eframe::Error> {
                             theme::StrokeWidth::THIN,
                             theme::Colors::TEXT_SECONDARY,
                         ),
-                        rounding: egui::Rounding::same(theme::Radius::MD),
+                        corner_radius: egui::CornerRadius::same(theme::Radius::MD as u8),
                         expansion: 0.0,
                     },
                     inactive: egui::style::WidgetVisuals {
@@ -74,11 +74,11 @@ fn main() -> Result<(), eframe::Error> {
                             theme::StrokeWidth::THIN,
                             theme::Colors::TEXT_PRIMARY,
                         ),
-                        rounding: egui::Rounding::same(theme::Radius::MD),
+                        corner_radius: egui::CornerRadius::same(theme::Radius::MD as u8),
                         expansion: 0.0,
                     },
                     hovered: egui::style::WidgetVisuals {
-                        bg_fill: theme::Colors::BG_WIDGET_HOVER,
+                        bg_fill: egui::Color32::from_rgba_unmultiplied(70, 70, 80, 180), // Subtle hover
                         weak_bg_fill: theme::Colors::BG_WIDGET_INACTIVE,
                         bg_stroke: egui::Stroke::new(
                             theme::StrokeWidth::THIN,
@@ -88,11 +88,12 @@ fn main() -> Result<(), eframe::Error> {
                             theme::StrokeWidth::MEDIUM,
                             theme::Colors::TEXT_PRIMARY,
                         ),
-                        rounding: egui::Rounding::same(theme::Radius::MD),
+                        corner_radius: egui::CornerRadius::same(theme::Radius::MD as u8),
                         expansion: 1.0,
                     },
                     active: egui::style::WidgetVisuals {
-                        bg_fill: theme::Colors::PRIMARY,
+                        // Use a very subtle selection color - just slightly lighter than background
+                        bg_fill: egui::Color32::from_rgba_unmultiplied(99, 102, 241, 40), // ~15% opacity primary
                         weak_bg_fill: theme::Colors::BG_WIDGET_INACTIVE,
                         bg_stroke: egui::Stroke::new(
                             theme::StrokeWidth::THIN,
@@ -102,7 +103,7 @@ fn main() -> Result<(), eframe::Error> {
                             theme::StrokeWidth::THICK,
                             egui::Color32::WHITE,
                         ),
-                        rounding: egui::Rounding::same(theme::Radius::MD),
+                        corner_radius: egui::CornerRadius::same(theme::Radius::MD as u8),
                         expansion: 1.0,
                     },
                     open: egui::style::WidgetVisuals {
@@ -116,13 +117,16 @@ fn main() -> Result<(), eframe::Error> {
                             theme::StrokeWidth::THIN,
                             theme::Colors::TEXT_PRIMARY,
                         ),
-                        rounding: egui::Rounding::same(theme::Radius::MD),
+                        corner_radius: egui::CornerRadius::same(theme::Radius::MD as u8),
                         expansion: 0.0,
                     },
                 },
                 selection: egui::style::Selection {
-                    bg_fill: egui::Color32::from_rgba_premultiplied(99, 102, 241, 80), // PRIMARY with alpha
-                    stroke: egui::Stroke::new(theme::StrokeWidth::THIN, theme::Colors::PRIMARY),
+                    bg_fill: egui::Color32::from_rgba_premultiplied(99, 102, 241, 35), // Very subtle primary ~14%
+                    stroke: egui::Stroke::new(
+                        theme::StrokeWidth::THIN,
+                        theme::Colors::BORDER_SUBTLE,
+                    ),
                 },
                 hyperlink_color: theme::Colors::PRIMARY,
                 ..egui::Visuals::dark()
@@ -133,12 +137,12 @@ fn main() -> Result<(), eframe::Error> {
                 egui::vec2(theme::Spacing::SM, theme::Indent::ITEM_SPACING);
             style.spacing.button_padding =
                 egui::vec2(theme::Spacing::MD, theme::Indent::ITEM_SPACING);
-            style.spacing.window_margin = egui::Margin::same(theme::Spacing::SM);
-            style.spacing.menu_margin = egui::Margin::same(theme::Radius::MD);
+            style.spacing.window_margin = egui::Margin::same(theme::Spacing::SM as i8);
+            style.spacing.menu_margin = egui::Margin::same(theme::Radius::MD as i8);
 
             cc.egui_ctx.set_style(style);
             cc.egui_ctx
-                .set_pixels_per_point(theme::Layout::DEFAULT_ZOOM_FACTOR);
+                .set_zoom_factor(theme::Layout::DEFAULT_ZOOM_FACTOR);
 
             Ok(Box::new(app::MercuryApp::new(cc)))
         }),
