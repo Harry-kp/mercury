@@ -3,7 +3,7 @@ pub const GITHUB_REPO: &str = "mercury";
 #[allow(dead_code)]
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 #[allow(dead_code)]
-pub const APP_NAME: &str = "Mercury";
+pub const APP_NAME: &str = "Mercury API Client";
 
 pub fn get_repo_url() -> String {
     format!("https://github.com/{}/{}", GITHUB_USERNAME, GITHUB_REPO)
