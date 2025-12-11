@@ -1599,9 +1599,9 @@ impl eframe::App for MercuryApp {
                             )
                             .style(|style: &mut egui::Style| {
                                 style.visuals.selection.bg_fill =
-                                    egui::Color32::from_rgba_unmultiplied(70, 70, 80, 100);
+                                    crate::theme::Colors::popup_selection_bg();
                                 style.visuals.widgets.hovered.bg_fill =
-                                    egui::Color32::from_rgba_unmultiplied(70, 70, 80, 120);
+                                    crate::theme::Colors::popup_hover_bg();
                             })
                             .show(|ui| {
                                 ui.set_min_height(100.0);
@@ -1659,9 +1659,9 @@ impl eframe::App for MercuryApp {
                             )
                             .style(|style: &mut egui::Style| {
                                 style.visuals.selection.bg_fill =
-                                    egui::Color32::from_rgba_unmultiplied(70, 70, 80, 100);
+                                    crate::theme::Colors::popup_selection_bg();
                                 style.visuals.widgets.hovered.bg_fill =
-                                    egui::Color32::from_rgba_unmultiplied(70, 70, 80, 120);
+                                    crate::theme::Colors::popup_hover_bg();
                             })
                             .show(|ui| {
                                 if ui.selectable_label(false, "Open Folder...").clicked() {
@@ -1706,9 +1706,9 @@ impl eframe::App for MercuryApp {
                             )
                             .style(|style: &mut egui::Style| {
                                 style.visuals.selection.bg_fill =
-                                    egui::Color32::from_rgba_unmultiplied(70, 70, 80, 100);
+                                    crate::theme::Colors::popup_selection_bg();
                                 style.visuals.widgets.hovered.bg_fill =
-                                    egui::Color32::from_rgba_unmultiplied(70, 70, 80, 120);
+                                    crate::theme::Colors::popup_hover_bg();
                             })
                             .show(|ui| {
                                 if ui.selectable_label(false, "Keyboard Shortcuts").clicked() {

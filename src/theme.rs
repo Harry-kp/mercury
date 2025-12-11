@@ -37,6 +37,17 @@ impl Colors {
     pub const ERROR: Color32 = Color32::from_rgb(239, 68, 68); // #ef4444 - Red
     pub const ERROR_BG: Color32 = Color32::from_rgb(45, 30, 30); // Dark red bg
 
+    // Popup/Menu Colors - Subtle selection and hover states (runtime functions due to alpha)
+    #[inline]
+    pub fn popup_selection_bg() -> Color32 {
+        Color32::from_rgba_unmultiplied(70, 70, 80, 100) // ~40% opacity gray
+    }
+
+    #[inline]
+    pub fn popup_hover_bg() -> Color32 {
+        Color32::from_rgba_unmultiplied(70, 70, 80, 120) // ~47% opacity gray
+    }
+
     // HTTP Methods - Muted, semantic
     pub const METHOD_GET: Color32 = Color32::from_rgb(34, 197, 94); // Green - safe read
     pub const METHOD_POST: Color32 = Color32::from_rgb(99, 102, 241); // Indigo - create

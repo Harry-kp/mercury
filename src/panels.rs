@@ -810,10 +810,8 @@ impl MercuryApp {
                 )
                 .style(|style: &mut egui::Style| {
                     // Use subtle selection colors for menu items
-                    style.visuals.selection.bg_fill =
-                        egui::Color32::from_rgba_unmultiplied(70, 70, 80, 100);
-                    style.visuals.widgets.hovered.bg_fill =
-                        egui::Color32::from_rgba_unmultiplied(70, 70, 80, 120);
+                    style.visuals.selection.bg_fill = Colors::popup_selection_bg();
+                    style.visuals.widgets.hovered.bg_fill = Colors::popup_hover_bg();
                 })
                 .show(|ui| {
                     for method in [
