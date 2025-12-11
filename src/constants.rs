@@ -17,6 +17,14 @@ pub fn get_releases_url() -> String {
     format!("{}/releases", get_repo_url())
 }
 
+pub fn get_docs_url() -> String {
+    format!(
+        "https://{}.github.io/{}/",
+        GITHUB_USERNAME.to_lowercase(),
+        GITHUB_REPO
+    )
+}
+
 pub const MAX_TIMELINE_ENTRIES: usize = 50;
 pub const URL_TRUNCATE_LENGTH: usize = 35;
 pub const FADE_DURATION_SECONDS: f64 = 3.0;
