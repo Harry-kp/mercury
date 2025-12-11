@@ -143,9 +143,9 @@ impl Layout {
 
     // Modal/Popup widths
     pub const MODAL_WIDTH: f32 = 420.0;
-    pub const POPUP_MIN_WIDTH: f32 = 140.0;
+    pub const POPUP_MIN_WIDTH: f32 = 180.0;
     pub const POPUP_WIDE_WIDTH: f32 = 160.0;
-    pub const METHOD_POPUP_WIDTH: f32 = 80.0;
+    pub const METHOD_POPUP_WIDTH: f32 = 100.0;
     pub const INPUT_FIELD_WIDTH: f32 = 100.0;
 
     // UI Scaling

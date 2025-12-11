@@ -14,10 +14,13 @@ pub fn status_badge(ui: &mut Ui, status: u16, status_text: &str) {
         (Colors::ERROR, Colors::ERROR_BG)
     };
 
-    egui::Frame::none()
+    egui::Frame::NONE
         .fill(bg)
-        .rounding(Radius::SM)
-        .inner_margin(egui::Margin::symmetric(Spacing::SM, Spacing::XS))
+        .corner_radius(Radius::SM)
+        .inner_margin(egui::Margin::symmetric(
+            Spacing::SM as i8,
+            Spacing::XS as i8,
+        ))
         .show(ui, |ui| {
             // Only show "200 OK" format, not "200 200 OK"
             let display_text = if status_text.starts_with(&status.to_string()) {
@@ -108,10 +111,13 @@ pub fn method_badge(ui: &mut Ui, method: &str) -> egui::Response {
         _ => Colors::TEXT_SECONDARY,
     };
 
-    egui::Frame::none()
+    egui::Frame::NONE
         .fill(color.gamma_multiply(0.15))
-        .rounding(Radius::SM)
-        .inner_margin(egui::Margin::symmetric(Spacing::SM, Spacing::XS))
+        .corner_radius(Radius::SM)
+        .inner_margin(egui::Margin::symmetric(
+            Spacing::SM as i8,
+            Spacing::XS as i8,
+        ))
         .show(ui, |ui| {
             ui.label(
                 RichText::new(method)
@@ -167,9 +173,9 @@ pub fn error_state(ui: &mut Ui, error: &str) {
         );
         ui.add_space(Spacing::SM);
 
-        egui::Frame::none()
+        egui::Frame::NONE
             .fill(Colors::ERROR_BG)
-            .rounding(Radius::SM)
+            .corner_radius(Radius::SM)
             .inner_margin(Spacing::SM)
             .show(ui, |ui| {
                 ui.label(
@@ -212,8 +218,9 @@ pub fn copy_icon_button(ui: &mut Ui) -> bool {
     if response.hovered() {
         ui.painter().rect_stroke(
             response.rect.expand(2.0),
-            2.0,
+            egui::CornerRadius::same(2),
             egui::Stroke::new(crate::theme::StrokeWidth::THIN, Colors::PRIMARY),
+            egui::StrokeKind::Middle,
         );
     }
 
