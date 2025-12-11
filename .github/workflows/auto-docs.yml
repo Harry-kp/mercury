@@ -1,16 +1,25 @@
 name: Auto-Update Documentation
 
 on:
+  # Trigger on PR merge
   pull_request:
     types: [closed]
     branches:
       - main
       - master
+  # Trigger on direct push to master
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - 'src/**'
+      - 'Cargo.toml'
 
 jobs:
   trigger-docs-update:
-    # Only run if PR was merged (not just closed)
-    if: github.event.pull_request.merged == true
+    # For PR: only run if merged. For push: always run
+    if: github.event_name == 'push' || github.event.pull_request.merged == true
     runs-on: ubuntu-latest
     
     permissions:
@@ -24,30 +33,53 @@ jobs:
         with:
           fetch-depth: 0  # Full history for better context
       
+      - name: Detect event type and set context
+        id: context
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "type=pr" >> $GITHUB_OUTPUT
+            echo "pr_number=${{ github.event.pull_request.number }}" >> $GITHUB_OUTPUT
+            echo "pr_title=${{ github.event.pull_request.title }}" >> $GITHUB_OUTPUT
+            echo "author=${{ github.event.pull_request.user.login }}" >> $GITHUB_OUTPUT
+            echo "body<<EOF" >> $GITHUB_OUTPUT
+            echo "${{ github.event.pull_request.body }}" >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+          else
+            echo "type=push" >> $GITHUB_OUTPUT
+            echo "pr_number=N/A" >> $GITHUB_OUTPUT
+            echo "pr_title=${{ github.event.head_commit.message }}" >> $GITHUB_OUTPUT
+            echo "author=${{ github.event.pusher.name }}" >> $GITHUB_OUTPUT
+            echo "body=Direct push to master by @${{ github.event.pusher.name }}" >> $GITHUB_OUTPUT
+          fi
+      
       - name: Check if code changes affect documentation
         id: check_changes
         run: |
-          # Get changed files from the merged PR
-          FILES=$(gh pr view ${{ github.event.pull_request.number }} --json files --jq '.files[].path' || echo "")
+          if [ "${{ steps.context.outputs.type }}" = "pr" ]; then
+            # For PR: get changed files from PR
+            FILES=$(gh pr view ${{ steps.context.outputs.pr_number }} --json files --jq '.files[].path' || echo "")
+            
+            # Check for skip-docs label
+            LABELS=$(gh pr view ${{ steps.context.outputs.pr_number }} --json labels --jq '.labels[].name' || echo "")
+            if echo "$LABELS" | grep -q "skip-docs"; then
+              echo "PR has skip-docs label, skipping documentation update"
+              echo "should_update=false" >> $GITHUB_OUTPUT
+              exit 0
+            fi
+          else
+            # For direct push: get changed files from commit
+            FILES=$(git diff --name-only ${{ github.event.before }} ${{ github.event.after }} || echo "")
+          fi
           
           # Check if changes are in source code or dependencies (Rust-specific)
           CODE_CHANGES=$(echo "$FILES" | grep -E '^(src/|Cargo\.toml)' || echo "")
           
-          # Skip if PR has skip-docs label
-          LABELS=$(gh pr view ${{ github.event.pull_request.number }} --json labels --jq '.labels[].name' || echo "")
-          
-          if echo "$LABELS" | grep -q "skip-docs"; then
-            echo "PR has skip-docs label, skipping documentation update"
-            echo "should_update=false" >> $GITHUB_OUTPUT
-          elif [ -z "$CODE_CHANGES" ]; then
+          if [ -z "$CODE_CHANGES" ]; then
             echo "No source code changes detected, skipping docs update"
             echo "should_update=false" >> $GITHUB_OUTPUT
           else
             echo "Source code changes detected, will update docs"
             echo "should_update=true" >> $GITHUB_OUTPUT
-            echo "changed_files<<EOF" >> $GITHUB_OUTPUT
-            echo "$FILES" >> $GITHUB_OUTPUT
-            echo "EOF" >> $GITHUB_OUTPUT
           fi
         env:
           GH_TOKEN: ${{ github.token }}
@@ -55,26 +87,27 @@ jobs:
       - name: Create documentation update issue
         if: steps.check_changes.outputs.should_update == 'true'
         run: |
-          # Create issue for Copilot to work on
-          gh issue create \
-            --title "📚 Update documentation for PR #${{ github.event.pull_request.number }}" \
-            --body "$(cat <<EOF
-          This PR merged code changes that may require documentation updates.
+          if [ "${{ steps.context.outputs.type }}" = "pr" ]; then
+            TITLE="📚 Update documentation for PR #${{ steps.context.outputs.pr_number }}"
+            SOURCE_REF="**Source PR:** #${{ steps.context.outputs.pr_number }}"
+          else
+            TITLE="📚 Update documentation for commit ${{ github.sha }}"
+            SOURCE_REF="**Source Commit:** [${{ github.sha }}](${{ github.event.head_commit.url }})"
+          fi
           
-          **Source PR:** #${{ github.event.pull_request.number }}
-          **Title:** ${{ github.event.pull_request.title }}
-          **Author:** @${{ github.event.pull_request.user.login }}
+          gh issue create \
+            --title "$TITLE" \
+            --body "Code changes merged to master may require documentation updates.
+          
+          $SOURCE_REF
+          **Title:** ${{ steps.context.outputs.pr_title }}
+          **Author:** @${{ steps.context.outputs.author }}
           
           ## Changes Summary
-          ${{ github.event.pull_request.body }}
-          
-          ## Files Changed
-          \`\`\`
-          ${{ steps.check_changes.outputs.changed_files }}
-          \`\`\`
+          ${{ steps.context.outputs.body }}
           
           ## Task
-          @docusaurus-agent Please review the code changes from PR #${{ github.event.pull_request.number }} and:
+          @docusaurus-agent Please review the code changes and:
           
           1. Review changes in Rust source code (\`src/\`) and dependencies (\`Cargo.toml\`)
           2. Update relevant documentation files in \`docs/\`
@@ -88,17 +121,15 @@ jobs:
           
           ---
           
-          **Note:** If no documentation changes are needed, please close this issue with a comment explaining why.
-          EOF
-          )" \
-            --label "documentation,automated"
+          **Note:** If no documentation changes are needed, please close this issue with a comment explaining why." \
+            --label "documentation"
         env:
           GH_TOKEN: ${{ github.token }}
       
       - name: Comment on original PR
-        if: steps.check_changes.outputs.should_update == 'true'
+        if: steps.check_changes.outputs.should_update == 'true' && steps.context.outputs.type == 'pr'
         run: |
-          gh pr comment ${{ github.event.pull_request.number }} \
-            --body "📚 Documentation update has been triggered. Check the [documentation issues](https://github.com/${{ github.repository }}/issues?q=is%3Aissue+is%3Aopen+label%3Adocumentation+label%3Aautomated+sort%3Acreated-desc) for the auto-generated task."
+          gh pr comment ${{ steps.context.outputs.pr_number }} \
+            --body "📚 Documentation update has been triggered. Check the [documentation issues](https://github.com/${{ github.repository }}/issues?q=is%3Aissue+is%3Aopen+label%3Adocumentation+sort%3Acreated-desc) for the auto-generated task."
         env:
           GH_TOKEN: ${{ github.token }}
