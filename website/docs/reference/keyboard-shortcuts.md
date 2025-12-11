@@ -27,7 +27,6 @@ These are the shortcuts you'll use most often:
 | Send Request | `⌘ + Enter` | `Ctrl + Enter` |
 | Save Request | `⌘ + S` | `Ctrl + S` |
 | New Request | `⌘ + N` | `Ctrl + N` |
-| Duplicate Request | `⌘ + D` | `Ctrl + D` |
 | Copy as cURL | `⌘ + Shift + C` | `Ctrl + Shift + C` |
 
 ## Navigation
@@ -35,9 +34,8 @@ These are the shortcuts you'll use most often:
 | Action | Mac | Windows/Linux |
 |--------|-----|---------------|
 | Quick Search | `⌘ + K` | `Ctrl + K` |
-| Focus Sidebar | `⌘ + 1` | `Ctrl + 1` |
-| Focus Request | `⌘ + 2` | `Ctrl + 2` |
-| Focus Response | `⌘ + 3` | `Ctrl + 3` |
+| Focus URL Bar | `⌘ + L` | `Ctrl + L` |
+| Clear Search | `Escape` | `Escape` |
 
 ## File Operations
 
@@ -45,44 +43,26 @@ These are the shortcuts you'll use most often:
 |--------|-----|---------------|
 | Open Folder | `⌘ + O` | `Ctrl + O` |
 | Save | `⌘ + S` | `Ctrl + S` |
-| Close Tab | `⌘ + W` | `Ctrl + W` |
-
-## Editing
-
-| Action | Mac | Windows/Linux |
-|--------|-----|---------------|
-| Undo | `⌘ + Z` | `Ctrl + Z` |
-| Redo | `⌘ + Shift + Z` | `Ctrl + Shift + Z` |
-| Cut | `⌘ + X` | `Ctrl + X` |
-| Copy | `⌘ + C` | `Ctrl + C` |
-| Paste | `⌘ + V` | `Ctrl + V` |
-| Select All | `⌘ + A` | `Ctrl + A` |
-| Find | `⌘ + F` | `Ctrl + F` |
-
-## Interface
-
-| Action | Mac | Windows/Linux |
-|--------|-----|---------------|
-| Toggle Sidebar | `⌘ + B` | `Ctrl + B` |
-| Zoom In | `⌘ + +` | `Ctrl + +` |
-| Zoom Out | `⌘ + -` | `Ctrl + -` |
-| Reset Zoom | `⌘ + 0` | `Ctrl + 0` |
-
-## Request Editor Tabs
-
-| Action | Mac | Windows/Linux |
-|--------|-----|---------------|
-| Headers Tab | `⌘ + Shift + H` | `Ctrl + Shift + H` |
-| Body Tab | `⌘ + Shift + B` | `Ctrl + Shift + B` |
-| Auth Tab | `⌘ + Shift + A` | `Ctrl + Shift + A` |
 
 ## Response Panel
 
 | Action | Mac | Windows/Linux |
 |--------|-----|---------------|
-| Copy Response | `⌘ + Shift + R` | `Ctrl + Shift + R` |
-| Save Response | `⌘ + Shift + S` | `Ctrl + Shift + S` |
-| Toggle Raw/Pretty | `⌘ + Shift + P` | `Ctrl + Shift + P` |
+| Toggle Raw/Pretty | `⌘ + R` | `Ctrl + R` |
+
+## Environment
+
+| Action | Mac | Windows/Linux |
+|--------|-----|---------------|
+| Switch Environment | `⌘ + E` | `Ctrl + E` |
+
+## Interface
+
+| Action | Mac | Windows/Linux |
+|--------|-----|---------------|
+| Focus Mode | `⌘ + Shift + F` | `Ctrl + Shift + F` |
+| Toggle History | `⌘ + H` | `Ctrl + H` |
+| Show Shortcuts | `?` | `?` |
 
 ## Keyboard Shortcuts Overlay
 
@@ -100,17 +80,13 @@ Train your fingers: `⌘+S` → `⌘+Enter`
 
 `⌘+K` to instantly jump to any request without touching the mouse.
 
-### 3. Navigate Panels
-
-`⌘+1`, `⌘+2`, `⌘+3` to move focus between panels quickly.
-
-### 4. Copy Results Fast
+### 3. Copy Results Fast
 
 `⌘+Shift+C` copies the request as cURL for sharing.
 
-## Customization
+### 4. Focus Mode
 
-Coming soon: Custom keybindings configuration.
+`⌘+Shift+F` hides the sidebar for distraction-free editing.
 
 ## Related
 
