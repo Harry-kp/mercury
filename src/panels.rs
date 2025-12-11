@@ -805,10 +805,7 @@ impl MercuryApp {
                     egui::Frame::popup(&ui.ctx().style())
                         .fill(Colors::BG_MODAL)
                         .corner_radius(Radius::MD)
-                        .stroke(egui::Stroke::new(
-                            StrokeWidth::THIN,
-                            Colors::BORDER_SUBTLE,
-                        ))
+                        .stroke(egui::Stroke::new(StrokeWidth::THIN, Colors::BORDER_SUBTLE))
                         .inner_margin(Spacing::SM),
                 )
                 .style(|style: &mut egui::Style| {

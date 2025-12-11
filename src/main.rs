@@ -123,7 +123,10 @@ fn main() -> Result<(), eframe::Error> {
                 },
                 selection: egui::style::Selection {
                     bg_fill: egui::Color32::from_rgba_premultiplied(99, 102, 241, 35), // Very subtle primary ~14%
-                    stroke: egui::Stroke::new(theme::StrokeWidth::THIN, theme::Colors::BORDER_SUBTLE),
+                    stroke: egui::Stroke::new(
+                        theme::StrokeWidth::THIN,
+                        theme::Colors::BORDER_SUBTLE,
+                    ),
                 },
                 hyperlink_color: theme::Colors::PRIMARY,
                 ..egui::Visuals::dark()
