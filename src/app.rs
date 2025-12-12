@@ -140,17 +140,20 @@ pub struct MercuryApp {
 }
 
 // Timeline entry for request history
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct TimelineEntry {
-    pub _timestamp: f64,
+    pub timestamp: f64,
     pub method: HttpMethod,
     pub url: String,
     pub status: u16,
-    pub _status_text: String,
+    pub status_text: String,
     pub duration_ms: u128,
     pub request_body: String,
     pub request_headers: String,
-    pub _response_body: String,
+    pub response_body: String,
+    pub response_type: String, // "json", "xml", "image", "binary", etc.
+    pub response_size: usize,  // Size in bytes for display
+    pub content_type: String,  // Original Content-Type header
 }
 
 pub use crate::utils::AuthMode;
@@ -192,7 +195,7 @@ impl MercuryApp {
             selected_tab: 0,
             focus_mode: false,
             headers_bulk_edit: false,
-            timeline: Vec::new(),
+            timeline: Self::load_history(),
             timeline_search: String::new(),
             show_timeline: false,
             temp_requests: Self::load_temp_requests(),
@@ -896,18 +899,74 @@ impl MercuryApp {
             let _ = fs::create_dir_all(parent);
         }
 
-        let to_save: Vec<_> = self
-            .temp_requests
-            .iter()
-            .rev()
-            .take(50)
-            .rev()
-            .cloned()
-            .collect();
+        let skip = self.temp_requests.len().saturating_sub(50);
+        let to_save: Vec<_> = self.temp_requests.iter().skip(skip).cloned().collect();
 
         if let Ok(json) = serde_json::to_string_pretty(&to_save) {
-            let _ = fs::write(&path, json);
+            if let Err(e) = fs::write(&path, json) {
+                eprintln!("Failed to save temp history: {}", e);
+            }
         }
+    }
+
+    fn get_history_file_path() -> PathBuf {
+        // Fallback robust resolution for home directory
+        let home = dirs::home_dir()
+            .or_else(|| std::env::var("HOME").ok().map(PathBuf::from))
+            .unwrap_or_else(std::env::temp_dir);
+        home.join(".mercury").join("history.json")
+    }
+
+    pub fn save_history(&self) {
+        let path = Self::get_history_file_path();
+        if let Some(parent) = path.parent() {
+            let _ = fs::create_dir_all(parent);
+        }
+
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs_f64();
+        let cutoff = now - crate::constants::HISTORY_EXPIRY_SECONDS;
+
+        // Filter by expiry, take most recent 50, preserve chronological order
+        // Filter by expiry, take most recent 50, preserve chronological order
+        let mut to_save: Vec<_> = self
+            .timeline
+            .iter()
+            .filter(|e| e.timestamp > cutoff)
+            .rev()
+            .take(crate::constants::MAX_TIMELINE_ENTRIES)
+            .cloned()
+            .collect();
+        to_save.reverse();
+
+        if let Ok(json) = serde_json::to_string_pretty(&to_save) {
+            if let Err(e) = fs::write(&path, json) {
+                eprintln!("Failed to save history: {}", e);
+            }
+        }
+    }
+
+    fn load_history() -> Vec<TimelineEntry> {
+        let path = Self::get_history_file_path();
+        if !path.exists() {
+            return Vec::new();
+        }
+        if let Ok(content) = fs::read_to_string(&path) {
+            if let Ok(entries) = serde_json::from_str::<Vec<TimelineEntry>>(&content) {
+                let now = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_secs_f64();
+                let cutoff = now - crate::constants::HISTORY_EXPIRY_SECONDS;
+                return entries
+                    .into_iter()
+                    .filter(|e| e.timestamp > cutoff)
+                    .collect();
+            }
+        }
+        Vec::new()
     }
 
     pub fn render_collection_tree(
@@ -1225,23 +1284,49 @@ impl eframe::App for MercuryApp {
             self.executing = false;
             match result {
                 Ok(response) => {
-                    let time = ctx.input(|i| i.time);
+                    let time = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap()
+                        .as_secs_f64();
+
+                    // Format response type as string for history
+                    let response_type_str = format!("{:?}", response.response_type);
+
+                    // Truncate large response bodies for history storage
+                    // Binary/Image responses already have placeholder text
+                    let stored_body = if response.body.len() > 100_000 {
+                        let truncated: String = response.body.chars().take(10_000).collect();
+                        format!(
+                            "{}...[truncated, {} bytes total]",
+                            truncated,
+                            response.body.len()
+                        )
+                    } else {
+                        response.body.clone()
+                    };
+
                     let entry = TimelineEntry {
-                        _timestamp: time,
+                        timestamp: time,
                         method: self.method.clone(),
                         url: self.url.clone(),
                         status: response.status,
-                        _status_text: response.status_text.clone(),
+                        status_text: response.status_text.clone(),
                         duration_ms: response.duration_ms,
                         request_body: self.body_text.clone(),
                         request_headers: self.headers_text.clone(),
-                        _response_body: response.body.clone(),
+                        response_body: stored_body,
+                        response_type: response_type_str,
+                        response_size: response.size_bytes,
+                        content_type: response.content_type.clone(),
                     };
                     self.timeline.push(entry);
 
                     if self.timeline.len() > crate::constants::MAX_TIMELINE_ENTRIES {
                         self.timeline.remove(0);
                     }
+
+                    // Save history to disk after each request
+                    self.save_history();
 
                     // Save to Recent (only if not a saved file AND it's a new unique request)
                     if self.current_file.is_none() && !self.url.is_empty() {
@@ -1623,15 +1708,17 @@ impl eframe::App for MercuryApp {
                             &env_name.to_string()
                         };
 
-                        let env_response = ui.add_enabled(
-                            self.workspace_path.is_some(),
-                            egui::Label::new(
-                                egui::RichText::new(env_display)
-                                    .size(crate::theme::FontSize::MD)
-                                    .color(env_color),
+                        let env_response = ui
+                            .add_enabled(
+                                self.workspace_path.is_some(),
+                                egui::Label::new(
+                                    egui::RichText::new(env_display)
+                                        .size(crate::theme::FontSize::MD)
+                                        .color(env_color),
+                                )
+                                .sense(egui::Sense::click()),
                             )
-                            .sense(egui::Sense::click()),
-                        );
+                            .on_hover_cursor(egui::CursorIcon::PointingHand);
                         // Clone env_files to avoid borrow issues
                         let env_files_clone: Vec<_> = self.env_files.clone();
                         let current_selection = self.selected_env;
@@ -1688,14 +1775,16 @@ impl eframe::App for MercuryApp {
                         ui.add_space(crate::theme::Spacing::XL);
 
                         // Open - borderless, just text
-                        let open_response = ui.add(
-                            egui::Label::new(
-                                egui::RichText::new("Open")
-                                    .size(crate::theme::FontSize::MD)
-                                    .color(crate::theme::Colors::TEXT_SECONDARY),
+                        let open_response = ui
+                            .add(
+                                egui::Label::new(
+                                    egui::RichText::new("Open")
+                                        .size(crate::theme::FontSize::MD)
+                                        .color(crate::theme::Colors::TEXT_SECONDARY),
+                                )
+                                .sense(egui::Sense::click()),
                             )
-                            .sense(egui::Sense::click()),
-                        );
+                            .on_hover_cursor(egui::CursorIcon::PointingHand);
 
                         egui::Popup::menu(&open_response)
                             .width(crate::theme::Layout::POPUP_WIDE_WIDTH)
@@ -1739,14 +1828,16 @@ impl eframe::App for MercuryApp {
                         ui.add_space(crate::theme::Spacing::XL);
 
                         // Help - borderless
-                        let help_response = ui.add(
-                            egui::Label::new(
-                                egui::RichText::new("Help")
-                                    .size(crate::theme::FontSize::MD)
-                                    .color(crate::theme::Colors::TEXT_SECONDARY),
+                        let help_response = ui
+                            .add(
+                                egui::Label::new(
+                                    egui::RichText::new("Help")
+                                        .size(crate::theme::FontSize::MD)
+                                        .color(crate::theme::Colors::TEXT_SECONDARY),
+                                )
+                                .sense(egui::Sense::click()),
                             )
-                            .sense(egui::Sense::click()),
-                        );
+                            .on_hover_cursor(egui::CursorIcon::PointingHand);
 
                         egui::Popup::menu(&help_response)
                             .width(crate::theme::Layout::POPUP_MIN_WIDTH)
@@ -2444,5 +2535,97 @@ impl eframe::App for MercuryApp {
         }
         // Save app state when app closes
         self.save_state();
+    }
+}
+
+#[cfg(test)]
+mod history_tests {
+    use super::*;
+
+    #[test]
+    fn test_timeline_entry_serialization() {
+        let entry = TimelineEntry {
+            timestamp: 1702400000.0,
+            method: HttpMethod::GET,
+            url: "https://api.example.com/users".to_string(),
+            status: 200,
+            status_text: "OK".to_string(),
+            duration_ms: 150,
+            request_body: "".to_string(),
+            request_headers: "Content-Type: application/json".to_string(),
+            response_body: r#"{"id": 1}"#.to_string(),
+            response_type: "Json".to_string(),
+            response_size: 10,
+            content_type: "application/json".to_string(),
+        };
+
+        // Serialize
+        let json = serde_json::to_string(&entry).expect("Failed to serialize");
+        assert!(json.contains("1702400000"));
+        assert!(json.contains("GET"));
+        assert!(json.contains("api.example.com"));
+
+        // Deserialize
+        let deserialized: TimelineEntry =
+            serde_json::from_str(&json).expect("Failed to deserialize");
+        assert_eq!(deserialized.url, entry.url);
+        assert_eq!(deserialized.status, 200);
+        assert_eq!(deserialized.duration_ms, 150);
+        assert_eq!(deserialized.response_type, "Json");
+    }
+
+    #[test]
+    fn test_timeline_entry_roundtrip() {
+        let entries = vec![
+            TimelineEntry {
+                timestamp: 1702400000.0,
+                method: HttpMethod::POST,
+                url: "https://api.example.com/login".to_string(),
+                status: 201,
+                status_text: "Created".to_string(),
+                duration_ms: 250,
+                request_body: r#"{"email": "test@test.com"}"#.to_string(),
+                request_headers: "".to_string(),
+                response_body: r#"{"token": "abc123"}"#.to_string(),
+                response_type: "Json".to_string(),
+                response_size: 20,
+                content_type: "application/json".to_string(),
+            },
+            TimelineEntry {
+                timestamp: 1702400100.0,
+                method: HttpMethod::DELETE,
+                url: "https://api.example.com/users/5".to_string(),
+                status: 204,
+                status_text: "No Content".to_string(),
+                duration_ms: 50,
+                request_body: "".to_string(),
+                request_headers: "Authorization: Bearer token".to_string(),
+                response_body: "".to_string(),
+                response_type: "Empty".to_string(),
+                response_size: 0,
+                content_type: "".to_string(),
+            },
+        ];
+
+        let json = serde_json::to_string_pretty(&entries).expect("Failed to serialize");
+        let deserialized: Vec<TimelineEntry> =
+            serde_json::from_str(&json).expect("Failed to deserialize");
+
+        assert_eq!(deserialized.len(), 2);
+        assert_eq!(deserialized[0].method.as_str(), "POST");
+        assert_eq!(deserialized[1].method.as_str(), "DELETE");
+    }
+
+    #[test]
+    fn test_history_expiry_constant() {
+        // 7 days in seconds
+        let expected = 7.0 * 24.0 * 60.0 * 60.0;
+        assert_eq!(crate::constants::HISTORY_EXPIRY_SECONDS, expected);
+        assert_eq!(crate::constants::HISTORY_EXPIRY_SECONDS, 604800.0);
+    }
+
+    #[test]
+    fn test_max_timeline_entries() {
+        assert_eq!(crate::constants::MAX_TIMELINE_ENTRIES, 50);
     }
 }

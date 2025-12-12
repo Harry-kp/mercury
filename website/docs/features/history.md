@@ -38,41 +38,33 @@ Each timeline entry shows:
 
 | Field | Description |
 |-------|-------------|
-| **Timestamp** | When the request was executed |
+| **Timestamp** | When the request was executed (relative time) |
 | **Status** | HTTP status code (color-coded) |
 | **Duration** | Response time in milliseconds |
-| **Size** | Response body size |
+| **Method** | HTTP Method (GET, POST, etc.) |
 
-Click an entry to expand and view the full response.
+Click an entry to restore it to the request panel.
 
 ## Restoring a Request
 
-If you want to rerun a previous request:
+To reuse a previous request:
 
-1. Click on the history entry
-2. Click **Restore** (or right-click → Restore)
-3. The request panel updates with that request's details
-4. Modify if needed, then send
-
-:::tip Quick Rerun
-Hold `⌘` (Mac) or `Ctrl` (Windows/Linux) and click a history entry to rerun immediately.
-:::
+1. Click on any history entry
+2. The request panel immediately updates with that request's details (URL, method, headers, body)
+3. Modify if needed, then click **Send**
 
 ## History Persistence
 
-History is stored locally on your machine:
-- History persists between sessions
-- Each workspace has its own history
-- History is not stored with your `.http` files (it's separate)
+Mercury automatically persists your request history:
 
-## Clearing History
+- **Automatic saving** — History is saved to `~/.mercury/history.json` after each request
+- **Survives restarts** — History is loaded when the app starts
+- **7-day retention** — Entries older than 7 days are automatically removed
+- **50 entry limit** — The most recent 50 entries are kept
+- **Global storage** — History is shared across all workspaces
 
-To clear request history:
-1. Right-click in the timeline
-2. Select **Clear History**
-
-:::warning
-Clearing history cannot be undone. All past executions will be deleted.
+:::tip Timestamps
+Each history entry shows when it was executed using relative timestamps like "Just now", "5 min ago", "Yesterday", or "3 days ago".
 :::
 
 ## Use Cases

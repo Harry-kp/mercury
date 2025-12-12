@@ -27,7 +27,9 @@ pub fn get_docs_url() -> String {
 
 pub const MAX_TIMELINE_ENTRIES: usize = 50;
 pub const URL_TRUNCATE_LENGTH: usize = 35;
+pub const HISTORY_URL_TRUNCATE_LENGTH: usize = 25;
 pub const FADE_DURATION_SECONDS: f64 = 3.0;
+pub const HISTORY_EXPIRY_SECONDS: f64 = 7.0 * 24.0 * 60.0 * 60.0; // 7 days
 
 // Response Size Limits
 // ---------------------

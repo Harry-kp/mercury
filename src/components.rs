@@ -1,7 +1,7 @@
 // components.rs - Reusable UI components
 // Modular widgets with consistent styling
 
-use crate::theme::{Colors, FontSize, Radius, Spacing};
+use crate::theme::{Colors, FontSize, Radius, Spacing, StrokeWidth};
 use egui::{self, Color32, RichText, Ui};
 
 /// Status badge for HTTP responses
@@ -224,7 +224,10 @@ pub fn copy_icon_button(ui: &mut Ui) -> bool {
         );
     }
 
-    response.on_hover_text("Copy to clipboard").clicked()
+    response
+        .on_hover_cursor(egui::CursorIcon::PointingHand)
+        .on_hover_text("Copy to clipboard")
+        .clicked()
 }
 
 /// Animated send button with pulsing glow when executing
@@ -252,10 +255,12 @@ pub fn animated_send_button(ui: &mut Ui, executing: bool, time: f64) -> egui::Re
 
     let icon = if executing { "◌" } else { "▶" };
 
-    let response = ui.add(
-        egui::Label::new(RichText::new(icon).size(FontSize::ICON).color(base_color))
-            .sense(egui::Sense::click()),
-    );
+    let response = ui
+        .add(
+            egui::Label::new(RichText::new(icon).size(FontSize::ICON).color(base_color))
+                .sense(egui::Sense::click()),
+        )
+        .on_hover_cursor(egui::CursorIcon::PointingHand);
 
     // Draw glow effect when executing
     if executing {
@@ -271,6 +276,35 @@ pub fn animated_send_button(ui: &mut Ui, executing: bool, time: f64) -> egui::Re
     }
 
     response
+}
+
+/// Standard close button with consistent vector icon (X)
+pub fn close_button(ui: &mut Ui, size: f32) -> egui::Response {
+    let (rect, response) = ui.allocate_exact_size(egui::vec2(size, size), egui::Sense::click());
+
+    if ui.is_rect_visible(rect) {
+        let color = if response.hovered() {
+            Colors::TEXT_PRIMARY
+        } else {
+            Colors::TEXT_MUTED
+        };
+        // Use a stroke for crisp vector lines
+        let stroke = egui::Stroke::new(StrokeWidth::MEDIUM, color);
+
+        const CLOSE_BUTTON_PADDING_RATIO: f32 = 0.25;
+        let padding = size * CLOSE_BUTTON_PADDING_RATIO;
+        let p1 = rect.min + egui::vec2(padding, padding);
+        let p2 = rect.max - egui::vec2(padding, padding);
+        let p3 = egui::pos2(rect.max.x - padding, rect.min.y + padding);
+        let p4 = egui::pos2(rect.min.x + padding, rect.max.y - padding);
+
+        ui.painter().line_segment([p1, p2], stroke);
+        ui.painter().line_segment([p3, p4], stroke);
+    }
+
+    response
+        .on_hover_cursor(egui::CursorIcon::PointingHand)
+        .on_hover_text("Close")
 }
 
 /// Render JSON with syntax highlighting
