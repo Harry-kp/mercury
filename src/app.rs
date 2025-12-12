@@ -4,6 +4,7 @@ use crate::request_executor::{execute_request, HttpResponse};
 
 use eframe::egui;
 use notify_debouncer_mini::new_debouncer;
+use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::fs;
@@ -137,6 +138,7 @@ pub struct MercuryApp {
     watched_path: Option<PathBuf>,
     expanded_folders: HashSet<PathBuf>,
     file_watcher_error: Option<String>,
+    pub show_env_manager: bool,
 }
 
 // Timeline entry for request history
@@ -238,6 +240,7 @@ impl MercuryApp {
             watched_path: None,
             expanded_folders: HashSet::new(),
             file_watcher_error: None,
+            show_env_manager: false,
         };
 
         // Restore saved state
@@ -1764,6 +1767,30 @@ impl eframe::App for MercuryApp {
                                         ui.close();
                                     }
                                 }
+
+                                ui.separator();
+
+                                if ui
+                                    .button(
+                                        egui::RichText::new("➕ Create New Environment")
+                                            .size(crate::theme::FontSize::SM),
+                                    )
+                                    .clicked()
+                                {
+                                    self.show_new_env_dialog = true;
+                                    ui.close();
+                                }
+
+                                if ui
+                                    .button(
+                                        egui::RichText::new("⚙️ Manage Environments")
+                                            .size(crate::theme::FontSize::SM),
+                                    )
+                                    .clicked()
+                                {
+                                    self.show_env_manager = true;
+                                    ui.close();
+                                }
                             });
 
                         // Apply selection change after popup closes
@@ -2096,6 +2123,119 @@ impl eframe::App for MercuryApp {
                         }
                     });
                 });
+        }
+
+        // Environment Manager Dialog
+        if self.show_env_manager {
+            if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+                self.show_env_manager = false;
+            }
+            let mut open = self.show_env_manager;
+            egui::Window::new("Environment Variables")
+                .open(&mut open)
+                .collapsible(false)
+                .resizable(true)
+                .default_width(500.0)
+                .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+                .frame(
+                    egui::Frame::NONE
+                        .fill(crate::theme::Colors::BG_MODAL)
+                        .stroke(egui::Stroke::new(
+                            crate::theme::StrokeWidth::THIN,
+                            crate::theme::Colors::BORDER_SUBTLE,
+                        ))
+                        .corner_radius(crate::theme::Radius::MD)
+                        .inner_margin(crate::theme::Spacing::MD),
+                )
+                .show(ctx, |ui| {
+                    let env_name = if self.selected_env < self.env_files.len() {
+                        self.env_files[self.selected_env].clone()
+                    } else {
+                        "None".to_string()
+                    };
+
+                    ui.heading(format!("Environment: {}", env_name));
+                    ui.separator();
+
+                    if self.env_variables.is_empty() {
+                        ui.label("No variables defined.");
+                    } else {
+                        egui::ScrollArea::vertical()
+                            .max_height(400.0)
+                            .show(ui, |ui| {
+                                egui::Grid::new("env_grid")
+                                    .striped(true)
+                                    .spacing([20.0, 8.0])
+                                    .show(ui, |ui| {
+                                        ui.label(egui::RichText::new("Key").strong());
+                                        ui.label(egui::RichText::new("Value").strong());
+                                        ui.end_row();
+
+                                        let secret_pattern = Regex::new(
+                                            r"(?i)(key|token|secret|password|auth|credential)",
+                                        )
+                                        .unwrap();
+                                        let mut keys: Vec<_> =
+                                            self.env_variables.keys().cloned().collect();
+                                        keys.sort();
+
+                                        for key in keys {
+                                            let value =
+                                                self.env_variables.get(&key).unwrap().clone();
+                                            ui.horizontal(|ui| {
+                                                if ui
+                                                    .small_button("📋")
+                                                    .on_hover_text("Copy {{variable}}")
+                                                    .clicked()
+                                                {
+                                                    ui.ctx().copy_text(format!("{{{{{}}}}}", key));
+                                                }
+                                                ui.label(egui::RichText::new(&key).monospace());
+                                            });
+
+                                            if secret_pattern.is_match(&key) {
+                                                let id = ui.make_persistent_id(&key);
+                                                let is_visible = ui.memory(|mem| {
+                                                    mem.data.get_temp(id).unwrap_or(false)
+                                                });
+
+                                                ui.horizontal(|ui| {
+                                                    if is_visible {
+                                                        ui.monospace(&value);
+                                                    } else {
+                                                        ui.monospace("********");
+                                                    }
+
+                                                    if ui
+                                                        .small_button(if is_visible {
+                                                            "🙈"
+                                                        } else {
+                                                            "👁"
+                                                        })
+                                                        .clicked()
+                                                    {
+                                                        ui.memory_mut(|mem| {
+                                                            mem.data.insert_temp(id, !is_visible)
+                                                        });
+                                                    }
+                                                });
+                                            } else {
+                                                ui.monospace(&value);
+                                            }
+                                            ui.end_row();
+                                        }
+                                    });
+                            });
+                    }
+
+                    ui.add_space(10.0);
+                    ui.horizontal(|ui| {
+                        if ui.button("Close").clicked() {
+                            self.show_env_manager = false;
+                        }
+                    });
+                });
+            self.show_env_manager = open;
         }
 
         // Delete Confirmation Dialog

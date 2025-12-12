@@ -998,6 +998,29 @@ impl MercuryApp {
                                 }
                             }
                         }
+
+                        // Variables Button (Draw ON TOP of TextEdit, LEFT of Format button)
+                        let vars_rect = egui::Rect::from_min_size(
+                            top_right - egui::vec2(65.0, 0.0),
+                            egui::vec2(30.0, 20.0),
+                        );
+                        if ui
+                            .put(
+                                vars_rect,
+                                egui::Label::new(
+                                    egui::RichText::new("{{}}")
+                                        .size(FontSize::MD)
+                                        .strong()
+                                        .color(Colors::PRIMARY),
+                                )
+                                .sense(egui::Sense::click()),
+                            )
+                            .on_hover_cursor(egui::CursorIcon::PointingHand)
+                            .on_hover_text("Open Variables (Env Manager)")
+                            .clicked()
+                        {
+                            self.show_env_manager = true;
+                        }
                     }
                     1 => {
                         // Headers with smart variables
