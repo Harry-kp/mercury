@@ -139,6 +139,8 @@ pub struct MercuryApp {
     expanded_folders: HashSet<PathBuf>,
     file_watcher_error: Option<String>,
     pub show_env_manager: bool,
+    pub new_var_key: String,
+    pub new_var_value: String,
 }
 
 // Timeline entry for request history
@@ -241,6 +243,8 @@ impl MercuryApp {
             expanded_folders: HashSet::new(),
             file_watcher_error: None,
             show_env_manager: false,
+            new_var_key: String::new(),
+            new_var_value: String::new(),
         };
 
         // Restore saved state
@@ -763,6 +767,41 @@ impl MercuryApp {
         } else {
             Err("No workspace loaded".to_string())
         }
+    }
+
+    fn add_env_variable(&mut self) {
+        if self.new_var_key.is_empty() {
+            return;
+        }
+
+        let key = self.new_var_key.trim().to_string();
+        let value = self.new_var_value.trim().to_string();
+
+        self.env_variables.insert(key.clone(), value.clone());
+
+        if self.selected_env < self.env_files.len() {
+            if let Some(workspace) = &self.workspace_path {
+                let env_file = workspace.join(&self.env_files[self.selected_env]);
+                let file = fs::OpenOptions::new().append(true).open(env_file);
+
+                if let Ok(mut f) = file {
+                    use std::io::Write;
+                    let needs_quote =
+                        value.contains(' ') || value.contains('\n') || value.contains('"');
+                    let written_value = if needs_quote {
+                        format!("\"{}\"", value.replace("\"", "\\\""))
+                    } else {
+                        value
+                    };
+
+                    if let Err(e) = writeln!(f, "\n{}={}", key, written_value) {
+                        eprintln!("Failed to append env var: {}", e);
+                    }
+                }
+            }
+        }
+        self.new_var_key.clear();
+        self.new_var_value.clear();
     }
 
     pub fn execute_request(&mut self, ctx: &egui::Context) {
@@ -2155,6 +2194,25 @@ impl eframe::App for MercuryApp {
                     };
 
                     ui.heading(format!("Environment: {}", env_name));
+                    ui.separator();
+
+                    ui.horizontal(|ui| {
+                        ui.label("Add New:");
+                        ui.add(
+                            egui::TextEdit::singleline(&mut self.new_var_key)
+                                .hint_text("KEY")
+                                .desired_width(120.0),
+                        );
+                        ui.label("=");
+                        ui.add(
+                            egui::TextEdit::singleline(&mut self.new_var_value)
+                                .hint_text("VALUE")
+                                .desired_width(180.0),
+                        );
+                        if ui.button("Add").clicked() {
+                            self.add_env_variable();
+                        }
+                    });
                     ui.separator();
 
                     if self.env_variables.is_empty() {
