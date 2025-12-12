@@ -34,11 +34,11 @@ Your data is stored in plain `.http` files in the folder you choose as your work
 
 ### How do I import from Postman?
 
-Direct Postman import is coming soon. For now:
-
-1. In Postman, right-click a request → **Copy as cURL**
-2. In Mercury, paste with `⌘+V` / `Ctrl+V`
-3. Mercury parses the cURL and fills in the request
+1. In Postman, export your collection (File → Export Collection)
+2. Choose **Collection v2.1** format
+3. In Mercury, go to **Help → Import Postman...**
+4. Select your exported JSON file
+5. Mercury creates `.http` files for each request
 
 ### How do I import from Insomnia?
 

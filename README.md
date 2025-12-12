@@ -126,6 +126,7 @@ Variables are loaded from `.env` files in your workspace.
 - **History** — Timeline of all requests with restore
 - **Focus Mode** — Distraction-free editing
 - **cURL Import** — Paste cURL commands directly
+- **Collection Import** — Import from Postman or Insomnia
 - **Syntax Highlighting** — JSON responses beautifully formatted
 - **Dark Mode** — Easy on the eyes, built for late nights
 

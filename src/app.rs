@@ -106,6 +106,7 @@ pub struct MercuryApp {
     pub should_execute_request: bool,
     pub should_open_folder_dialog: bool,
     pub should_open_insomnia_import: bool,
+    pub should_open_postman_import: bool,
     pub should_focus_search: bool,
     pub should_focus_url_bar: bool,
     pub should_copy_curl: bool,
@@ -212,6 +213,7 @@ impl MercuryApp {
             should_execute_request: false,
             should_open_folder_dialog: false,
             should_open_insomnia_import: false,
+            should_open_postman_import: false,
             should_focus_search: false,
             should_focus_url_bar: false,
             should_copy_curl: false,
@@ -1406,6 +1408,57 @@ impl eframe::App for MercuryApp {
             });
         }
 
+        if self.should_open_postman_import {
+            self.should_open_postman_import = false;
+            let current_workspace = self.workspace_path.clone();
+            let folder_tx = self.folder_tx.clone();
+
+            std::thread::spawn(move || {
+                if let Some(file_path) = rfd::FileDialog::new()
+                    .add_filter("Postman Collection", &["json"])
+                    .set_title("Select Postman Collection File")
+                    .pick_file()
+                {
+                    // Determine where to save:
+                    // 1. If we have a workspace, use it.
+                    // 2. If not, ask user to pick a folder.
+                    let target_folder = if let Some(ws_path) = current_workspace {
+                        Some(ws_path)
+                    } else {
+                        rfd::FileDialog::new()
+                            .set_title("Choose where to save imported collection")
+                            .set_directory(
+                                dirs::document_dir()
+                                    .unwrap_or_else(|| std::path::PathBuf::from("~")),
+                            )
+                            .set_file_name("Mercury")
+                            .pick_folder()
+                    };
+
+                    if let Some(folder_path) = target_folder {
+                        match crate::postman_importer::import_postman_collection(
+                            &file_path,
+                            &folder_path,
+                        ) {
+                            Ok((req_count, env_count)) => {
+                                println!(
+                                    "✅ Imported {} requests and {} environments to {}",
+                                    req_count,
+                                    env_count,
+                                    folder_path.display()
+                                );
+                                // Always reload workspace (if we picked a new one, or just refreshed current)
+                                let _ = folder_tx.send(folder_path);
+                            }
+                            Err(e) => {
+                                eprintln!("❌ Import failed: {}", e);
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
         if self.should_focus_search {
             self.should_focus_search = false;
             ctx.memory_mut(|mem| mem.request_focus(egui::Id::new("search_box")));
@@ -1675,6 +1728,10 @@ impl eframe::App for MercuryApp {
                                 }
                                 if ui.selectable_label(false, "Import Insomnia...").clicked() {
                                     self.should_open_insomnia_import = true;
+                                    ui.close();
+                                }
+                                if ui.selectable_label(false, "Import Postman...").clicked() {
+                                    self.should_open_postman_import = true;
                                     ui.close();
                                 }
                             });
