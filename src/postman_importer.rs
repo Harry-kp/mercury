@@ -14,6 +14,32 @@ fn sanitize_filename(name: &str) -> String {
         .collect()
 }
 
+/// URL-encodes a string for use in query parameters or path segments.
+fn url_encode(s: &str) -> String {
+    let mut encoded = String::new();
+    for c in s.chars() {
+        match c {
+            'A'..='Z' | 'a'..='z' | '0'..='9' | '-' | '_' | '.' | '~' => encoded.push(c),
+            _ => {
+                for byte in c.to_string().bytes() {
+                    encoded.push_str(&format!("%{:02X}", byte));
+                }
+            }
+        }
+    }
+    encoded
+}
+
+/// Escapes a value for use in .env files.
+/// Wraps values containing special characters in double quotes.
+fn escape_env_value(value: &str) -> String {
+    if value.contains('=') || value.contains('\n') || value.contains('"') || value.contains(' ') {
+        format!("\"{}\"", value.replace('"', "\\\""))
+    } else {
+        value.to_string()
+    }
+}
+
 #[derive(Debug, Deserialize)]
 struct PostmanCollection {
     info: PostmanInfo,
@@ -122,11 +148,21 @@ fn reconstruct_url(url: &PostmanUrl) -> String {
                 raw_url.clone()
             } else {
                 let proto = protocol.as_deref().unwrap_or("https");
-                let host_str = host.join(".");
+                let host_str = if host.is_empty() {
+                    "localhost".to_string()
+                } else {
+                    host.join(".")
+                };
                 let path_str = if path.is_empty() {
                     String::new()
                 } else {
-                    format!("/{}", path.join("/"))
+                    format!(
+                        "/{}",
+                        path.iter()
+                            .map(|p| url_encode(p))
+                            .collect::<Vec<_>>()
+                            .join("/")
+                    )
                 };
                 let query_str = if query.is_empty() {
                     String::new()
@@ -134,7 +170,7 @@ fn reconstruct_url(url: &PostmanUrl) -> String {
                     let active_params: Vec<String> = query
                         .iter()
                         .filter(|q| !q.disabled)
-                        .map(|q| format!("{}={}", q.key, q.value))
+                        .map(|q| format!("{}={}", url_encode(&q.key), url_encode(&q.value)))
                         .collect();
                     if active_params.is_empty() {
                         String::new()
@@ -162,7 +198,8 @@ fn reconstruct_url(url: &PostmanUrl) -> String {
 /// - If item contains a request: creates a .http file
 /// - If item contains sub-items: creates a folder and recursively processes children
 /// - If item is empty: returns 0
-fn process_item(item: &PostmanItem, parent_dir: &Path, _depth: usize) -> Result<usize, String> {
+#[allow(clippy::only_used_in_recursion)]
+fn process_item(item: &PostmanItem, parent_dir: &Path, depth: usize) -> Result<usize, String> {
     if let Some(request) = &item.request {
         // This is a request - create .http file
         let file_name = format!("{}.http", sanitize_filename(&item.name));
@@ -203,7 +240,7 @@ fn process_item(item: &PostmanItem, parent_dir: &Path, _depth: usize) -> Result<
 
         let mut count = 0;
         for child in &item.item {
-            count += process_item(child, &folder_path, _depth + 1)?;
+            count += process_item(child, &folder_path, depth + 1)?;
         }
         Ok(count)
     } else {
@@ -257,7 +294,7 @@ pub fn import_postman_collection(
                 Value::Bool(b) => b.to_string(),
                 _ => var.value.to_string(),
             };
-            env_content.push_str(&format!("{}={}\n", var.key, value_str));
+            env_content.push_str(&format!("{}={}\n", var.key, escape_env_value(&value_str)));
         }
 
         fs::write(&env_path, env_content)
@@ -679,6 +716,59 @@ mod tests {
         assert_eq!(
             sanitize_filename("My API: v1/users?all"),
             "my-api-v1usersall"
+        );
+    }
+
+    #[test]
+    fn test_url_encoding() {
+        assert_eq!(url_encode("hello world"), "hello%20world");
+        assert_eq!(url_encode("a=b&c=d"), "a%3Db%26c%3Dd");
+        assert_eq!(url_encode("simple"), "simple");
+    }
+
+    #[test]
+    fn test_escape_env_value() {
+        assert_eq!(escape_env_value("simple"), "simple");
+        assert_eq!(escape_env_value("has space"), "\"has space\"");
+        assert_eq!(escape_env_value("has=equals"), "\"has=equals\"");
+        assert_eq!(escape_env_value("has\"quote"), "\"has\\\"quote\"");
+    }
+
+    #[test]
+    fn test_empty_host_url_reconstruction() {
+        let url = PostmanUrl::Object {
+            raw: None,
+            protocol: Some("https".to_string()),
+            host: vec![],
+            path: vec!["api".to_string()],
+            query: vec![],
+        };
+        assert_eq!(reconstruct_url(&url), "https://localhost/api");
+    }
+
+    #[test]
+    fn test_disabled_query_params_filtered() {
+        let url = PostmanUrl::Object {
+            raw: None,
+            protocol: Some("https".to_string()),
+            host: vec!["example".to_string(), "com".to_string()],
+            path: vec!["search".to_string()],
+            query: vec![
+                PostmanQueryParam {
+                    key: "active".to_string(),
+                    value: "yes".to_string(),
+                    disabled: false,
+                },
+                PostmanQueryParam {
+                    key: "disabled".to_string(),
+                    value: "no".to_string(),
+                    disabled: true,
+                },
+            ],
+        };
+        assert_eq!(
+            reconstruct_url(&url),
+            "https://example.com/search?active=yes"
         );
     }
 }

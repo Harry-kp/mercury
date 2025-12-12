@@ -63,7 +63,7 @@ Mercury can import Postman Collection v2.1 files (JSON format).
 1. In Postman, click **Export** on your collection (or go to File → Export Collection)
 2. Choose **Collection v2.1** format
 3. Save as JSON file
-4. In Mercury, click **Import Postman...** in the Help menu
+4. In Mercury, click **Import Postman...** in the Open menu
 5. Select your exported file
 6. Mercury creates:
    - `.http` files for each request
