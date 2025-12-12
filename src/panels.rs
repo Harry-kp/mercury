@@ -285,7 +285,7 @@ impl MercuryApp {
             format!("{} min ago", (diff / 60.0) as i32)
         } else if diff < 86400.0 {
             format!("{} hr ago", (diff / 3600.0) as i32)
-        } else if diff < 172800.0 {
+        } else if diff < 86400.0 * 2.0 {
             "Yesterday".to_string()
         } else {
             format!("{} days ago", (diff / 86400.0) as i32)
@@ -355,7 +355,11 @@ impl MercuryApp {
 
                                     let limit = crate::constants::HISTORY_URL_TRUNCATE_LENGTH;
                                     let url = if entry.url.len() > limit {
-                                        format!("{}...", &entry.url[..limit - 3])
+                                        if limit >= 3 {
+                                            format!("{}...", &entry.url[..limit - 3])
+                                        } else {
+                                            entry.url.chars().take(limit).collect::<String>()
+                                        }
                                     } else {
                                         entry.url.clone()
                                     };

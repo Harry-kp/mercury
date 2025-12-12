@@ -291,7 +291,8 @@ pub fn close_button(ui: &mut Ui, size: f32) -> egui::Response {
         // Use a stroke for crisp vector lines
         let stroke = egui::Stroke::new(StrokeWidth::MEDIUM, color);
 
-        let padding = size * 0.25;
+        const CLOSE_BUTTON_PADDING_RATIO: f32 = 0.25;
+        let padding = size * CLOSE_BUTTON_PADDING_RATIO;
         let p1 = rect.min + egui::vec2(padding, padding);
         let p2 = rect.max - egui::vec2(padding, padding);
         let p3 = egui::pos2(rect.max.x - padding, rect.min.y + padding);

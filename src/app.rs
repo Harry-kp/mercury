@@ -899,22 +899,21 @@ impl MercuryApp {
             let _ = fs::create_dir_all(parent);
         }
 
-        let to_save: Vec<_> = self
-            .temp_requests
-            .iter()
-            .rev()
-            .take(50)
-            .rev()
-            .cloned()
-            .collect();
+        let skip = self.temp_requests.len().saturating_sub(50);
+        let to_save: Vec<_> = self.temp_requests.iter().skip(skip).cloned().collect();
 
         if let Ok(json) = serde_json::to_string_pretty(&to_save) {
-            let _ = fs::write(&path, json);
+            if let Err(e) = fs::write(&path, json) {
+                eprintln!("Failed to save temp history: {}", e);
+            }
         }
     }
 
     fn get_history_file_path() -> PathBuf {
-        let home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
+        // Fallback robust resolution for home directory
+        let home = dirs::home_dir()
+            .or_else(|| std::env::var("HOME").ok().map(PathBuf::from))
+            .unwrap_or_else(|| std::env::temp_dir());
         home.join(".mercury").join("history.json")
     }
 
@@ -931,20 +930,21 @@ impl MercuryApp {
         let cutoff = now - crate::constants::HISTORY_EXPIRY_SECONDS;
 
         // Filter by expiry, take most recent 50, preserve chronological order
-        let to_save: Vec<_> = self
+        // Filter by expiry, take most recent 50, preserve chronological order
+        let mut to_save: Vec<_> = self
             .timeline
             .iter()
             .filter(|e| e.timestamp > cutoff)
             .rev()
             .take(crate::constants::MAX_TIMELINE_ENTRIES)
             .cloned()
-            .collect::<Vec<_>>()
-            .into_iter()
-            .rev()
             .collect();
+        to_save.reverse();
 
         if let Ok(json) = serde_json::to_string_pretty(&to_save) {
-            let _ = fs::write(&path, json);
+            if let Err(e) = fs::write(&path, json) {
+                eprintln!("Failed to save history: {}", e);
+            }
         }
     }
 
@@ -1295,9 +1295,10 @@ impl eframe::App for MercuryApp {
                     // Truncate large response bodies for history storage
                     // Binary/Image responses already have placeholder text
                     let stored_body = if response.body.len() > 100_000 {
+                        let truncated: String = response.body.chars().take(10_000).collect();
                         format!(
                             "{}...[truncated, {} bytes total]",
-                            &response.body[..10_000],
+                            truncated,
                             response.body.len()
                         )
                     } else {

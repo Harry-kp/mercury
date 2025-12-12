@@ -1,3 +1,4 @@
+use regex::Regex;
 use serde::Deserialize;
 use serde_json::Value;
 use std::fs;
@@ -7,11 +8,20 @@ use std::path::Path;
 /// Converts to lowercase, replaces spaces with dashes, and removes
 /// characters that are invalid on Windows, macOS, or Linux filesystems.
 fn sanitize_filename(name: &str) -> String {
-    name.to_lowercase()
-        .replace(' ', "-")
-        .chars()
-        .filter(|c| !matches!(c, '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|'))
-        .collect()
+    // Regex to match any sequence of space or invalid filename characters
+    // Invalid: / \ : * ? " < > | and space
+    // Replace any such sequence with a single dash
+    let re = Regex::new(r#"[ /\\:\*\?"<>\|]+"#).unwrap();
+    let lower = name.to_lowercase();
+    let sanitized = re.replace_all(&lower, "-");
+    // Remove leading/trailing dashes
+    let sanitized = sanitized.trim_matches('-');
+    // If the result is empty, use a default name
+    if sanitized.is_empty() {
+        "untitled".to_string()
+    } else {
+        sanitized.to_string()
+    }
 }
 
 /// URL-encodes a string for use in query parameters or path segments.
@@ -37,6 +47,18 @@ fn escape_env_value(value: &str) -> String {
         format!("\"{}\"", value.replace('"', "\\\""))
     } else {
         value.to_string()
+    }
+}
+
+/// Sanitizes an environment variable key.
+/// Replaces invalid characters with underscores.
+fn sanitize_env_key(key: &str) -> String {
+    let re = Regex::new(r#"[^a-zA-Z0-9_]"#).unwrap();
+    let sanitized = re.replace_all(key, "_");
+    if sanitized.chars().next().map_or(false, |c| c.is_numeric()) {
+        format!("_{}", sanitized)
+    } else {
+        sanitized.to_string()
     }
 }
 
@@ -198,8 +220,7 @@ fn reconstruct_url(url: &PostmanUrl) -> String {
 /// - If item contains a request: creates a .http file
 /// - If item contains sub-items: creates a folder and recursively processes children
 /// - If item is empty: returns 0
-#[allow(clippy::only_used_in_recursion)]
-fn process_item(item: &PostmanItem, parent_dir: &Path, depth: usize) -> Result<usize, String> {
+fn process_item(item: &PostmanItem, parent_dir: &Path) -> Result<usize, String> {
     if let Some(request) = &item.request {
         // This is a request - create .http file
         let file_name = format!("{}.http", sanitize_filename(&item.name));
@@ -240,7 +261,7 @@ fn process_item(item: &PostmanItem, parent_dir: &Path, depth: usize) -> Result<u
 
         let mut count = 0;
         for child in &item.item {
-            count += process_item(child, &folder_path, depth + 1)?;
+            count += process_item(child, &folder_path)?;
         }
         Ok(count)
     } else {
@@ -294,7 +315,11 @@ pub fn import_postman_collection(
                 Value::Bool(b) => b.to_string(),
                 _ => var.value.to_string(),
             };
-            env_content.push_str(&format!("{}={}\n", var.key, escape_env_value(&value_str)));
+            env_content.push_str(&format!(
+                "{}={}\n",
+                sanitize_env_key(&var.key),
+                escape_env_value(&value_str)
+            ));
         }
 
         fs::write(&env_path, env_content)
@@ -305,7 +330,7 @@ pub fn import_postman_collection(
     // Process all items (requests and folders)
     let mut request_count = 0;
     for item in &collection.item {
-        request_count += process_item(item, output_dir, 0)?;
+        request_count += process_item(item, output_dir)?;
     }
 
     Ok((request_count, env_count))
@@ -702,20 +727,20 @@ mod tests {
         // Basic spaces to dashes
         assert_eq!(sanitize_filename("Get User"), "get-user");
 
-        // Special characters removed
-        assert_eq!(sanitize_filename("users/list"), "userslist");
-        assert_eq!(sanitize_filename("test:request"), "testrequest");
+        // Special characters replaced with dashes
+        assert_eq!(sanitize_filename("users/list"), "users-list");
+        assert_eq!(sanitize_filename("test:request"), "test-request");
         assert_eq!(sanitize_filename("what?"), "what");
-        assert_eq!(sanitize_filename("file<name>"), "filename");
-        assert_eq!(sanitize_filename("a|b|c"), "abc");
-        assert_eq!(sanitize_filename("test*star"), "teststar");
-        assert_eq!(sanitize_filename("back\\slash"), "backslash");
-        assert_eq!(sanitize_filename("quote\"test"), "quotetest");
+        assert_eq!(sanitize_filename("file<name>"), "file-name");
+        assert_eq!(sanitize_filename("a|b|c"), "a-b-c");
+        assert_eq!(sanitize_filename("test*star"), "test-star");
+        assert_eq!(sanitize_filename("back\\slash"), "back-slash");
+        assert_eq!(sanitize_filename("quote\"test"), "quote-test");
 
         // Combined
         assert_eq!(
             sanitize_filename("My API: v1/users?all"),
-            "my-api-v1usersall"
+            "my-api-v1-users-all"
         );
     }
 
@@ -770,5 +795,49 @@ mod tests {
             reconstruct_url(&url),
             "https://example.com/search?active=yes"
         );
+    }
+
+    #[test]
+    fn test_disabled_headers_excluded() {
+        let dir = TempDir::new().unwrap();
+        let json_content = r#"{
+            "info": {
+                "name": "Test",
+                "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+            },
+            "item": [
+                {
+                    "name": "Request",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Active",
+                                "value": "yes",
+                                "disabled": false
+                            },
+                            {
+                                "key": "Inactive",
+                                "value": "no",
+                                "disabled": true
+                            }
+                        ],
+                        "url": "https://example.com"
+                    }
+                }
+            ],
+            "variable": []
+        }"#;
+        let file_path = create_temp_file(dir.path(), "collection.json", json_content);
+        let output_dir = dir.path().join("output");
+        fs::create_dir(&output_dir).unwrap();
+
+        let result = import_postman_collection(&file_path, &output_dir);
+        assert!(result.is_ok());
+
+        let http_file = output_dir.join("request.http");
+        let content = fs::read_to_string(http_file).unwrap();
+        assert!(content.contains("Active: yes"));
+        assert!(!content.contains("Inactive: no"));
     }
 }

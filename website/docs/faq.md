@@ -36,7 +36,7 @@ Your data is stored in plain `.http` files in the folder you choose as your work
 
 1. In Postman, export your collection (File → Export Collection)
 2. Choose **Collection v2.1** format
-3. In Mercury, go to **Help → Import Postman...**
+3. In Mercury, go to **Open → Import Postman...**
 4. Select your exported JSON file
 5. Mercury creates `.http` files for each request
 
