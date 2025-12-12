@@ -3,6 +3,17 @@ use serde_json::Value;
 use std::fs;
 use std::path::Path;
 
+/// Sanitizes a name for use as a filename or directory name.
+/// Converts to lowercase, replaces spaces with dashes, and removes
+/// characters that are invalid on Windows, macOS, or Linux filesystems.
+fn sanitize_filename(name: &str) -> String {
+    name.to_lowercase()
+        .replace(' ', "-")
+        .chars()
+        .filter(|c| !matches!(c, '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|'))
+        .collect()
+}
+
 #[derive(Debug, Deserialize)]
 struct PostmanCollection {
     info: PostmanInfo,
@@ -151,14 +162,10 @@ fn reconstruct_url(url: &PostmanUrl) -> String {
 /// - If item contains a request: creates a .http file
 /// - If item contains sub-items: creates a folder and recursively processes children
 /// - If item is empty: returns 0
-fn process_item(
-    item: &PostmanItem,
-    parent_dir: &Path,
-    depth: usize,
-) -> Result<usize, String> {
+fn process_item(item: &PostmanItem, parent_dir: &Path, _depth: usize) -> Result<usize, String> {
     if let Some(request) = &item.request {
         // This is a request - create .http file
-        let file_name = format!("{}.http", item.name.to_lowercase().replace(' ', "-"));
+        let file_name = format!("{}.http", sanitize_filename(&item.name));
         let file_path = parent_dir.join(&file_name);
 
         let mut http_content = String::new();
@@ -190,14 +197,13 @@ fn process_item(
         Ok(1)
     } else if !item.item.is_empty() {
         // This is a folder - create directory and recurse
-        let folder_name = item.name.to_lowercase().replace(' ', "-");
+        let folder_name = sanitize_filename(&item.name);
         let folder_path = parent_dir.join(&folder_name);
-        fs::create_dir_all(&folder_path)
-            .map_err(|e| format!("Failed to create folder: {}", e))?;
+        fs::create_dir_all(&folder_path).map_err(|e| format!("Failed to create folder: {}", e))?;
 
         let mut count = 0;
         for child in &item.item {
-            count += process_item(child, &folder_path, depth + 1)?;
+            count += process_item(child, &folder_path, _depth + 1)?;
         }
         Ok(count)
     } else {
@@ -240,7 +246,7 @@ pub fn import_postman_collection(
     // Extract collection variables to .env file
     let mut env_count = 0;
     if !collection.variable.is_empty() {
-        let collection_name = collection.info.name.to_lowercase().replace(' ', "-");
+        let collection_name = sanitize_filename(&collection.info.name);
         let env_path = output_dir.join(format!(".env.{}", collection_name));
 
         let mut env_content = String::new();
@@ -644,6 +650,35 @@ mod tests {
                 },
             ],
         };
-        assert_eq!(reconstruct_url(&url3), "https://api.example.com/search?q=test&limit=10");
+        assert_eq!(
+            reconstruct_url(&url3),
+            "https://api.example.com/search?q=test&limit=10"
+        );
+
+        // Test with URL string variant
+        let url4 = PostmanUrl::String("https://example.com/simple".to_string());
+        assert_eq!(reconstruct_url(&url4), "https://example.com/simple");
+    }
+
+    #[test]
+    fn test_sanitize_filename() {
+        // Basic spaces to dashes
+        assert_eq!(sanitize_filename("Get User"), "get-user");
+
+        // Special characters removed
+        assert_eq!(sanitize_filename("users/list"), "userslist");
+        assert_eq!(sanitize_filename("test:request"), "testrequest");
+        assert_eq!(sanitize_filename("what?"), "what");
+        assert_eq!(sanitize_filename("file<name>"), "filename");
+        assert_eq!(sanitize_filename("a|b|c"), "abc");
+        assert_eq!(sanitize_filename("test*star"), "teststar");
+        assert_eq!(sanitize_filename("back\\slash"), "backslash");
+        assert_eq!(sanitize_filename("quote\"test"), "quotetest");
+
+        // Combined
+        assert_eq!(
+            sanitize_filename("My API: v1/users?all"),
+            "my-api-v1usersall"
+        );
     }
 }
