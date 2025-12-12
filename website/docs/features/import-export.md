@@ -6,7 +6,7 @@ sidebar_position: 6
 
 # Import & Export
 
-> Migrate from other tools easily. Import from Insomnia or cURL, and export your requests as cURL commands.
+> Migrate from other tools easily. Import from Postman, Insomnia, or cURL, and export your requests as cURL commands.
 
 ## Import from Insomnia
 
@@ -56,12 +56,54 @@ your-workspace/
 
 ## Import from Postman
 
-Coming soon! For now, you can:
+Mercury can import Postman Collection v2.1 files (JSON format).
 
-1. Export from Postman as cURL commands
-2. Import each cURL command in Mercury
+### How to Import
 
-Or manually create `.http` files — they're just text!
+1. In Postman, click **Export** on your collection (or go to File → Export Collection)
+2. Choose **Collection v2.1** format
+3. Save as JSON file
+4. In Mercury, click **Import Postman...** in the Open menu
+5. Select your exported file
+6. Mercury creates:
+   - `.http` files for each request
+   - Folders matching your Postman folder structure
+   - `.env.{collection-name}` file for collection variables
+
+### What Gets Imported
+
+| Postman Item | Mercury Equivalent |
+|--------------|-------------------|
+| Requests | `.http` files |
+| Folders | Directories |
+| Collection Variables | `.env.{name}` file |
+| Headers | Headers in `.http` file |
+| Body (raw/JSON) | Body in `.http` file |
+| Query Parameters | URL with query string |
+
+### File Structure After Import
+
+If you import a Postman collection named "My API" with:
+- Folder "Auth" containing "Login" request
+- Folder "Users" with subfolder "Admin" containing "List Admins"
+- Top-level "Health Check" request
+- Collection variables: `base_url`, `token`
+
+Mercury creates:
+```
+your-workspace/
+├── .env.my-api            # Collection variables
+├── auth/
+│   └── login.http
+├── users/
+│   └── admin/
+│       └── list-admins.http
+└── health-check.http
+```
+
+:::tip Variable Preservation
+Postman variables like `{{base_url}}` are preserved in the `.http` files. Define them in your `.env` file to use them.
+:::
 
 ## Import from cURL
 

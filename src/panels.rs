@@ -109,6 +109,7 @@ impl MercuryApp {
                                                 )
                                                 .sense(egui::Sense::click()),
                                             )
+                                            .on_hover_cursor(egui::CursorIcon::PointingHand)
                                             .clicked()
                                         {
                                             // Load this request into the form
@@ -130,15 +131,7 @@ impl MercuryApp {
                                             egui::Layout::right_to_left(egui::Align::Center),
                                             |ui| {
                                                 ui.add_space(Spacing::SM);
-                                                if ui
-                                                    .add(
-                                                        egui::Label::new(
-                                                            egui::RichText::new("x")
-                                                                .size(FontSize::SM)
-                                                                .color(Colors::TEXT_MUTED),
-                                                        )
-                                                        .sense(egui::Sense::click()),
-                                                    )
+                                                if close_button(ui, FontSize::SM)
                                                     .on_hover_text("Remove from recent")
                                                     .clicked()
                                                 {
@@ -203,6 +196,7 @@ impl MercuryApp {
                                         )
                                         .sense(egui::Sense::click()),
                                     )
+                                    .on_hover_cursor(egui::CursorIcon::PointingHand)
                                     .clicked()
                                 {
                                     self.should_open_insomnia_import = true;
@@ -237,6 +231,7 @@ impl MercuryApp {
                                         )
                                         .sense(egui::Sense::click()),
                                     )
+                                    .on_hover_cursor(egui::CursorIcon::PointingHand)
                                     .clicked()
                                 {
                                     self.should_open_insomnia_import = true;
@@ -276,6 +271,27 @@ impl MercuryApp {
             });
     }
 
+    /// Format timestamp as relative human-readable string
+    fn format_timestamp(timestamp: f64) -> String {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs_f64();
+        let diff = now - timestamp;
+
+        if diff < 60.0 {
+            "Just now".to_string()
+        } else if diff < 3600.0 {
+            format!("{} min ago", (diff / 60.0) as i32)
+        } else if diff < 86400.0 {
+            format!("{} hr ago", (diff / 3600.0) as i32)
+        } else if diff < 172800.0 {
+            "Yesterday".to_string()
+        } else {
+            format!("{} days ago", (diff / 86400.0) as i32)
+        }
+    }
+
     /// Timeline content with proper scroll
     fn render_timeline_content(&mut self, ui: &mut Ui) {
         // Header with back link
@@ -288,18 +304,7 @@ impl MercuryApp {
             );
 
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui
-                    .add(
-                        egui::Label::new(
-                            egui::RichText::new("✕")
-                                .size(FontSize::MD)
-                                .color(Colors::TEXT_MUTED),
-                        )
-                        .sense(egui::Sense::click()),
-                    )
-                    .on_hover_text("Close")
-                    .clicked()
-                {
+                if close_button(ui, FontSize::MD).clicked() {
                     self.show_timeline = false;
                 }
             });
@@ -339,35 +344,56 @@ impl MercuryApp {
                             Colors::ERROR
                         };
 
-                        let response = ui.horizontal(|ui| {
-                            method_badge(ui, entry.method.as_str());
-                            ui.add_space(Spacing::XS);
+                        // Create a clickable row using a Frame for proper full-width hit area
+                        let row_response = egui::Frame::NONE
+                            .fill(egui::Color32::TRANSPARENT)
+                            .show(ui, |ui| {
+                                ui.set_min_width(ui.available_width());
+                                ui.horizontal(|ui| {
+                                    method_badge(ui, entry.method.as_str());
+                                    ui.add_space(Spacing::XS);
 
-                            let url = if entry.url.len() > 25 {
-                                format!("{}...", &entry.url[..22])
-                            } else {
-                                entry.url.clone()
-                            };
-                            ui.label(egui::RichText::new(url).size(FontSize::SM));
+                                    let limit = crate::constants::HISTORY_URL_TRUNCATE_LENGTH;
+                                    let url = if entry.url.len() > limit {
+                                        format!("{}...", &entry.url[..limit - 3])
+                                    } else {
+                                        entry.url.clone()
+                                    };
+                                    ui.label(egui::RichText::new(url).size(FontSize::SM));
 
-                            ui.with_layout(
-                                egui::Layout::right_to_left(egui::Align::Center),
-                                |ui| {
-                                    ui.label(
-                                        egui::RichText::new(format!("{}ms", entry.duration_ms))
-                                            .size(FontSize::XS)
-                                            .color(Colors::TEXT_MUTED),
+                                    ui.with_layout(
+                                        egui::Layout::right_to_left(egui::Align::Center),
+                                        |ui| {
+                                            ui.label(
+                                                egui::RichText::new(format!(
+                                                    "{}ms",
+                                                    entry.duration_ms
+                                                ))
+                                                .size(FontSize::XS)
+                                                .color(Colors::TEXT_MUTED),
+                                            );
+                                            ui.label(
+                                                egui::RichText::new(entry.status.to_string())
+                                                    .size(FontSize::XS)
+                                                    .color(status_color),
+                                            );
+                                            ui.add_space(Spacing::SM);
+                                            ui.label(
+                                                egui::RichText::new(Self::format_timestamp(
+                                                    entry.timestamp,
+                                                ))
+                                                .size(FontSize::XS)
+                                                .color(Colors::TEXT_MUTED),
+                                            );
+                                        },
                                     );
-                                    ui.label(
-                                        egui::RichText::new(entry.status.to_string())
-                                            .size(FontSize::XS)
-                                            .color(status_color),
-                                    );
-                                },
-                            );
-                        });
+                                });
+                            })
+                            .response
+                            .interact(egui::Sense::click())
+                            .on_hover_cursor(egui::CursorIcon::PointingHand);
 
-                        if response.response.clicked() {
+                        if row_response.clicked() {
                             self.method = entry.method.clone();
                             self.url = entry.url.clone();
                             self.body_text = entry.request_body.clone();
@@ -446,6 +472,7 @@ impl MercuryApp {
                                 )
                                 .sense(egui::Sense::click()),
                             )
+                            .on_hover_cursor(egui::CursorIcon::PointingHand)
                             .clicked()
                         {
                             save_clicked = true;
@@ -462,6 +489,7 @@ impl MercuryApp {
                             )
                             .sense(egui::Sense::click()),
                         )
+                        .on_hover_cursor(egui::CursorIcon::PointingHand)
                         .clicked()
                     {
                         self.show_timeline = true;
@@ -788,15 +816,17 @@ impl MercuryApp {
             };
 
             // Use a simple popup for method selection
-            let method_response = ui.add(
-                egui::Label::new(
-                    egui::RichText::new(self.method.as_str())
-                        .color(method_color)
-                        .strong()
-                        .size(FontSize::MD),
+            let method_response = ui
+                .add(
+                    egui::Label::new(
+                        egui::RichText::new(self.method.as_str())
+                            .color(method_color)
+                            .strong()
+                            .size(FontSize::MD),
+                    )
+                    .sense(egui::Sense::click()),
                 )
-                .sense(egui::Sense::click()),
-            );
+                .on_hover_cursor(egui::CursorIcon::PointingHand);
 
             egui::Popup::menu(&method_response)
                 .width(Layout::METHOD_POPUP_WIDTH)
@@ -952,6 +982,7 @@ impl MercuryApp {
                                 )
                                 .sense(egui::Sense::click()),
                             )
+                            .on_hover_cursor(egui::CursorIcon::PointingHand)
                             .on_hover_text("Format JSON")
                             .clicked()
                         {
@@ -1205,15 +1236,7 @@ impl MercuryApp {
 
                     // Remove button - bigger, closer
                     if (!key.is_empty() || !value.is_empty())
-                        && ui
-                            .add(
-                                egui::Label::new(
-                                    egui::RichText::new("×")
-                                        .size(FontSize::LG)
-                                        .color(Colors::TEXT_MUTED),
-                                )
-                                .sense(egui::Sense::click()),
-                            )
+                        && close_button(ui, FontSize::SM)
                             .on_hover_text("Remove")
                             .clicked()
                     {
@@ -1268,6 +1291,7 @@ impl MercuryApp {
                 )
                 .sense(egui::Sense::click()),
             )
+            .on_hover_cursor(egui::CursorIcon::PointingHand)
             .on_hover_text("Toggle edit mode")
             .clicked()
         {
@@ -1298,5 +1322,59 @@ impl MercuryApp {
                 }
             });
         }
+    }
+}
+
+#[cfg(test)]
+mod timestamp_tests {
+    use super::MercuryApp;
+
+    fn get_current_time() -> f64 {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs_f64()
+    }
+
+    #[test]
+    fn test_format_timestamp_just_now() {
+        let now = get_current_time();
+        assert_eq!(MercuryApp::format_timestamp(now), "Just now");
+        assert_eq!(MercuryApp::format_timestamp(now - 30.0), "Just now");
+        assert_eq!(MercuryApp::format_timestamp(now - 59.0), "Just now");
+    }
+
+    #[test]
+    fn test_format_timestamp_minutes() {
+        let now = get_current_time();
+        assert_eq!(MercuryApp::format_timestamp(now - 60.0), "1 min ago");
+        assert_eq!(MercuryApp::format_timestamp(now - 120.0), "2 min ago");
+        assert_eq!(MercuryApp::format_timestamp(now - 300.0), "5 min ago");
+        assert_eq!(MercuryApp::format_timestamp(now - 3599.0), "59 min ago");
+    }
+
+    #[test]
+    fn test_format_timestamp_hours() {
+        let now = get_current_time();
+        assert_eq!(MercuryApp::format_timestamp(now - 3600.0), "1 hr ago");
+        assert_eq!(MercuryApp::format_timestamp(now - 7200.0), "2 hr ago");
+        assert_eq!(MercuryApp::format_timestamp(now - 43200.0), "12 hr ago");
+        assert_eq!(MercuryApp::format_timestamp(now - 86399.0), "23 hr ago");
+    }
+
+    #[test]
+    fn test_format_timestamp_yesterday() {
+        let now = get_current_time();
+        assert_eq!(MercuryApp::format_timestamp(now - 86400.0), "Yesterday");
+        assert_eq!(MercuryApp::format_timestamp(now - 100000.0), "Yesterday");
+        assert_eq!(MercuryApp::format_timestamp(now - 172799.0), "Yesterday");
+    }
+
+    #[test]
+    fn test_format_timestamp_days() {
+        let now = get_current_time();
+        assert_eq!(MercuryApp::format_timestamp(now - 172800.0), "2 days ago");
+        assert_eq!(MercuryApp::format_timestamp(now - 259200.0), "3 days ago");
+        assert_eq!(MercuryApp::format_timestamp(now - 604800.0), "7 days ago");
     }
 }
