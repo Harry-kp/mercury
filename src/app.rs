@@ -913,7 +913,7 @@ impl MercuryApp {
         // Fallback robust resolution for home directory
         let home = dirs::home_dir()
             .or_else(|| std::env::var("HOME").ok().map(PathBuf::from))
-            .unwrap_or_else(|| std::env::temp_dir());
+            .unwrap_or_else(std::env::temp_dir);
         home.join(".mercury").join("history.json")
     }
 

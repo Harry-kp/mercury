@@ -55,7 +55,7 @@ fn escape_env_value(value: &str) -> String {
 fn sanitize_env_key(key: &str) -> String {
     let re = Regex::new(r#"[^a-zA-Z0-9_]"#).unwrap();
     let sanitized = re.replace_all(key, "_");
-    if sanitized.chars().next().map_or(false, |c| c.is_numeric()) {
+    if sanitized.chars().next().is_some_and(|c| c.is_numeric()) {
         format!("_{}", sanitized)
     } else {
         sanitized.to_string()
