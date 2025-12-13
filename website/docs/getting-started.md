@@ -34,10 +34,16 @@ Key philosophy:
 ## Installation
 
 ### macOS
+**Option 1: One-Line Installer (Recommended)**
+Open your terminal and run:
+```bash
+curl -sL https://raw.githubusercontent.com/Harry-kp/mercury/master/install.sh | bash
+```
 
+**Option 2: Manual Download**
 Download the latest `.dmg` from [GitHub Releases](https://github.com/Harry-kp/mercury/releases), open it, and drag Mercury to your Applications folder.
 
-Or build from source:
+**Option 3: Build from Source**
 ```bash
 cargo install mercury
 ```

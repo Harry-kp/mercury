@@ -69,7 +69,7 @@ Mercury is built on principles, not features:
 
 | Platform | Command |
 |----------|---------|
-| **macOS** | Download `.dmg`, right-click → Open |
+| **macOS** | `curl -sL https://raw.githubusercontent.com/Harry-kp/mercury/master/install.sh \| bash` |
 | **Windows** | Download `.exe`, click "More info" → "Run anyway" |
 | **Linux** | `chmod +x mercury.AppImage && ./mercury.AppImage` |
 

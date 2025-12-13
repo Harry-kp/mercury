@@ -54,12 +54,14 @@ jobs:
               <string>${{ steps.version.outputs.VERSION }}</string>
               <key>CFBundleShortVersionString</key>
               <string>${{ steps.version.outputs.VERSION }}</string>
+              <key>CFBundleIconFile</key>
+              <string>icon.png</string>
           </dict>
           </plist>
           EOF
           
           # Ad-hoc code signing (required for Apple Silicon)
-          codesign --force --deep --sign - Mercury.app
+          codesign --force --deep --sign - --entitlements assets/entitlements.plist --options runtime Mercury.app
           
           hdiutil create -volname Mercury -srcfolder Mercury.app -ov -format UDZO mercury-macos-${{ matrix.target_name }}.dmg
           
