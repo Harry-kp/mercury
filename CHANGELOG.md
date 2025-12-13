@@ -31,4 +31,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Native performance (~5MB binary, <50ms startup)
 - 100% local storage
 - Cross-platform: macOS, Linux, Windows
+- **Easy Installation**: One-line installer for macOS (`curl | bash`)
+- **Ad-hoc Signing**: Improved Apple Silicon support with hardened runtime entitlements
 - No telemetry, no accounts
