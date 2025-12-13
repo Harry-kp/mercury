@@ -6,6 +6,11 @@ on:
 
 jobs:
   add-to-project:
+    # Only run if issue has relevant labels - prevents "No jobs were run" emails
+    if: |
+      contains(github.event.issue.labels.*.name, 'Q1-2026') ||
+      contains(github.event.issue.labels.*.name, 'priority: critical') ||
+      contains(github.event.issue.labels.*.name, 'priority: high')
     runs-on: ubuntu-latest
     permissions:
       issues: read
