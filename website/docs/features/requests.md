@@ -169,6 +169,24 @@ The button animates while the request is in progress.
 
 ![Sending request - Replace with: Screenshot showing animated send button during request](/img/screenshots/placeholder.png)
 
+## Defaults
+
+Mercury uses sensible defaults so you can focus on your API, not configuration:
+
+| Setting | Default | Behavior |
+|---------|---------|----------|
+| **Timeout** | 30 seconds | Requests fail after 30s of no response |
+| **Redirects** | Followed | HTTP redirects followed automatically (up to 10) |
+| **Content-Type** | Auto-detect | JSON body → `application/json` header added automatically |
+| **URL Scheme** | Auto-prefix | `example.com` → `http://example.com` |
+
+:::tip URL Validation
+Mercury validates URLs before sending:
+- Empty URLs show an error
+- Missing protocol is auto-prefixed with `http://`
+- Unresolved `{{variables}}` show a warning
+:::
+
 ## Request Actions
 
 Right-click on a request in the sidebar for actions:
