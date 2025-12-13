@@ -60,6 +60,8 @@ impl Colors {
     pub const METHOD_PUT: Color32 = Color32::from_rgb(245, 158, 11); // Amber - update
     pub const METHOD_PATCH: Color32 = Color32::from_rgb(234, 179, 8); // Yellow - partial
     pub const METHOD_DELETE: Color32 = Color32::from_rgb(239, 68, 68); // Red - danger
+    pub const METHOD_HEAD: Color32 = Color32::from_rgb(86, 182, 194); // Cyan - metadata only
+    pub const METHOD_OPTIONS: Color32 = Color32::from_rgb(209, 154, 102); // Orange/brown - preflight
 
     pub const SELECTED_ITEM: Color32 = Color32::from_rgb(97, 175, 239);
     pub const ERROR_FLASH: Color32 = Color32::from_rgb(220, 80, 80);

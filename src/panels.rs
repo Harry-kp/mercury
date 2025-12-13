@@ -873,8 +873,8 @@ impl MercuryApp {
                 "PUT" => Colors::METHOD_PUT,
                 "PATCH" => Colors::METHOD_PATCH,
                 "DELETE" => Colors::METHOD_DELETE,
-                "HEAD" => Colors::PRIMARY,
-                "OPTIONS" => Colors::WARNING,
+                "HEAD" => Colors::METHOD_HEAD,
+                "OPTIONS" => Colors::METHOD_OPTIONS,
                 _ => Colors::TEXT_SECONDARY,
             };
 
@@ -922,8 +922,8 @@ impl MercuryApp {
                             "PUT" => Colors::METHOD_PUT,
                             "PATCH" => Colors::METHOD_PATCH,
                             "DELETE" => Colors::METHOD_DELETE,
-                            "HEAD" => Colors::PRIMARY,    // Cyan-ish
-                            "OPTIONS" => Colors::WARNING, // Orange
+                            "HEAD" => Colors::METHOD_HEAD, // Cyan-ish
+                            "OPTIONS" => Colors::METHOD_OPTIONS, // Orange
                             _ => Colors::TEXT_SECONDARY,
                         };
                         if ui
