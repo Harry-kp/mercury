@@ -549,13 +549,13 @@ impl MercuryApp {
                             ui.horizontal(|ui| {
                                 ui.label(
                                     egui::RichText::new(format!("{}: ", name))
-                                        .size(FontSize::XS)
+                                        .size(FontSize::SM)
                                         .color(Colors::PRIMARY)
                                         .monospace(),
                                 );
                                 ui.label(
                                     egui::RichText::new(value)
-                                        .size(FontSize::XS)
+                                        .size(FontSize::SM)
                                         .color(Colors::TEXT_SECONDARY)
                                         .monospace(),
                                 );
