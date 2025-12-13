@@ -5,6 +5,7 @@ use std::path::Path;
 /// Parse result with variables and any warnings encountered
 pub struct EnvParseResult {
     pub vars: HashMap<String, String>,
+    #[allow(dead_code)]
     pub warnings: Vec<String>,
 }
 
