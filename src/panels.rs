@@ -1344,11 +1344,11 @@ impl MercuryApp {
             } else {
                 format!(
                     "{}, +{} more",
-                    undefined_vars[..2].join(", "),
-                    undefined_vars.len() - 2
+                    undefined_vars[..3].join(", "),
+                    undefined_vars.len() - 3
                 )
             };
-            let warn_rect = egui::Rect::from_min_size(start_pos, egui::vec2(200.0, 20.0));
+            let warn_rect = egui::Rect::from_min_size(start_pos, egui::vec2(280.0, 20.0));
             ui.put(
                 warn_rect,
                 egui::Label::new(

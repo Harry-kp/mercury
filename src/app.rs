@@ -424,19 +424,23 @@ impl MercuryApp {
                                 "{}: {} issue(s) - {}",
                                 env_name,
                                 result.warnings.len(),
-                                result.warnings.first().unwrap_or(&String::new())
+                                &result.warnings[0] // Safe: we checked is_empty above
                             );
-                            // Store warning to show in status bar (set time to 0 so it shows on next repaint)
                             self.env_parse_warning = Some(warning);
                         } else {
                             self.env_parse_warning = None;
                         }
                     }
                     Err(_) => {
-                        self.env_parse_warning = None;
+                        // Show error when file can't be read
+                        self.env_parse_warning =
+                            Some("Failed to read environment file".to_string());
                     }
                 }
             }
+        } else {
+            // Clear warning when no environment selected
+            self.env_parse_warning = None;
         }
     }
 

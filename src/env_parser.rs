@@ -25,10 +25,11 @@ pub fn parse_env_file(path: &Path) -> Result<EnvParseResult, std::io::Error> {
         if let Some((key, value)) = line.split_once('=') {
             let key = key.trim().to_string();
 
-            // Proper quote handling: only strip if both ends have matching quotes
+            // Proper quote handling: only strip if both ends have matching quotes and len >= 2
             let value = value.trim();
-            let value = if (value.starts_with('"') && value.ends_with('"'))
-                || (value.starts_with('\'') && value.ends_with('\''))
+            let value = if value.len() >= 2
+                && ((value.starts_with('"') && value.ends_with('"'))
+                    || (value.starts_with('\'') && value.ends_with('\'')))
             {
                 value[1..value.len() - 1].to_string()
             } else {
