@@ -138,6 +138,10 @@ pub struct MercuryApp {
     watched_path: Option<PathBuf>,
     expanded_folders: HashSet<PathBuf>,
     file_watcher_error: Option<String>,
+
+    // Request options
+    pub follow_redirects: bool, // Whether to automatically follow redirects
+    pub request_timeout_secs: u64, // Request timeout in seconds
 }
 
 // Timeline entry for request history
@@ -240,6 +244,8 @@ impl MercuryApp {
             watched_path: None,
             expanded_folders: HashSet::new(),
             file_watcher_error: None,
+            follow_redirects: true,   // Follow redirects by default
+            request_timeout_secs: 30, // 30 seconds default timeout
         };
 
         // Restore saved state
@@ -831,6 +837,33 @@ impl MercuryApp {
         let headers_text = substitute_variables(&self.headers_text, &self.env_variables);
         let body = substitute_variables(&self.body_text, &self.env_variables);
 
+        // Validate URL before execution
+        if url.trim().is_empty() {
+            self.last_action_message = Some((
+                "URL cannot be empty".to_string(),
+                ctx.input(|i| i.time),
+                true,
+            ));
+            return;
+        }
+        if !url.starts_with("http://") && !url.starts_with("https://") {
+            self.last_action_message = Some((
+                "URL must start with http:// or https://".to_string(),
+                ctx.input(|i| i.time),
+                true,
+            ));
+            return;
+        }
+        // Check for unresolved variables
+        if url.contains("{{") && url.contains("}}") {
+            self.last_action_message = Some((
+                "URL contains unresolved variables".to_string(),
+                ctx.input(|i| i.time),
+                true,
+            ));
+            return;
+        }
+
         // Parse headers
         let mut headers = HashMap::new();
         for line in headers_text.lines() {
@@ -849,10 +882,12 @@ impl MercuryApp {
         // Execute async request in background thread
         let ctx = ctx.clone();
         let tx = self.response_tx.clone();
+        let timeout = self.request_timeout_secs;
+        let redirects = self.follow_redirects;
         self.executing = true;
 
         std::thread::spawn(move || {
-            let response = execute_request(&request);
+            let response = execute_request(&request, timeout, redirects);
             let _ = tx.send(response);
             ctx.request_repaint();
         });

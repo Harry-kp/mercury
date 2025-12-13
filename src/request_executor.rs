@@ -123,11 +123,22 @@ fn get_content_type(headers: &[(String, String)]) -> String {
         .unwrap_or_default()
 }
 
-pub fn execute_request(request: &HttpRequest) -> Result<HttpResponse, String> {
+pub fn execute_request(
+    request: &HttpRequest,
+    timeout_secs: u64,
+    follow_redirects: bool,
+) -> Result<HttpResponse, String> {
     let start = Instant::now();
 
+    let redirect_policy = if follow_redirects {
+        reqwest::redirect::Policy::default() // Follow up to 10 redirects
+    } else {
+        reqwest::redirect::Policy::none()
+    };
+
     let client = reqwest::blocking::Client::builder()
-        .timeout(std::time::Duration::from_secs(30))
+        .timeout(std::time::Duration::from_secs(timeout_secs))
+        .redirect(redirect_policy)
         .build()
         .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
 
