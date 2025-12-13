@@ -6,6 +6,8 @@ on:
 
 jobs:
   label:
+    # Always run - at least one step will likely match. This prevents "No jobs were run" notifications.
+    # If we need to filter, add specific conditions here.
     runs-on: ubuntu-latest
     permissions:
       issues: write
