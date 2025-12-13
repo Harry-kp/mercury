@@ -140,6 +140,19 @@ Variables like `{{token}}` are loaded from `.env` files in your workspace.
 
 ---
 
+## Defaults
+
+Mercury uses sensible defaults so you can focus on your API, not configuration:
+
+| Setting | Default | Behavior |
+|---------|---------|----------|
+| **Timeout** | 30 seconds | Requests fail after 30s of no response |
+| **Redirects** | Followed | HTTP redirects are followed automatically (up to 10) |
+| **Content-Type** | Auto-detect | JSON body → `application/json` header added automatically |
+| **URL Scheme** | Auto-prefix | `example.com` → `http://example.com` |
+
+---
+
 ## What Mercury is NOT
 
 We intentionally don't build:
