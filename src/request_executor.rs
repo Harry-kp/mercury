@@ -138,9 +138,7 @@ pub fn execute_request(request: &HttpRequest) -> Result<HttpResponse, String> {
         HttpMethod::PATCH => client.patch(&request.url),
         HttpMethod::DELETE => client.delete(&request.url),
         HttpMethod::HEAD => client.head(&request.url),
-        HttpMethod::OPTIONS => {
-            return Err("OPTIONS method not yet supported".to_string());
-        }
+        HttpMethod::OPTIONS => client.request(reqwest::Method::OPTIONS, &request.url),
     };
 
     for (key, value) in &request.headers {

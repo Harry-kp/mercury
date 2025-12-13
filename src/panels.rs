@@ -100,7 +100,7 @@ impl MercuryApp {
                                             temp.url.clone()
                                         };
 
-                                        if ui
+                                        let label_response = ui
                                             .add(
                                                 egui::Label::new(
                                                     egui::RichText::new(&url_display)
@@ -109,9 +109,18 @@ impl MercuryApp {
                                                 )
                                                 .sense(egui::Sense::click()),
                                             )
-                                            .on_hover_cursor(egui::CursorIcon::PointingHand)
-                                            .clicked()
+                                            .on_hover_cursor(egui::CursorIcon::PointingHand);
+
+                                        // Show full URL in tooltip if truncated
+                                        let label_response = if temp.url.len()
+                                            > crate::constants::URL_TRUNCATE_LENGTH
                                         {
+                                            label_response.on_hover_text(&temp.url)
+                                        } else {
+                                            label_response
+                                        };
+
+                                        if label_response.clicked() {
                                             // Load this request into the form
                                             self.current_file = None;
                                             self.method = match temp.method.as_str() {
@@ -851,6 +860,8 @@ impl MercuryApp {
                 "PUT" => Colors::METHOD_PUT,
                 "PATCH" => Colors::METHOD_PATCH,
                 "DELETE" => Colors::METHOD_DELETE,
+                "HEAD" => Colors::PRIMARY,
+                "OPTIONS" => Colors::WARNING,
                 _ => Colors::TEXT_SECONDARY,
             };
 
@@ -889,6 +900,8 @@ impl MercuryApp {
                         HttpMethod::PUT,
                         HttpMethod::PATCH,
                         HttpMethod::DELETE,
+                        HttpMethod::HEAD,
+                        HttpMethod::OPTIONS,
                     ] {
                         let color = match method.as_str() {
                             "GET" => Colors::METHOD_GET,
@@ -896,6 +909,8 @@ impl MercuryApp {
                             "PUT" => Colors::METHOD_PUT,
                             "PATCH" => Colors::METHOD_PATCH,
                             "DELETE" => Colors::METHOD_DELETE,
+                            "HEAD" => Colors::PRIMARY,    // Cyan-ish
+                            "OPTIONS" => Colors::WARNING, // Orange
                             _ => Colors::TEXT_SECONDARY,
                         };
                         if ui

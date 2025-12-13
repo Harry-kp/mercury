@@ -2192,11 +2192,18 @@ impl eframe::App for MercuryApp {
                             .color(crate::theme::Colors::TEXT_PRIMARY),
                         );
                         if is_dir {
+                            // Count files in folder
+                            let file_count = walkdir::WalkDir::new(&target_path)
+                                .into_iter()
+                                .filter_map(|e| e.ok())
+                                .filter(|e| e.file_type().is_file())
+                                .count();
                             ui.add_space(crate::theme::Spacing::XS);
                             ui.label(
-                                egui::RichText::new(
-                                    "⚠ This will delete the folder and all its contents!",
-                                )
+                                egui::RichText::new(format!(
+                                    "⚠ This will delete the folder and {} file(s) inside!",
+                                    file_count
+                                ))
                                 .color(crate::theme::Colors::ERROR),
                             );
                         }
