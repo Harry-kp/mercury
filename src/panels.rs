@@ -564,9 +564,9 @@ impl MercuryApp {
                     });
 
                 ui.add_space(Spacing::SM);
+                ui.separator();
             }
 
-            ui.separator();
             ui.add_space(Spacing::SM);
 
             // Body rendering based on ResponseType
