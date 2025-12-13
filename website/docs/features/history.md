@@ -63,6 +63,14 @@ Mercury automatically persists your request history:
 - **50 entry limit** — The most recent 50 entries are kept
 - **Global storage** — History is shared across all workspaces
 
+## Clearing History
+
+To clear all history entries:
+1. Open the History panel (click **History** or press `Cmd/Ctrl + H`)
+2. Click the **Clear** button in the header
+
+This permanently removes all history entries. The change is saved immediately.
+
 :::tip Timestamps
 Each history entry shows when it was executed using relative timestamps like "Just now", "5 min ago", "Yesterday", or "3 days ago".
 :::
