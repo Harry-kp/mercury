@@ -73,7 +73,7 @@ impl MercuryApp {
                             if self.recent_expanded {
                                 let mut to_remove = None;
                                 for (idx, temp) in self.temp_requests.iter().enumerate().rev() {
-                                    ui.horizontal(|ui| {
+                                    let row_response = ui.horizontal(|ui| {
                                         ui.add_space(Spacing::MD);
                                         let method_color = match temp.method.as_str() {
                                             "GET" => Colors::METHOD_GET,
@@ -100,40 +100,11 @@ impl MercuryApp {
                                             temp.url.clone()
                                         };
 
-                                        let label_response = ui
-                                            .add(
-                                                egui::Label::new(
-                                                    egui::RichText::new(&url_display)
-                                                        .size(FontSize::XS)
-                                                        .color(Colors::TEXT_PRIMARY),
-                                                )
-                                                .sense(egui::Sense::click()),
-                                            )
-                                            .on_hover_cursor(egui::CursorIcon::PointingHand);
-
-                                        // Show full URL in tooltip if truncated
-                                        let label_response = if temp.url.len()
-                                            > crate::constants::URL_TRUNCATE_LENGTH
-                                        {
-                                            label_response.on_hover_text(&temp.url)
-                                        } else {
-                                            label_response
-                                        };
-
-                                        if label_response.clicked() {
-                                            // Load this request into the form
-                                            self.current_file = None;
-                                            self.method = match temp.method.as_str() {
-                                                "POST" => crate::http_parser::HttpMethod::POST,
-                                                "PUT" => crate::http_parser::HttpMethod::PUT,
-                                                "DELETE" => crate::http_parser::HttpMethod::DELETE,
-                                                "PATCH" => crate::http_parser::HttpMethod::PATCH,
-                                                _ => crate::http_parser::HttpMethod::GET,
-                                            };
-                                            self.url = temp.url.clone();
-                                            self.headers_text = temp.headers.clone();
-                                            self.body_text = temp.body.clone();
-                                        }
+                                        ui.label(
+                                            egui::RichText::new(&url_display)
+                                                .size(FontSize::XS)
+                                                .color(Colors::TEXT_PRIMARY),
+                                        );
 
                                         // X button to remove from recent
                                         ui.with_layout(
@@ -149,6 +120,37 @@ impl MercuryApp {
                                             },
                                         );
                                     });
+
+                                    // Make entire row clickable with pointer cursor and tooltip
+                                    let row_response = row_response
+                                        .response
+                                        .interact(egui::Sense::click())
+                                        .on_hover_cursor(egui::CursorIcon::PointingHand);
+
+                                    // Show full URL in tooltip if truncated
+                                    let row_response =
+                                        if temp.url.len() > crate::constants::URL_TRUNCATE_LENGTH {
+                                            row_response.on_hover_text(&temp.url)
+                                        } else {
+                                            row_response
+                                        };
+
+                                    if row_response.clicked() {
+                                        // Load this request into the form
+                                        self.current_file = None;
+                                        self.method = match temp.method.as_str() {
+                                            "POST" => crate::http_parser::HttpMethod::POST,
+                                            "PUT" => crate::http_parser::HttpMethod::PUT,
+                                            "DELETE" => crate::http_parser::HttpMethod::DELETE,
+                                            "PATCH" => crate::http_parser::HttpMethod::PATCH,
+                                            "HEAD" => crate::http_parser::HttpMethod::HEAD,
+                                            "OPTIONS" => crate::http_parser::HttpMethod::OPTIONS,
+                                            _ => crate::http_parser::HttpMethod::GET,
+                                        };
+                                        self.url = temp.url.clone();
+                                        self.headers_text = temp.headers.clone();
+                                        self.body_text = temp.body.clone();
+                                    }
                                 }
 
                                 // Remove after iteration to avoid borrow issues
