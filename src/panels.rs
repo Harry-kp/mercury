@@ -524,7 +524,7 @@ impl MercuryApp {
                 ui.horizontal(|ui| {
                     ui.label(egui::RichText::new("Headers").size(FontSize::SM).strong());
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if ui.small_button("📋 Copy").clicked() {
+                        if copy_icon_button(ui) {
                             let headers_text: String = response
                                 .headers
                                 .iter()
