@@ -102,18 +102,26 @@ cargo build --release
 
 Your requests are plain text. Version control friendly. No lock-in.
 
-```yaml
-# ~/api/users/get-user.http
+```http
+# Simple GET request
+GET https://api.example.com/users
 
-method: GET
-url: https://api.example.com/users/{{user_id}}
+# POST with headers and body
+POST https://api.example.com/users
+Content-Type: application/json
+Authorization: Bearer {{token}}
 
-headers:
-  Authorization: Bearer {{token}}
-  Accept: application/json
+{
+  "name": "John Doe",
+  "email": "john@example.com"
+}
+
+# Using environment variables
+GET {{base_url}}/users/{{user_id}}
+Authorization: Bearer {{api_key}}
 ```
 
-Variables are loaded from `.env` files in your workspace.
+Variables like `{{token}}` are loaded from `.env` files in your workspace.
 
 ---
 

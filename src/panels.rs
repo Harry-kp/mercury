@@ -521,7 +521,20 @@ impl MercuryApp {
 
             // Headers section (collapsible) - constrained width to prevent panel expansion
             if self.show_response_headers {
-                ui.label(egui::RichText::new("Headers").size(FontSize::SM).strong());
+                ui.horizontal(|ui| {
+                    ui.label(egui::RichText::new("Headers").size(FontSize::SM).strong());
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if ui.small_button("📋 Copy").clicked() {
+                            let headers_text: String = response
+                                .headers
+                                .iter()
+                                .map(|(k, v)| format!("{}: {}", k, v))
+                                .collect::<Vec<_>>()
+                                .join("\n");
+                            ui.ctx().copy_text(headers_text);
+                        }
+                    });
+                });
 
                 ScrollArea::both()
                     .id_salt("response_headers")
