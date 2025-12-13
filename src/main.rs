@@ -13,6 +13,10 @@ mod utils;
 
 use eframe::egui;
 
+// Use mimalloc for better memory efficiency in GUI apps
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 fn main() -> Result<(), eframe::Error> {
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()

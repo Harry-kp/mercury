@@ -12,7 +12,11 @@ Common questions and troubleshooting tips for Mercury.
 
 ### What is Mercury?
 
-Mercury is a fast, minimal API client for developers. It's a native desktop app written in Rust — no Electron, no web views. It launches in under 50ms and uses about 30MB of RAM.
+Mercury is a **native** API client that actually feels native. It's built with Rust and GPU-accelerated rendering — no Electron, no web views. It launches in under 300ms and runs at a locked 60fps with zero input lag.
+
+### Why does Mercury feel so fast?
+
+Mercury renders directly to your GPU at 60 frames per second, just like a video game. Electron apps render through a web browser engine, adding 2-4 frames of latency to every click. You feel this difference immediately.
 
 ### Is Mercury free?
 

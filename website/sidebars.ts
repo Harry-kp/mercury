@@ -13,6 +13,11 @@ const sidebars: SidebarsConfig = {
       label: 'Quick Start',
     },
     {
+      type: 'doc',
+      id: 'performance',
+      label: 'Performance',
+    },
+    {
       type: 'category',
       label: 'Features',
       collapsed: false,

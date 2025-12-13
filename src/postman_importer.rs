@@ -1,4 +1,3 @@
-use regex::Regex;
 use serde::Deserialize;
 use serde_json::Value;
 use std::fs;
@@ -8,19 +7,35 @@ use std::path::Path;
 /// Converts to lowercase, replaces spaces with dashes, and removes
 /// characters that are invalid on Windows, macOS, or Linux filesystems.
 fn sanitize_filename(name: &str) -> String {
-    // Regex to match any sequence of space or invalid filename characters
-    // Invalid: / \ : * ? " < > | and space
-    // Replace any such sequence with a single dash
-    let re = Regex::new(r#"[ /\\:\*\?"<>\|]+"#).unwrap();
+    // Invalid chars: / \ : * ? " < > | and space
     let lower = name.to_lowercase();
-    let sanitized = re.replace_all(&lower, "-");
-    // Remove leading/trailing dashes
-    let sanitized = sanitized.trim_matches('-');
-    // If the result is empty, use a default name
-    if sanitized.is_empty() {
+    let mut result = String::with_capacity(lower.len());
+    let mut last_was_dash = true; // Start true to skip leading dashes
+
+    for ch in lower.chars() {
+        if matches!(
+            ch,
+            ' ' | '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|'
+        ) {
+            if !last_was_dash {
+                result.push('-');
+                last_was_dash = true;
+            }
+        } else {
+            result.push(ch);
+            last_was_dash = false;
+        }
+    }
+
+    // Remove trailing dash
+    if result.ends_with('-') {
+        result.pop();
+    }
+
+    if result.is_empty() {
         "untitled".to_string()
     } else {
-        sanitized.to_string()
+        result
     }
 }
 
@@ -53,12 +68,18 @@ fn escape_env_value(value: &str) -> String {
 /// Sanitizes an environment variable key.
 /// Replaces invalid characters with underscores.
 fn sanitize_env_key(key: &str) -> String {
-    let re = Regex::new(r#"[^a-zA-Z0-9_]"#).unwrap();
-    let sanitized = re.replace_all(key, "_");
-    if sanitized.chars().next().is_some_and(|c| c.is_numeric()) {
-        format!("_{}", sanitized)
+    let mut result = String::with_capacity(key.len());
+    for ch in key.chars() {
+        if ch.is_ascii_alphanumeric() || ch == '_' {
+            result.push(ch);
+        } else {
+            result.push('_');
+        }
+    }
+    if result.chars().next().is_some_and(|c| c.is_numeric()) {
+        format!("_{}", result)
     } else {
-        sanitized.to_string()
+        result
     }
 }
 

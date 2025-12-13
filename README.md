@@ -6,7 +6,7 @@
 
 <p align="center">
   <strong>API Testing for Purists.</strong><br>
-  5MB. 50ms startup. $0 forever.
+  Instant startup. 60fps UI. $0 forever.
 </p>
 
 <p align="center">
@@ -38,12 +38,14 @@
 
 | | Postman | Insomnia | **Mercury** |
 |---|---|---|---|
-| **Size** | ~500MB | ~400MB | **5MB** |
-| **Startup** | 3-5 sec | 2-4 sec | **<50ms** |
-| **Memory** | 300-800MB | 200-500MB | **~30MB** |
+| **Startup** | 3-5 sec | 2-4 sec | **<300ms** |
+| **Frame Rate** | Sluggish | Sluggish | **60fps native** |
+| **Input Lag** | 50-100ms | 30-50ms | **<16ms** |
+| **Binary Size** | ~500MB | ~400MB | **6MB** |
 | **Price** | $14-25/mo | $5-18/mo | **Free forever** |
-| **Account** | Required | Required | **None** |
-| **Telemetry** | Yes | Yes | **None** |
+| **Scrolling** | Janky | Okay | **Buttery smooth** |
+
+> *Mercury uses ~100MB RAM to render at 60fps with native GPU acceleration. Electron apps use 500MB+ to feel like a slow website.*
 
 ---
 

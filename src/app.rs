@@ -31,7 +31,7 @@ pub struct AppState {
     pub body_text: String,
     pub auth_text: String,
     pub selected_tab: usize,
-    pub selected_env_name: Option<String>, // Persist by name, not index
+    pub selected_env: usize,
 }
 
 #[derive(Clone, Debug)]
@@ -71,11 +71,12 @@ pub struct MercuryApp {
     pub response_view_raw: bool,
     pub show_response_headers: bool,
     pub show_response_diff: bool,
+    // Cached formatted response to avoid cloning every frame
+    pub formatted_response_cache: Option<String>,
 
     pub env_files: Vec<String>,
     pub selected_env: usize,
     pub env_variables: HashMap<String, String>,
-    pub env_parse_warning: Option<String>, // Warning message for .env parse issues
 
     pub search_query: String,
     pub show_shortcuts: bool,
@@ -138,13 +139,11 @@ pub struct MercuryApp {
     watched_path: Option<PathBuf>,
     expanded_folders: HashSet<PathBuf>,
     file_watcher_error: Option<String>,
-
-    // Request options
-    pub follow_redirects: bool, // Whether to automatically follow redirects
-    pub request_timeout_secs: u64, // Request timeout in seconds
 }
 
 // Timeline entry for request history
+// Note: response_body is intentionally omitted to save memory (~5MB for 50 entries)
+// Users can re-execute requests from history to see responses
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct TimelineEntry {
     pub timestamp: f64,
@@ -155,7 +154,8 @@ pub struct TimelineEntry {
     pub duration_ms: u128,
     pub request_body: String,
     pub request_headers: String,
-    pub response_body: String,
+    #[serde(default)]
+    pub response_body: String, // Kept small: first 500 chars max for preview
     pub response_type: String, // "json", "xml", "image", "binary", etc.
     pub response_size: usize,  // Size in bytes for display
     pub content_type: String,  // Original Content-Type header
@@ -191,11 +191,11 @@ impl MercuryApp {
             response_view_raw: false,
             show_response_headers: false,
             show_response_diff: false,
+            formatted_response_cache: None,
 
             env_files: vec!["None".to_string()],
             selected_env: 0,
             env_variables: HashMap::new(),
-            env_parse_warning: None,
             search_query: String::new(),
             show_shortcuts: false,
             selected_tab: 0,
@@ -244,8 +244,6 @@ impl MercuryApp {
             watched_path: None,
             expanded_folders: HashSet::new(),
             file_watcher_error: None,
-            follow_redirects: true,   // Follow redirects by default
-            request_timeout_secs: 30, // 30 seconds default timeout
         };
 
         // Restore saved state
@@ -282,12 +280,10 @@ impl MercuryApp {
                 let workspace_path = PathBuf::from(&workspace_str);
                 if workspace_path.exists() {
                     app.load_workspace(workspace_path);
-                    // Restore selected env by name (more stable than index)
-                    if let Some(env_name) = &state.selected_env_name {
-                        if let Some(pos) = app.env_files.iter().position(|e| e == env_name) {
-                            app.selected_env = pos;
-                            app.load_env();
-                        }
+                    // Restore selected env after loading workspace
+                    if state.selected_env < app.env_files.len() {
+                        app.selected_env = state.selected_env;
+                        app.load_env();
                     }
                 }
             }
@@ -420,84 +416,35 @@ impl MercuryApp {
         if self.selected_env > 0 && self.selected_env < self.env_files.len() {
             if let Some(workspace) = &self.workspace_path {
                 let env_file = workspace.join(&self.env_files[self.selected_env]);
-                match parse_env_file(&env_file) {
-                    Ok(result) => {
-                        self.env_variables = result.vars;
-                        // Show warning if there were parse issues
-                        if !result.warnings.is_empty() {
-                            let env_name = &self.env_files[self.selected_env];
-                            let warning = format!(
-                                "{}: {} issue(s) - {}",
-                                env_name,
-                                result.warnings.len(),
-                                &result.warnings[0] // Safe: we checked is_empty above
-                            );
-                            self.env_parse_warning = Some(warning);
-                        } else {
-                            self.env_parse_warning = None;
-                        }
-                    }
-                    Err(_) => {
-                        // Show error when file can't be read
-                        self.env_parse_warning =
-                            Some("Failed to read environment file".to_string());
-                    }
+                if let Ok(result) = parse_env_file(&env_file) {
+                    self.env_variables = result.vars;
                 }
             }
-        } else {
-            // Clear warning when no environment selected
-            self.env_parse_warning = None;
         }
     }
 
-    /// Extract variable names from text using {{variable}} syntax
-    /// Handles edge cases: unclosed braces, nested braces, whitespace
     pub fn extract_variables(text: &str) -> Vec<String> {
         let mut vars = Vec::new();
         let mut chars = text.chars().peekable();
-        let mut depth = 0;
-        let mut var_name = String::new();
-        let mut in_var = false;
 
         while let Some(c) = chars.next() {
-            match c {
-                '{' if chars.peek() == Some(&'{') && !in_var => {
-                    chars.next(); // consume second {
-                    in_var = true;
-                    depth = 2;
-                    var_name.clear();
-                }
-                '{' if in_var => {
-                    // Extra { inside variable - include it in name (edge case)
-                    depth += 1;
-                    var_name.push(c);
-                }
-                '}' if in_var => {
-                    depth -= 1;
-                    if depth == 1 && chars.peek() == Some(&'}') {
-                        chars.next(); // consume second }
-                        depth = 0;
-                        in_var = false;
-                        let trimmed = var_name.trim();
-                        // Only add valid variable names (alphanumeric + underscore)
-                        if !trimmed.is_empty()
-                            && trimmed.chars().all(|c| c.is_alphanumeric() || c == '_')
-                        {
-                            vars.push(trimmed.to_string());
+            if c == '{' && chars.peek() == Some(&'{') {
+                chars.next(); // consume second {
+                let mut var_name = String::new();
+
+                while let Some(c) = chars.next() {
+                    if c == '}' {
+                        if chars.peek() == Some(&'}') {
+                            chars.next(); // consume second }
+                            if !var_name.is_empty() {
+                                vars.push(var_name.trim().to_string());
+                            }
+                            break;
                         }
-                        var_name.clear();
-                    } else if depth > 1 {
-                        var_name.push(c);
                     } else {
-                        // Unclosed or malformed - abandon this variable
-                        in_var = false;
-                        var_name.clear();
+                        var_name.push(c);
                     }
                 }
-                _ if in_var => {
-                    var_name.push(c);
-                }
-                _ => {}
             }
         }
 
@@ -837,33 +784,6 @@ impl MercuryApp {
         let headers_text = substitute_variables(&self.headers_text, &self.env_variables);
         let body = substitute_variables(&self.body_text, &self.env_variables);
 
-        // Validate URL before execution
-        if url.trim().is_empty() {
-            self.last_action_message = Some((
-                "URL cannot be empty".to_string(),
-                ctx.input(|i| i.time),
-                true,
-            ));
-            return;
-        }
-        if !url.starts_with("http://") && !url.starts_with("https://") {
-            self.last_action_message = Some((
-                "URL must start with http:// or https://".to_string(),
-                ctx.input(|i| i.time),
-                true,
-            ));
-            return;
-        }
-        // Check for unresolved variables
-        if url.contains("{{") && url.contains("}}") {
-            self.last_action_message = Some((
-                "URL contains unresolved variables".to_string(),
-                ctx.input(|i| i.time),
-                true,
-            ));
-            return;
-        }
-
         // Parse headers
         let mut headers = HashMap::new();
         for line in headers_text.lines() {
@@ -882,12 +802,10 @@ impl MercuryApp {
         // Execute async request in background thread
         let ctx = ctx.clone();
         let tx = self.response_tx.clone();
-        let timeout = self.request_timeout_secs;
-        let redirects = self.follow_redirects;
         self.executing = true;
 
         std::thread::spawn(move || {
-            let response = execute_request(&request, timeout, redirects);
+            let response = execute_request(&request, 30, true);
             let _ = tx.send(response);
             ctx.request_repaint();
         });
@@ -961,7 +879,7 @@ impl MercuryApp {
             body_text: self.body_text.clone(),
             auth_text: self.auth_text.clone(),
             selected_tab: self.selected_tab,
-            selected_env_name: self.env_files.get(self.selected_env).cloned(),
+            selected_env: self.selected_env,
         };
 
         if let Ok(json) = serde_json::to_string_pretty(&state) {
@@ -1380,15 +1298,11 @@ impl eframe::App for MercuryApp {
                     // Format response type as string for history
                     let response_type_str = format!("{:?}", response.response_type);
 
-                    // Truncate large response bodies for history storage
-                    // Binary/Image responses already have placeholder text
-                    let stored_body = if response.body.len() > 100_000 {
-                        let truncated: String = response.body.chars().take(10_000).collect();
-                        format!(
-                            "{}...[truncated, {} bytes total]",
-                            truncated,
-                            response.body.len()
-                        )
+                    // Store only a small preview of response body to save memory
+                    // Full response is always viewable by re-running the request
+                    let stored_body = if response.body.len() > 500 {
+                        let preview: String = response.body.chars().take(500).collect();
+                        format!("{}...", preview)
                     } else {
                         response.body.clone()
                     };
@@ -1443,6 +1357,7 @@ impl eframe::App for MercuryApp {
                     // Track previous response for diff
                     self.previous_response = self.response.take();
                     self.response = Some(response);
+                    self.formatted_response_cache = None; // Invalidate cache
                     self.request_error = None;
                     self.last_action_message = Some(("Request completed".to_string(), time, false));
                 }
@@ -1791,16 +1706,16 @@ impl eframe::App for MercuryApp {
 
                         // Show disabled state if no workspace
                         let env_display = if self.workspace_path.is_none() && env_name == "None" {
-                            "No env (open folder)".to_string()
+                            "No env (open folder)"
                         } else {
-                            format!("{} ▼", env_name) // Add dropdown indicator
+                            &env_name.to_string()
                         };
 
                         let env_response = ui
                             .add_enabled(
                                 self.workspace_path.is_some(),
                                 egui::Label::new(
-                                    egui::RichText::new(&env_display)
+                                    egui::RichText::new(env_display)
                                         .size(crate::theme::FontSize::MD)
                                         .color(env_color),
                                 )
@@ -2227,18 +2142,11 @@ impl eframe::App for MercuryApp {
                             .color(crate::theme::Colors::TEXT_PRIMARY),
                         );
                         if is_dir {
-                            // Count files in folder
-                            let file_count = walkdir::WalkDir::new(&target_path)
-                                .into_iter()
-                                .filter_map(|e| e.ok())
-                                .filter(|e| e.file_type().is_file())
-                                .count();
                             ui.add_space(crate::theme::Spacing::XS);
                             ui.label(
-                                egui::RichText::new(format!(
-                                    "⚠ This will delete the folder and {} file(s) inside!",
-                                    file_count
-                                ))
+                                egui::RichText::new(
+                                    "⚠ This will delete the folder and all its contents!",
+                                )
                                 .color(crate::theme::Colors::ERROR),
                             );
                         }

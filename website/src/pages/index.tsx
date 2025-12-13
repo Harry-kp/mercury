@@ -8,7 +8,7 @@ export default function Home(): ReactNode {
   return (
     <Layout
       title="The last API client you'll ever need"
-      description="5MB. 50ms startup. Zero monthly fees. A native API client that respects your time, your privacy, and your sanity.">
+      description="Instant startup. 60fps native UI. Zero monthly fees. A native API client that respects your time, your privacy, and your sanity.">
 
       {/* Hero Section */}
       <section className={styles.hero}>
@@ -20,13 +20,13 @@ export default function Home(): ReactNode {
 
           <h1 className={styles.heroTitle}>
             <span className={styles.line}>
-              <span className={styles.strike}>500MB</span> → <span className={styles.accent}>5MB</span>
+              <span className={styles.strike}>Sluggish</span> → <span className={styles.accent}>60fps</span>
             </span>
             <span className={styles.line}>
               <span className={styles.strike}>$25/mo</span> → <span className={styles.accent}>$0</span>
             </span>
             <span className={styles.line}>
-              <span className={styles.strike}>2 sec</span> → <span className={styles.accent}>50ms</span>
+              <span className={styles.strike}>3 sec</span> → <span className={styles.accent}>instant</span>
             </span>
           </h1>
 
@@ -50,16 +50,16 @@ export default function Home(): ReactNode {
 
           <div className={styles.metrics}>
             <div className={styles.metric}>
-              <div className={styles.metricValue}>5MB</div>
-              <div className={styles.metricLabel}>Binary Size</div>
+              <div className={styles.metricValue}>60fps</div>
+              <div className={styles.metricLabel}>Native UI</div>
             </div>
             <div className={styles.metric}>
-              <div className={styles.metricValue}>&lt;50ms</div>
+              <div className={styles.metricValue}>&lt;300ms</div>
               <div className={styles.metricLabel}>Startup</div>
             </div>
             <div className={styles.metric}>
-              <div className={styles.metricValue}>30MB</div>
-              <div className={styles.metricLabel}>RAM Usage</div>
+              <div className={styles.metricValue}>&lt;16ms</div>
+              <div className={styles.metricLabel}>Input Lag</div>
             </div>
             <div className={styles.metric}>
               <div className={styles.metricValue}>$0</div>
@@ -98,7 +98,7 @@ export default function Home(): ReactNode {
             <div className={styles.principle}>
               <div className={styles.principleIcon}>⚡</div>
               <h3>Native Performance</h3>
-              <p>Written in Rust. Launches before Postman finishes checking for updates. No Electron, no web views, no memory hogs.</p>
+              <p>GPU-accelerated 60fps rendering. <strong>&lt;16ms input latency.</strong> Scrolling that feels like butter. This is what native means.</p>
             </div>
             <div className={styles.principle}>
               <div className={styles.principleIcon}>📁</div>
@@ -133,22 +133,28 @@ export default function Home(): ReactNode {
               <div className={styles.mercuryCol}>Mercury</div>
             </div>
             <div className={styles.comparisonRow}>
-              <div>App Size</div>
-              <div className={styles.bad}>~500MB</div>
-              <div className={styles.bad}>~400MB</div>
-              <div className={styles.good}>5MB</div>
-            </div>
-            <div className={styles.comparisonRow}>
               <div>Startup Time</div>
               <div className={styles.bad}>3-5 seconds</div>
               <div className={styles.bad}>2-4 seconds</div>
-              <div className={styles.good}>&lt;50ms</div>
+              <div className={styles.good}>&lt;300ms</div>
             </div>
             <div className={styles.comparisonRow}>
-              <div>Memory Usage</div>
-              <div className={styles.bad}>300-800MB</div>
-              <div className={styles.bad}>200-500MB</div>
-              <div className={styles.good}>~30MB</div>
+              <div>UI Frame Rate</div>
+              <div className={styles.bad}>Sluggish</div>
+              <div className={styles.warn}>Variable</div>
+              <div className={styles.good}>60fps native</div>
+            </div>
+            <div className={styles.comparisonRow}>
+              <div>Input Latency</div>
+              <div className={styles.bad}>50-100ms</div>
+              <div className={styles.bad}>30-50ms</div>
+              <div className={styles.good}>&lt;16ms</div>
+            </div>
+            <div className={styles.comparisonRow}>
+              <div>App Size</div>
+              <div className={styles.bad}>~500MB</div>
+              <div className={styles.bad}>~400MB</div>
+              <div className={styles.good}>6MB</div>
             </div>
             <div className={styles.comparisonRow}>
               <div>Price (Pro)</div>

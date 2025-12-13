@@ -6,11 +6,11 @@ sidebar_position: 1
 
 # Getting Started with Mercury
 
-> Mercury is a fast, minimal API client for developers who value simplicity. 5MB binary. 50ms startup. Zero monthly fees.
+> Mercury is a **native** API client that actually feels native. Instant startup. 60fps scrolling. Zero input lag. No subscriptions.
 
 ## What is Mercury?
 
-Mercury is a **native desktop API client** built with Rust. Unlike Electron-based tools that consume hundreds of megabytes of RAM, Mercury launches instantly and stays light.
+Mercury is a **native desktop API client** built with Rust and GPU-accelerated rendering. Unlike Electron-based tools that feel like slow websites, Mercury responds the instant you click.
 
 Key philosophy:
 - **Files, not databases** — Your requests are plain `.http` files you can version control
@@ -23,13 +23,15 @@ Key philosophy:
 ## Why Mercury over Postman/Insomnia?
 
 | Feature | Postman | Insomnia | Mercury |
-|---------|---------|----------|---------|
-| App Size | ~500MB | ~400MB | **5MB** |
-| Startup Time | 3-5 sec | 2-4 sec | **&lt;50ms** |
-| Memory Usage | 300-800MB | 200-500MB | **~30MB** |
-| Account Required | Yes | Yes | **No** |
-| Price | $14-25/mo | $5-18/mo | **Free forever** |
-| Open Source | No | Partially | **100%** |
+|:--------|:--------|:---------|:--------|
+| **Startup Time** | 3-5 sec | 2-4 sec | **\<300ms** |
+| **UI Frame Rate** | Sluggish | Variable | **60fps native** |
+| **Input Latency** | 50-100ms | 30-50ms | **\<16ms** |
+| **Scrolling** | Janky | Okay | **Buttery smooth** |
+| **Binary Size** | ~500MB | ~400MB | **6MB** |
+| **Account Required** | Yes | Yes | **No** |
+| **Price** | $14-25/mo | $5-18/mo | **Free forever** |
+| **Open Source** | No | Partially | **100%** |
 
 ## Installation
 

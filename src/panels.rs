@@ -249,7 +249,10 @@ impl MercuryApp {
                                 }
                             });
                         } else {
-                            let mut tree = self.collection_tree.clone();
+                            // Note: render_collection_tree modifies expanded state in-place
+                            // No clone needed since we own the tree
+                            let tree = std::mem::take(&mut self.collection_tree);
+                            let mut tree = tree; // Make mutable
                             self.render_collection_tree(ui, &mut tree, 0);
                             self.collection_tree = tree;
                         }
@@ -490,6 +493,7 @@ impl MercuryApp {
 
             // Track if save was clicked (can't call method inside borrow)
             let mut save_clicked = false;
+            let mut raw_toggled = false;
 
             ui.horizontal(|ui| {
                 // Headers checkbox for all response types
@@ -498,7 +502,11 @@ impl MercuryApp {
 
                 // Raw and Diff only make sense for text responses
                 if is_text_response {
+                    let was_raw = self.response_view_raw;
                     ui.checkbox(&mut self.response_view_raw, "Raw");
+                    if self.response_view_raw != was_raw {
+                        raw_toggled = true;
+                    }
                     if has_previous {
                         ui.checkbox(&mut self.show_response_diff, "Diff");
                     }
@@ -544,6 +552,10 @@ impl MercuryApp {
             // Handle save after borrow is released
             if save_clicked {
                 self.save_response_to_file();
+            }
+            // Invalidate cache when raw toggle changes
+            if raw_toggled {
+                self.formatted_response_cache = None;
             }
 
             ui.add_space(Spacing::SM);
@@ -630,14 +642,20 @@ impl MercuryApp {
                         });
                     });
 
+                    // Use cached formatted response to avoid expensive cloning every frame
                     let body = if self.response_view_raw {
-                        response.body.clone()
+                        &response.body
+                    } else if let Some(cached) = &self.formatted_response_cache {
+                        cached
                     } else {
-                        match &response.response_type {
+                        // Cache miss - format once and store
+                        let formatted = match &response.response_type {
                             ResponseType::Json => format_json(&response.body),
                             ResponseType::Xml => format_xml(&response.body),
                             _ => response.body.clone(),
-                        }
+                        };
+                        self.formatted_response_cache = Some(formatted);
+                        self.formatted_response_cache.as_ref().unwrap()
                     };
 
                     ScrollArea::both()
@@ -652,9 +670,9 @@ impl MercuryApp {
                                 );
                             } else {
                                 match &response.response_type {
-                                    ResponseType::Json => json_syntax_highlight(ui, &body),
-                                    ResponseType::Xml => xml_syntax_highlight(ui, &body),
-                                    ResponseType::Html => html_syntax_highlight(ui, &body),
+                                    ResponseType::Json => json_syntax_highlight(ui, body),
+                                    ResponseType::Xml => xml_syntax_highlight(ui, body),
+                                    ResponseType::Html => html_syntax_highlight(ui, body),
                                     _ => {
                                         ui.add(
                                             egui::TextEdit::multiline(&mut body.as_str())
