@@ -305,6 +305,9 @@ impl MercuryApp {
 
     /// Timeline content with proper scroll
     fn render_timeline_content(&mut self, ui: &mut Ui) {
+        // Track if we should clear history (to avoid borrow issues)
+        let mut should_clear = false;
+
         // Header with back link
         ui.horizontal(|ui| {
             ui.label(
@@ -318,8 +321,34 @@ impl MercuryApp {
                 if close_button(ui, FontSize::MD).clicked() {
                     self.show_timeline = false;
                 }
+
+                // Clear history button
+                if !self.timeline.is_empty() {
+                    ui.add_space(Spacing::SM);
+                    if ui
+                        .add(
+                            egui::Label::new(
+                                egui::RichText::new("Clear")
+                                    .size(FontSize::XS)
+                                    .color(Colors::TEXT_MUTED),
+                            )
+                            .sense(egui::Sense::click()),
+                        )
+                        .on_hover_cursor(egui::CursorIcon::PointingHand)
+                        .on_hover_text("Clear all history")
+                        .clicked()
+                    {
+                        should_clear = true;
+                    }
+                }
             });
         });
+
+        // Clear history outside the borrow
+        if should_clear {
+            self.timeline.clear();
+            self.save_history();
+        }
 
         ui.add_space(Spacing::SM);
 
