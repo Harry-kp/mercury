@@ -48,6 +48,12 @@ impl Colors {
         Color32::from_rgba_unmultiplied(70, 70, 80, 120) // ~47% opacity gray
     }
 
+    /// Subtle warning color for borders - muted amber at ~40% opacity
+    #[inline]
+    pub fn warning_subtle() -> Color32 {
+        Color32::from_rgba_unmultiplied(245, 158, 11, 100) // Muted amber
+    }
+
     // HTTP Methods - Muted, semantic
     pub const METHOD_GET: Color32 = Color32::from_rgb(34, 197, 94); // Green - safe read
     pub const METHOD_POST: Color32 = Color32::from_rgb(99, 102, 241); // Indigo - create

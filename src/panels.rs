@@ -763,13 +763,35 @@ impl MercuryApp {
             ui.add_space(Spacing::SM);
         }
 
-        // URL bar card
-        egui::Frame::NONE
+        // Check for undefined variables to style URL bar
+        let all_vars: Vec<String> = [
+            Self::extract_variables(&self.url),
+            Self::extract_variables(&self.headers_text),
+            Self::extract_variables(&self.body_text),
+        ]
+        .concat();
+        let undefined_vars: Vec<_> = all_vars
+            .into_iter()
+            .filter(|v| !self.env_variables.contains_key(v))
+            .collect::<std::collections::HashSet<_>>()
+            .into_iter()
+            .collect();
+
+        let has_undefined = !undefined_vars.is_empty();
+        // Very subtle warning - muted amber, not bright yellow
+        let border_color = if has_undefined {
+            Colors::warning_subtle()
+        } else {
+            Colors::BORDER_SUBTLE
+        };
+
+        // URL bar card - border slightly changes when undefined vars exist
+        let frame_response = egui::Frame::NONE
             .fill(Colors::BG_CARD)
             .corner_radius(Radius::MD)
             .stroke(egui::Stroke::new(
-                crate::theme::StrokeWidth::THIN,
-                Colors::BORDER_SUBTLE,
+                crate::theme::StrokeWidth::THIN, // Keep thin, not thicker
+                border_color,
             ))
             .inner_margin(Spacing::MD)
             .outer_margin(egui::Margin {
@@ -781,6 +803,19 @@ impl MercuryApp {
             .show(ui, |ui| {
                 self.render_url_bar_new(ui, ctx);
             });
+
+        // Tooltip on the frame when hovering shows undefined vars
+        if has_undefined {
+            let tooltip = format!(
+                "Undefined variables:\n{}",
+                undefined_vars
+                    .iter()
+                    .map(|v| format!("• {{{{{}}}}}", v))
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            );
+            frame_response.response.on_hover_text(tooltip);
+        }
 
         ui.add_space(Spacing::XS);
 
@@ -1145,11 +1180,6 @@ impl MercuryApp {
         let top_right = ui.cursor().min + egui::vec2(ui.available_width(), 0.0);
         let start_pos = ui.cursor().min;
 
-        let undefined = Self::extract_variables(&self.headers_text)
-            .iter()
-            .filter(|v| !self.env_variables.contains_key(*v))
-            .count();
-
         if self.headers_bulk_edit {
             // Bulk edit mode - raw text
             ui.add(
@@ -1302,13 +1332,27 @@ impl MercuryApp {
             self.headers_bulk_edit = !self.headers_bulk_edit;
         }
 
-        // Overlay Undefined Warning (Rendered Last)
-        if undefined > 0 {
-            let warn_rect = egui::Rect::from_min_size(start_pos, egui::vec2(100.0, 20.0));
+        // Overlay Undefined Warning (Rendered Last) - show names, not just count
+        let undefined_vars: Vec<_> = Self::extract_variables(&self.headers_text)
+            .into_iter()
+            .filter(|v| !self.env_variables.contains_key(v))
+            .collect();
+
+        if !undefined_vars.is_empty() {
+            let names = if undefined_vars.len() <= 3 {
+                undefined_vars.join(", ")
+            } else {
+                format!(
+                    "{}, +{} more",
+                    undefined_vars[..2].join(", "),
+                    undefined_vars.len() - 2
+                )
+            };
+            let warn_rect = egui::Rect::from_min_size(start_pos, egui::vec2(200.0, 20.0));
             ui.put(
                 warn_rect,
                 egui::Label::new(
-                    egui::RichText::new(format!("{} undefined", undefined))
+                    egui::RichText::new(format!("Undefined: {}", names))
                         .size(FontSize::XS)
                         .color(Colors::ERROR),
                 ),

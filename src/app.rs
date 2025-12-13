@@ -31,7 +31,7 @@ pub struct AppState {
     pub body_text: String,
     pub auth_text: String,
     pub selected_tab: usize,
-    pub selected_env: usize,
+    pub selected_env_name: Option<String>, // Persist by name, not index
 }
 
 #[derive(Clone, Debug)]
@@ -75,6 +75,7 @@ pub struct MercuryApp {
     pub env_files: Vec<String>,
     pub selected_env: usize,
     pub env_variables: HashMap<String, String>,
+    pub env_parse_warning: Option<String>, // Warning message for .env parse issues
 
     pub search_query: String,
     pub show_shortcuts: bool,
@@ -190,6 +191,7 @@ impl MercuryApp {
             env_files: vec!["None".to_string()],
             selected_env: 0,
             env_variables: HashMap::new(),
+            env_parse_warning: None,
             search_query: String::new(),
             show_shortcuts: false,
             selected_tab: 0,
@@ -274,10 +276,12 @@ impl MercuryApp {
                 let workspace_path = PathBuf::from(&workspace_str);
                 if workspace_path.exists() {
                     app.load_workspace(workspace_path);
-                    // Restore selected env after loading workspace
-                    if state.selected_env < app.env_files.len() {
-                        app.selected_env = state.selected_env;
-                        app.load_env();
+                    // Restore selected env by name (more stable than index)
+                    if let Some(env_name) = &state.selected_env_name {
+                        if let Some(pos) = app.env_files.iter().position(|e| e == env_name) {
+                            app.selected_env = pos;
+                            app.load_env();
+                        }
                     }
                 }
             }
@@ -410,35 +414,80 @@ impl MercuryApp {
         if self.selected_env > 0 && self.selected_env < self.env_files.len() {
             if let Some(workspace) = &self.workspace_path {
                 let env_file = workspace.join(&self.env_files[self.selected_env]);
-                if let Ok(vars) = parse_env_file(&env_file) {
-                    self.env_variables = vars;
+                match parse_env_file(&env_file) {
+                    Ok(result) => {
+                        self.env_variables = result.vars;
+                        // Show warning if there were parse issues
+                        if !result.warnings.is_empty() {
+                            let env_name = &self.env_files[self.selected_env];
+                            let warning = format!(
+                                "{}: {} issue(s) - {}",
+                                env_name,
+                                result.warnings.len(),
+                                result.warnings.first().unwrap_or(&String::new())
+                            );
+                            // Store warning to show in status bar (set time to 0 so it shows on next repaint)
+                            self.env_parse_warning = Some(warning);
+                        } else {
+                            self.env_parse_warning = None;
+                        }
+                    }
+                    Err(_) => {
+                        self.env_parse_warning = None;
+                    }
                 }
             }
         }
     }
 
+    /// Extract variable names from text using {{variable}} syntax
+    /// Handles edge cases: unclosed braces, nested braces, whitespace
     pub fn extract_variables(text: &str) -> Vec<String> {
         let mut vars = Vec::new();
         let mut chars = text.chars().peekable();
+        let mut depth = 0;
+        let mut var_name = String::new();
+        let mut in_var = false;
 
         while let Some(c) = chars.next() {
-            if c == '{' && chars.peek() == Some(&'{') {
-                chars.next(); // consume second {
-                let mut var_name = String::new();
-
-                while let Some(c) = chars.next() {
-                    if c == '}' {
-                        if chars.peek() == Some(&'}') {
-                            chars.next(); // consume second }
-                            if !var_name.is_empty() {
-                                vars.push(var_name.trim().to_string());
-                            }
-                            break;
+            match c {
+                '{' if chars.peek() == Some(&'{') && !in_var => {
+                    chars.next(); // consume second {
+                    in_var = true;
+                    depth = 2;
+                    var_name.clear();
+                }
+                '{' if in_var => {
+                    // Extra { inside variable - include it in name (edge case)
+                    depth += 1;
+                    var_name.push(c);
+                }
+                '}' if in_var => {
+                    depth -= 1;
+                    if depth == 1 && chars.peek() == Some(&'}') {
+                        chars.next(); // consume second }
+                        depth = 0;
+                        in_var = false;
+                        let trimmed = var_name.trim();
+                        // Only add valid variable names (alphanumeric + underscore)
+                        if !trimmed.is_empty()
+                            && trimmed.chars().all(|c| c.is_alphanumeric() || c == '_')
+                        {
+                            vars.push(trimmed.to_string());
                         }
-                    } else {
+                        var_name.clear();
+                    } else if depth > 1 {
                         var_name.push(c);
+                    } else {
+                        // Unclosed or malformed - abandon this variable
+                        in_var = false;
+                        var_name.clear();
                     }
                 }
+                _ if in_var => {
+                    var_name.push(c);
+                }
+                _ => {}
             }
         }
 
@@ -873,7 +922,7 @@ impl MercuryApp {
             body_text: self.body_text.clone(),
             auth_text: self.auth_text.clone(),
             selected_tab: self.selected_tab,
-            selected_env: self.selected_env,
+            selected_env_name: self.env_files.get(self.selected_env).cloned(),
         };
 
         if let Ok(json) = serde_json::to_string_pretty(&state) {
@@ -1703,16 +1752,16 @@ impl eframe::App for MercuryApp {
 
                         // Show disabled state if no workspace
                         let env_display = if self.workspace_path.is_none() && env_name == "None" {
-                            "No env (open folder)"
+                            "No env (open folder)".to_string()
                         } else {
-                            &env_name.to_string()
+                            format!("{} ▼", env_name) // Add dropdown indicator
                         };
 
                         let env_response = ui
                             .add_enabled(
                                 self.workspace_path.is_some(),
                                 egui::Label::new(
-                                    egui::RichText::new(env_display)
+                                    egui::RichText::new(&env_display)
                                         .size(crate::theme::FontSize::MD)
                                         .color(env_color),
                                 )

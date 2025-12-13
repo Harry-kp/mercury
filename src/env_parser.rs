@@ -2,11 +2,18 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 
-pub fn parse_env_file(path: &Path) -> Result<HashMap<String, String>, std::io::Error> {
+/// Parse result with variables and any warnings encountered
+pub struct EnvParseResult {
+    pub vars: HashMap<String, String>,
+    pub warnings: Vec<String>,
+}
+
+pub fn parse_env_file(path: &Path) -> Result<EnvParseResult, std::io::Error> {
     let content = fs::read_to_string(path)?;
     let mut vars = HashMap::new();
+    let mut warnings = Vec::new();
 
-    for line in content.lines() {
+    for (line_num, line) in content.lines().enumerate() {
         let line = line.trim();
 
         // Skip empty lines and comments
@@ -17,16 +24,30 @@ pub fn parse_env_file(path: &Path) -> Result<HashMap<String, String>, std::io::E
         // Parse KEY=VALUE
         if let Some((key, value)) = line.split_once('=') {
             let key = key.trim().to_string();
-            let value = value
-                .trim()
-                .trim_matches('"')
-                .trim_matches('\'')
-                .to_string();
+
+            // Proper quote handling: only strip if both ends have matching quotes
+            let value = value.trim();
+            let value = if (value.starts_with('"') && value.ends_with('"'))
+                || (value.starts_with('\'') && value.ends_with('\''))
+            {
+                value[1..value.len() - 1].to_string()
+            } else {
+                value.to_string()
+            };
+
+            // Warn on duplicate keys
+            if vars.contains_key(&key) {
+                warnings.push(format!("Line {}: duplicate key '{}'", line_num + 1, key));
+            }
+
             vars.insert(key, value);
+        } else {
+            // Malformed line - no = sign
+            warnings.push(format!("Line {}: skipped (no '=' found)", line_num + 1));
         }
     }
 
-    Ok(vars)
+    Ok(EnvParseResult { vars, warnings })
 }
 
 pub fn substitute_variables(text: &str, variables: &HashMap<String, String>) -> String {
