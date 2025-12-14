@@ -92,17 +92,54 @@ pub fn parse_curl(curl_cmd: &str) -> Result<CurlRequest, String> {
                     i += 1;
                 }
             }
-            "-d" | "--data" | "--data-raw" | "--data-binary" => {
+            "-d" | "--data" | "--data-raw" | "--data-binary" | "--json" => {
                 if i + 1 < tokens.len() {
                     body = Some(tokens[i + 1].clone());
                     if method == HttpMethod::GET {
                         method = HttpMethod::POST;
                     }
+                    // --json also adds Content-Type header
+                    if token == "--json" {
+                        headers.push(("Content-Type".to_string(), "application/json".to_string()));
+                    }
                     i += 1;
                 }
             }
-            "--compressed" | "-s" | "--silent" | "-L" | "--location" | "-k" | "--insecure" => {
-                // Ignore these flags
+            "-u" | "--user" => {
+                // Basic auth: -u user:password
+                if i + 1 < tokens.len() {
+                    let credentials = &tokens[i + 1];
+                    use base64::Engine;
+                    let encoded = base64::engine::general_purpose::STANDARD.encode(credentials);
+                    headers.push(("Authorization".to_string(), format!("Basic {}", encoded)));
+                    i += 1;
+                }
+            }
+            "-A" | "--user-agent" => {
+                if i + 1 < tokens.len() {
+                    headers.push(("User-Agent".to_string(), tokens[i + 1].clone()));
+                    i += 1;
+                }
+            }
+            "-b" | "--cookie" => {
+                if i + 1 < tokens.len() {
+                    headers.push(("Cookie".to_string(), tokens[i + 1].clone()));
+                    i += 1;
+                }
+            }
+            "-I" | "--head" => {
+                method = HttpMethod::HEAD;
+            }
+            "-G" | "--get" => {
+                // Force GET even with data
+                method = HttpMethod::GET;
+            }
+            "--compressed" | "-s" | "--silent" | "-L" | "--location" | "-k" | "--insecure"
+            | "-v" | "--verbose" | "-o" | "--output" => {
+                // Ignore these flags (some take an argument, handle below)
+                if token == "-o" || token == "--output" {
+                    i += 1; // Skip the output filename
+                }
             }
             arg if !arg.starts_with('-') => {
                 // Assume it's the URL
@@ -150,5 +187,55 @@ mod tests {
         assert_eq!(req.url, "https://api.example.com/users");
         assert_eq!(req.headers.len(), 1);
         assert_eq!(req.body, Some(r#"{"name":"test"}"#.to_string()));
+    }
+
+    #[test]
+    fn test_basic_auth() {
+        let curl = "curl -u admin:secret https://api.example.com/users";
+        let req = parse_curl(curl).unwrap();
+        assert_eq!(req.headers.len(), 1);
+        assert_eq!(req.headers[0].0, "Authorization");
+        assert!(req.headers[0].1.starts_with("Basic "));
+    }
+
+    #[test]
+    fn test_user_agent() {
+        let curl = r#"curl -A "Mozilla/5.0" https://example.com"#;
+        let req = parse_curl(curl).unwrap();
+        assert_eq!(req.headers.len(), 1);
+        assert_eq!(
+            req.headers[0],
+            ("User-Agent".to_string(), "Mozilla/5.0".to_string())
+        );
+    }
+
+    #[test]
+    fn test_cookie() {
+        let curl = r#"curl -b "session=abc123" https://example.com"#;
+        let req = parse_curl(curl).unwrap();
+        assert_eq!(req.headers.len(), 1);
+        assert_eq!(
+            req.headers[0],
+            ("Cookie".to_string(), "session=abc123".to_string())
+        );
+    }
+
+    #[test]
+    fn test_head_request() {
+        let curl = "curl -I https://example.com";
+        let req = parse_curl(curl).unwrap();
+        assert_eq!(req.method, HttpMethod::HEAD);
+    }
+
+    #[test]
+    fn test_json_flag() {
+        let curl = r#"curl --json '{"key":"value"}' https://api.example.com"#;
+        let req = parse_curl(curl).unwrap();
+        assert_eq!(req.method, HttpMethod::POST);
+        assert_eq!(req.body, Some(r#"{"key":"value"}"#.to_string()));
+        assert!(req
+            .headers
+            .iter()
+            .any(|(k, v)| k == "Content-Type" && v == "application/json"));
     }
 }
