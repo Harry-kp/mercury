@@ -10,7 +10,9 @@ jobs:
   add-to-project:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/add-to-project@v1.0.2
-        with:
-          project-url: https://github.com/users/Harry-kp/projects/5
-          github-token: ${{ secrets.ADD_TO_PROJECT_PAT }}
+      - name: Add to Mercury Roadmap
+        env:
+          GH_TOKEN: ${{ secrets.PROJECT_PAT }}
+        run: |
+          gh project item-add 5 --owner Harry-kp \
+            --url "${{ github.event.issue.html_url || github.event.pull_request.html_url }}" || true
