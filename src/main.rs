@@ -2,20 +2,13 @@
 //!
 //! Entry point and application initialization.
 
-mod app;
-mod components;
-mod constants;
-mod curl_parser;
-mod env_parser;
-mod http_parser;
-mod insomnia_importer;
-mod panels;
-mod persistence;
-mod postman_importer;
-mod request_executor;
-mod theme;
-mod types;
+mod core;
+mod importer;
+mod parser;
+mod ui;
 mod utils;
+
+use ui::theme;
 
 use eframe::egui;
 
@@ -155,7 +148,7 @@ fn main() -> Result<(), eframe::Error> {
             cc.egui_ctx
                 .set_zoom_factor(theme::Layout::DEFAULT_ZOOM_FACTOR);
 
-            Ok(Box::new(app::MercuryApp::new(cc)))
+            Ok(Box::new(ui::app::MercuryApp::new(cc)))
         }),
     )
 }

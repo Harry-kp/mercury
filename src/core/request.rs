@@ -2,8 +2,8 @@
 //!
 //! Executes HTTP requests using reqwest and returns structured responses.
 
-use crate::constants::MAX_RESPONSE_SIZE;
-use crate::http_parser::{HttpMethod, HttpRequest};
+use super::constants::MAX_RESPONSE_SIZE;
+use crate::parser::{HttpMethod, HttpRequest};
 use serde_json::Value;
 use std::time::Instant;
 
@@ -69,7 +69,7 @@ fn detect_response_type(content_type: &str, body: &[u8], status: u16) -> Respons
 
     // Large responses (>1MB) are treated as LargeText to prevent UI hangs
     // Checked AFTER Image/Binary so large images are still classified as Image
-    if body.len() > crate::constants::MAX_TEXT_DISPLAY_SIZE {
+    if body.len() > super::constants::MAX_TEXT_DISPLAY_SIZE {
         return ResponseType::LargeText;
     }
 

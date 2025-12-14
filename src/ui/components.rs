@@ -3,7 +3,7 @@
 //! Reusable UI components with consistent styling.
 //! Includes status badges, method badges, buttons, tabs, and syntax highlighting.
 
-use crate::theme::{Colors, FontSize, Radius, Spacing, StrokeWidth};
+use super::theme::{Animation, Colors, FontSize, Radius, Spacing, StrokeWidth};
 use egui::{self, Color32, RichText, Ui};
 
 /// Status badge for HTTP responses
@@ -214,7 +214,7 @@ pub fn copy_icon_button(ui: &mut Ui) -> bool {
         ui.painter().rect_stroke(
             response.rect.expand(2.0),
             egui::CornerRadius::same(2),
-            egui::Stroke::new(crate::theme::StrokeWidth::THIN, Colors::PRIMARY),
+            egui::Stroke::new(super::theme::StrokeWidth::THIN, Colors::PRIMARY),
             egui::StrokeKind::Middle,
         );
     }
@@ -227,8 +227,6 @@ pub fn copy_icon_button(ui: &mut Ui) -> bool {
 
 /// Animated send button with pulsing glow when executing
 pub fn animated_send_button(ui: &mut Ui, executing: bool, time: f64) -> egui::Response {
-    use crate::theme::Animation;
-
     // Calculate pulse effect (0.0 to 1.0)
     let pulse = if executing {
         ((time * Animation::PULSE_SPEED as f64 * std::f64::consts::PI * 2.0).sin() * 0.5 + 0.5)

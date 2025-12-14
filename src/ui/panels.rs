@@ -2,12 +2,11 @@
 //!
 //! Main UI panel layouts - sidebar, request editor, response viewer.
 
-use crate::app::AuthMode;
-use crate::app::MercuryApp;
-use crate::components::*;
-use crate::http_parser::HttpMethod;
-use crate::request_executor::{format_json, format_xml, ResponseType};
-use crate::theme::{Colors, FontSize, Layout, Radius, Spacing, StrokeWidth};
+use super::app::{AuthMode, MercuryApp};
+use super::components::*;
+use super::theme::{Colors, FontSize, Layout, Radius, Spacing, StrokeWidth};
+use crate::core::{format_json, format_xml, ResponseType};
+use crate::parser::HttpMethod;
 use egui::{self, Context, ScrollArea, Ui};
 
 impl MercuryApp {
@@ -22,7 +21,7 @@ impl MercuryApp {
                 egui::Frame::NONE
                     .fill(Colors::BG_SURFACE)
                     .stroke(egui::Stroke::new(
-                        crate::theme::StrokeWidth::THIN,
+                        super::theme::StrokeWidth::THIN,
                         Colors::BORDER_SUBTLE,
                     )),
             )
@@ -85,11 +84,12 @@ impl MercuryApp {
                                         );
 
                                         let url_display = if temp.url.len()
-                                            > crate::constants::URL_TRUNCATE_LENGTH
+                                            > crate::core::constants::URL_TRUNCATE_LENGTH
                                         {
                                             format!(
                                                 "{}...",
-                                                &temp.url[..crate::constants::URL_TRUNCATE_LENGTH]
+                                                &temp.url
+                                                    [..crate::core::constants::URL_TRUNCATE_LENGTH]
                                             )
                                         } else {
                                             temp.url.clone()
@@ -123,24 +123,25 @@ impl MercuryApp {
                                         .on_hover_cursor(egui::CursorIcon::PointingHand);
 
                                     // Show full URL in tooltip if truncated
-                                    let row_response =
-                                        if temp.url.len() > crate::constants::URL_TRUNCATE_LENGTH {
-                                            row_response.on_hover_text(&temp.url)
-                                        } else {
-                                            row_response
-                                        };
+                                    let row_response = if temp.url.len()
+                                        > crate::core::constants::URL_TRUNCATE_LENGTH
+                                    {
+                                        row_response.on_hover_text(&temp.url)
+                                    } else {
+                                        row_response
+                                    };
 
                                     if row_response.clicked() {
                                         // Load this request into the form
                                         self.current_file = None;
                                         self.method = match temp.method.as_str() {
-                                            "POST" => crate::http_parser::HttpMethod::POST,
-                                            "PUT" => crate::http_parser::HttpMethod::PUT,
-                                            "DELETE" => crate::http_parser::HttpMethod::DELETE,
-                                            "PATCH" => crate::http_parser::HttpMethod::PATCH,
-                                            "HEAD" => crate::http_parser::HttpMethod::HEAD,
-                                            "OPTIONS" => crate::http_parser::HttpMethod::OPTIONS,
-                                            _ => crate::http_parser::HttpMethod::GET,
+                                            "POST" => crate::parser::HttpMethod::POST,
+                                            "PUT" => crate::parser::HttpMethod::PUT,
+                                            "DELETE" => crate::parser::HttpMethod::DELETE,
+                                            "PATCH" => crate::parser::HttpMethod::PATCH,
+                                            "HEAD" => crate::parser::HttpMethod::HEAD,
+                                            "OPTIONS" => crate::parser::HttpMethod::OPTIONS,
+                                            _ => crate::parser::HttpMethod::GET,
                                         };
                                         self.url = temp.url.clone();
                                         self.headers_text = temp.headers.clone();
@@ -266,7 +267,7 @@ impl MercuryApp {
                 egui::Frame::NONE
                     .fill(Colors::BG_CARD)
                     .stroke(egui::Stroke::new(
-                        crate::theme::StrokeWidth::THIN,
+                        super::theme::StrokeWidth::THIN,
                         Colors::BORDER_SUBTLE,
                     ))
                     .inner_margin(Spacing::MD),
@@ -391,7 +392,7 @@ impl MercuryApp {
                                     method_badge(ui, entry.method.as_str());
                                     ui.add_space(Spacing::XS);
 
-                                    let limit = crate::constants::HISTORY_URL_TRUNCATE_LENGTH;
+                                    let limit = crate::core::constants::HISTORY_URL_TRUNCATE_LENGTH;
                                     let url = if entry.url.len() > limit {
                                         if limit >= 3 {
                                             format!("{}...", &entry.url[..limit - 3])
@@ -463,7 +464,7 @@ impl MercuryApp {
                     ui,
                     &format!(
                         "{:.1}KB",
-                        response.size_bytes as f32 / crate::theme::BYTES_PER_KB
+                        response.size_bytes as f32 / super::theme::BYTES_PER_KB
                     ),
                     None,
                 );
@@ -780,7 +781,7 @@ impl MercuryApp {
         if let Some(response) = &self.response {
             // Generate smart filename based on content type
             let extension =
-                crate::components::get_extension_for_content_type(&response.content_type);
+                super::components::get_extension_for_content_type(&response.content_type);
             let default_filename = format!("response{}", extension);
 
             if let Some(path) = rfd::FileDialog::new()
@@ -856,7 +857,7 @@ impl MercuryApp {
             .fill(Colors::BG_CARD)
             .corner_radius(Radius::MD)
             .stroke(egui::Stroke::new(
-                crate::theme::StrokeWidth::THIN, // Keep thin, not thicker
+                super::theme::StrokeWidth::THIN, // Keep thin, not thicker
                 border_color,
             ))
             .inner_margin(Spacing::MD)
@@ -890,7 +891,7 @@ impl MercuryApp {
             .fill(Colors::BG_CARD)
             .corner_radius(Radius::MD)
             .stroke(egui::Stroke::new(
-                crate::theme::StrokeWidth::THIN,
+                super::theme::StrokeWidth::THIN,
                 Colors::BORDER_SUBTLE,
             ))
             .inner_margin(Spacing::MD)
@@ -908,7 +909,7 @@ impl MercuryApp {
     /// URL bar content - minimal unified design
     fn render_url_bar_new(&mut self, ui: &mut Ui, ctx: &Context) {
         ui.horizontal(|ui| {
-            ui.spacing_mut().item_spacing.x = crate::theme::Spacing::SM;
+            ui.spacing_mut().item_spacing.x = super::theme::Spacing::SM;
 
             // Method - just colored text, clickable
             let method_color = Colors::method_color(self.method.as_str());
@@ -968,7 +969,7 @@ impl MercuryApp {
                 });
 
             // URL input - fills remaining space
-            let available = ui.available_width() - crate::theme::Indent::SEND_BUTTON_RESERVE;
+            let available = ui.available_width() - super::theme::Indent::SEND_BUTTON_RESERVE;
             let url_response = ui.add(
                 egui::TextEdit::singleline(&mut self.url)
                     .hint_text(
@@ -988,7 +989,7 @@ impl MercuryApp {
 
             // Auto-detect cURL and parse it
             if url_response.changed() && self.url.trim_start().starts_with("curl ") {
-                if let Ok(curl_req) = crate::curl_parser::parse_curl(&self.url) {
+                if let Ok(curl_req) = crate::parser::parse_curl(&self.url) {
                     self.method = curl_req.method;
                     self.url = curl_req.url;
 

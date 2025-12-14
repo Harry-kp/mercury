@@ -8,11 +8,12 @@
 //! - UI state and rendering dispatch
 //! - Session persistence (state, history, recent requests)
 
-use crate::env_parser::{parse_env_file, substitute_variables};
-use crate::http_parser::{parse_http_file, HttpMethod, HttpRequest};
-use crate::persistence;
-use crate::request_executor::{execute_request, HttpResponse};
-use crate::types::{AppState, CollectionItem, TempRequest, TimelineEntry};
+use crate::core::persistence;
+use crate::core::types::{AppState, CollectionItem, TempRequest, TimelineEntry};
+use crate::core::{execute_request, HttpResponse};
+use crate::parser::{
+    parse_env_file, parse_http_file, substitute_variables, HttpMethod, HttpRequest,
+};
 
 use eframe::egui;
 use notify_debouncer_mini::new_debouncer;
@@ -1060,10 +1061,11 @@ impl MercuryApp {
                     let current_time = ui.input(|i| i.time);
 
                     if let Some((msg, timestamp, is_error)) = &self.last_action_message {
-                        if current_time - timestamp < crate::constants::FADE_DURATION_SECONDS {
-                            let alpha = ((crate::constants::FADE_DURATION_SECONDS
+                        if current_time - timestamp < crate::core::constants::FADE_DURATION_SECONDS
+                        {
+                            let alpha = ((crate::core::constants::FADE_DURATION_SECONDS
                                 - (current_time - timestamp))
-                                / crate::constants::FADE_DURATION_SECONDS
+                                / crate::core::constants::FADE_DURATION_SECONDS
                                 * 255.0) as u8;
                             let color = if *is_error {
                                 egui::Color32::from_rgba_unmultiplied(
@@ -1169,7 +1171,7 @@ impl eframe::App for MercuryApp {
                     };
                     self.timeline.push(entry);
 
-                    if self.timeline.len() > crate::constants::MAX_TIMELINE_ENTRIES {
+                    if self.timeline.len() > crate::core::constants::MAX_TIMELINE_ENTRIES {
                         self.timeline.remove(0);
                     }
 
@@ -1319,10 +1321,8 @@ impl eframe::App for MercuryApp {
                     };
 
                     if let Some(folder_path) = target_folder {
-                        match crate::insomnia_importer::import_insomnia_collection(
-                            &file_path,
-                            &folder_path,
-                        ) {
+                        match crate::importer::import_insomnia_collection(&file_path, &folder_path)
+                        {
                             Ok((req_count, env_count)) => {
                                 println!(
                                     "✅ Imported {} requests and {} environments to {}",
@@ -1370,10 +1370,7 @@ impl eframe::App for MercuryApp {
                     };
 
                     if let Some(folder_path) = target_folder {
-                        match crate::postman_importer::import_postman_collection(
-                            &file_path,
-                            &folder_path,
-                        ) {
+                        match crate::importer::import_postman_collection(&file_path, &folder_path) {
                             Ok((req_count, env_count)) => {
                                 println!(
                                     "✅ Imported {} requests and {} environments to {}",
@@ -1711,15 +1708,15 @@ impl eframe::App for MercuryApp {
                                 }
                                 ui.separator();
                                 if ui.selectable_label(false, "Check for Updates").clicked() {
-                                    let _ = open::that(crate::constants::get_releases_url());
+                                    let _ = open::that(crate::core::constants::get_releases_url());
                                     ui.close();
                                 }
                                 if ui.selectable_label(false, "Documentation").clicked() {
-                                    let _ = open::that(crate::constants::get_docs_url());
+                                    let _ = open::that(crate::core::constants::get_docs_url());
                                     ui.close();
                                 }
                                 if ui.selectable_label(false, "Report Issue").clicked() {
-                                    let _ = open::that(crate::constants::get_issues_url());
+                                    let _ = open::that(crate::core::constants::get_issues_url());
                                     ui.close();
                                 }
                             });
@@ -2462,12 +2459,12 @@ mod history_tests {
     fn test_history_expiry_constant() {
         // 7 days in seconds
         let expected = 7.0 * 24.0 * 60.0 * 60.0;
-        assert_eq!(crate::constants::HISTORY_EXPIRY_SECONDS, expected);
-        assert_eq!(crate::constants::HISTORY_EXPIRY_SECONDS, 604800.0);
+        assert_eq!(crate::core::constants::HISTORY_EXPIRY_SECONDS, expected);
+        assert_eq!(crate::core::constants::HISTORY_EXPIRY_SECONDS, 604800.0);
     }
 
     #[test]
     fn test_max_timeline_entries() {
-        assert_eq!(crate::constants::MAX_TIMELINE_ENTRIES, 50);
+        assert_eq!(crate::core::constants::MAX_TIMELINE_ENTRIES, 50);
     }
 }
