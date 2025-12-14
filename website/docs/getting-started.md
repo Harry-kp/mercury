@@ -35,38 +35,89 @@ Key philosophy:
 
 ## Installation
 
-### macOS
-**Option 1: One-Line Installer (Recommended)**
-Open your terminal and run:
+### ⚡ Fastest Way (30 seconds)
+
+**macOS / Linux:**
 ```bash
-curl -sL https://raw.githubusercontent.com/Harry-kp/mercury/master/install.sh | bash
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/Harry-kp/mercury/releases/latest/download/mercury-installer.sh | sh
 ```
 
-**Option 2: Manual Download**
-Download the latest `.dmg` from [GitHub Releases](https://github.com/Harry-kp/mercury/releases), open it, and drag Mercury to your Applications folder.
-
-**Option 3: Build from Source**
-```bash
-cargo install mercury
+**Windows (PowerShell):**
+```powershell
+irm https://github.com/Harry-kp/mercury/releases/latest/download/mercury-installer.ps1 | iex
 ```
 
-### Windows
-
-Download the latest `.exe` from [GitHub Releases](https://github.com/Harry-kp/mercury/releases) and run it.
-
-### Linux
-
-Download the AppImage from [GitHub Releases](https://github.com/Harry-kp/mercury/releases):
-
+**Then launch:**
 ```bash
-chmod +x Mercury-*.AppImage
-./Mercury-*.AppImage
+mercury
 ```
 
-Or build from source:
+:::tip Getting "command not found"?
+Restart your terminal or run `source ~/.zshrc` (or `~/.bashrc`) to reload your PATH.
+:::
+
+### Want it in your Applications folder? {#applications-folder}
+
+The installer puts `mercury` in `~/.cargo/bin`. Here's how to set it up like a traditional app:
+
+<details>
+<summary><strong>macOS: Add to Applications + Dock</strong></summary>
+
 ```bash
-cargo install mercury
+mkdir -p /Applications/Mercury.app/Contents/MacOS && \
+cp ~/.cargo/bin/mercury /Applications/Mercury.app/Contents/MacOS/ && \
+cat > /Applications/Mercury.app/Contents/Info.plist << 'EOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleExecutable</key>
+    <string>mercury</string>
+    <key>CFBundleName</key>
+    <string>Mercury</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.mercury.app</string>
+</dict>
+</plist>
+EOF
 ```
+Now search "Mercury" in Spotlight (⌘ Space) and drag to Dock!
+
+</details>
+
+<details>
+<summary><strong>Windows: Pin to Start Menu</strong></summary>
+
+1. Open File Explorer → `%USERPROFILE%\.cargo\bin\`
+2. Right-click `mercury.exe` → **Create shortcut**
+3. Right-click the shortcut → **Pin to Start**
+
+</details>
+
+<details>
+<summary><strong>Linux: Add to app launcher</strong></summary>
+
+```bash
+cat > ~/.local/share/applications/mercury.desktop << 'EOF'
+[Desktop Entry]
+Name=Mercury
+Exec=$HOME/.cargo/bin/mercury
+Type=Application
+Categories=Development;
+EOF
+```
+
+</details>
+
+### Troubleshooting
+
+**macOS Gatekeeper error ("developer cannot be verified"):**
+1. Run `mercury` (it will fail)
+2. Go to **System Settings → Privacy & Security** → Click **"Allow Anyway"**
+3. Run `mercury` again
+
+**Windows SmartScreen:**
+Click **"More info"** → **"Run anyway"**
 
 ## Your First Request in 60 Seconds
 

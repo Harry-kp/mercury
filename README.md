@@ -65,7 +65,7 @@ Mercury is built on principles, not features:
 
 ## Installation
 
-### Quick Install
+### ⚡ Fastest Way (30 seconds)
 
 **macOS / Linux:**
 ```bash
@@ -77,12 +77,104 @@ curl --proto '=https' --tlsv1.2 -LsSf https://github.com/Harry-kp/mercury/releas
 irm https://github.com/Harry-kp/mercury/releases/latest/download/mercury-installer.ps1 | iex
 ```
 
+**Then launch:**
+```bash
+mercury
+```
+> 💡 If you get "command not found", restart your terminal or run `source ~/.zshrc`
 
-### Manual Download
+---
 
-📦 **[Download latest release](https://github.com/Harry-kp/mercury/releases)** — Available for macOS (Intel/ARM), Windows, and Linux (x64/ARM64).
+### 🖥️ Want it in your Applications folder?
 
-### Build from Source
+The installer puts `mercury` in `~/.cargo/bin`. If you prefer launching from Spotlight/Start Menu:
+
+<details>
+<summary><strong>macOS: Add to Applications + Dock</strong></summary>
+
+```bash
+# One-liner: creates Mercury.app you can add to Dock
+mkdir -p /Applications/Mercury.app/Contents/MacOS && \
+cp ~/.cargo/bin/mercury /Applications/Mercury.app/Contents/MacOS/ && \
+cat > /Applications/Mercury.app/Contents/Info.plist << 'EOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleExecutable</key>
+    <string>mercury</string>
+    <key>CFBundleName</key>
+    <string>Mercury</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.mercury.app</string>
+</dict>
+</plist>
+EOF
+```
+Now search "Mercury" in Spotlight (⌘ Space) and drag to Dock!
+
+</details>
+
+<details>
+<summary><strong>Windows: Pin to Start Menu</strong></summary>
+
+1. Open File Explorer → `%USERPROFILE%\.cargo\bin\`
+2. Right-click `mercury.exe` → **Create shortcut**
+3. Right-click the shortcut → **Pin to Start**
+
+</details>
+
+<details>
+<summary><strong>Linux: Add to app launcher</strong></summary>
+
+```bash
+cat > ~/.local/share/applications/mercury.desktop << 'EOF'
+[Desktop Entry]
+Name=Mercury
+Exec=$HOME/.cargo/bin/mercury
+Type=Application
+Categories=Development;
+EOF
+```
+
+</details>
+
+---
+
+### 🔧 Troubleshooting
+
+<details>
+<summary><strong>🍎 macOS: "developer cannot be verified" error</strong></summary>
+
+1. Run `mercury` (it will fail)
+2. **System Settings → Privacy & Security** → Click **"Allow Anyway"**
+3. Run `mercury` again
+
+Or run: `xattr -d com.apple.quarantine ~/.cargo/bin/mercury`
+
+</details>
+
+<details>
+<summary><strong>🪟 Windows: "Windows protected your PC"</strong></summary>
+
+Click **"More info"** → **"Run anyway"**
+
+</details>
+
+<details>
+<summary><strong>📦 Manual Download</strong></summary>
+
+📦 **[Download from Releases](https://github.com/Harry-kp/mercury/releases)** — macOS (Intel/ARM), Windows, Linux
+
+```bash
+# Extract and run
+tar -xf mercury-*.tar.xz && chmod +x mercury && ./mercury
+```
+
+</details>
+
+<details>
+<summary><strong>🛠️ Build from Source</strong></summary>
 
 ```bash
 git clone https://github.com/Harry-kp/mercury.git
@@ -90,6 +182,8 @@ cd mercury
 cargo build --release
 ./target/release/mercury
 ```
+
+</details>
 
 ---
 

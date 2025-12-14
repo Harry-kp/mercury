@@ -218,17 +218,17 @@ export default function Home(): ReactNode {
             <Link to="https://github.com/Harry-kp/mercury/releases" className={styles.downloadCard}>
               <div className={styles.downloadIcon}>🍎</div>
               <div className={styles.downloadPlatform}>macOS</div>
-              <div className={styles.downloadMeta}>Universal • 5MB</div>
+              <div className={styles.downloadMeta}>Universal • 6MB</div>
             </Link>
             <Link to="https://github.com/Harry-kp/mercury/releases" className={styles.downloadCard}>
               <div className={styles.downloadIcon}>⊞</div>
               <div className={styles.downloadPlatform}>Windows</div>
-              <div className={styles.downloadMeta}>x64 • 5MB</div>
+              <div className={styles.downloadMeta}>x64 • 6MB</div>
             </Link>
             <Link to="https://github.com/Harry-kp/mercury/releases" className={styles.downloadCard}>
               <div className={styles.downloadIcon}>🐧</div>
               <div className={styles.downloadPlatform}>Linux</div>
-              <div className={styles.downloadMeta}>AppImage • 5MB</div>
+              <div className={styles.downloadMeta}>x64/ARM64 • 6MB</div>
             </Link>
           </div>
 
@@ -242,6 +242,10 @@ export default function Home(): ReactNode {
             <CodeBlock language="powershell">
               {`irm https://github.com/Harry-kp/mercury/releases/latest/download/mercury-installer.ps1 | iex`}
             </CodeBlock>
+            <br />
+            <p style={{ fontSize: '0.9rem', opacity: 0.8 }}>
+              Then run: <code>mercury</code> — <Link to="/docs/getting-started#applications-folder">Want it in your Applications folder?</Link>
+            </p>
           </div>
         </div>
       </section>
