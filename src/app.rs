@@ -1102,8 +1102,7 @@ impl MercuryApp {
                         ui.label(egui::RichText::new("📄").size(crate::theme::FontSize::SM));
 
                         if let Some(method) = method {
-                            let (r, g, b) = method.color();
-                            let color = egui::Color32::from_rgb(r, g, b);
+                            let color = crate::theme::Colors::method_color(method.as_str());
                             ui.label(
                                 egui::RichText::new(method.as_str())
                                     .color(color)

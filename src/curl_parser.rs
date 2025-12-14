@@ -66,18 +66,7 @@ pub fn parse_curl(curl_cmd: &str) -> Result<CurlRequest, String> {
         match token.as_str() {
             "-X" | "--request" => {
                 if i + 1 < tokens.len() {
-                    method = match tokens[i + 1].to_uppercase().as_str() {
-                        "GET" => HttpMethod::GET,
-                        "POST" => HttpMethod::POST,
-                        "PUT" => HttpMethod::PUT,
-                        "PATCH" => HttpMethod::PATCH,
-                        "DELETE" => HttpMethod::DELETE,
-                        "HEAD" => HttpMethod::HEAD,
-                        "OPTIONS" => HttpMethod::OPTIONS,
-                        "CONNECT" => HttpMethod::CONNECT,
-                        "TRACE" => HttpMethod::TRACE,
-                        _ => HttpMethod::GET,
-                    };
+                    method = HttpMethod::from_str(&tokens[i + 1]).unwrap_or(HttpMethod::GET);
                     i += 1;
                 }
             }
