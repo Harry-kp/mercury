@@ -1,32 +1,16 @@
-name: Add Issues to Project Board
+name: Add to Project
 
 on:
   issues:
-    types: [opened, labeled]
+    types: [opened]
+  pull_request:
+    types: [opened]
 
 jobs:
   add-to-project:
-    # Only run if issue has relevant labels - prevents "No jobs were run" emails
-    if: |
-      contains(github.event.issue.labels.*.name, 'Q1-2026') ||
-      contains(github.event.issue.labels.*.name, 'priority: critical') ||
-      contains(github.event.issue.labels.*.name, 'priority: high')
     runs-on: ubuntu-latest
-    permissions:
-      issues: read
     steps:
-      - name: Add Q1 issues to project board
-        if: contains(github.event.issue.labels.*.name, 'Q1-2026')
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh project item-add 4 --owner Harry-kp \
-            --url ${{ github.event.issue.html_url }}
-      
-      - name: Add critical priority to project board
-        if: contains(github.event.issue.labels.*.name, 'priority: critical') || contains(github.event.issue.labels.*.name, 'priority: high')
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh project item-add 4 --owner Harry-kp \
-            --url ${{ github.event.issue.html_url }} || true
+      - uses: actions/add-to-project@v1.0.2
+        with:
+          project-url: https://github.com/users/Harry-kp/projects/5
+          github-token: ${{ secrets.ADD_TO_PROJECT_PAT }}

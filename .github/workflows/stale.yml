@@ -34,7 +34,7 @@ jobs:
           days-before-close: 7
           
           # Exempt important labels
-          exempt-issue-labels: 'priority: critical,priority: high,Q1-2026,status: in-progress,status: blocked'
+          exempt-issue-labels: 'help wanted,good first issue'
           
           # PRs
           stale-pr-message: |
@@ -47,7 +47,7 @@ jobs:
           days-before-pr-stale: 30
           days-before-pr-close: 7
           
-          exempt-pr-labels: 'status: in-progress,status: blocked'
+          exempt-pr-labels: 'help wanted'
           
           # Appearance
           stale-issue-label: 'stale'
