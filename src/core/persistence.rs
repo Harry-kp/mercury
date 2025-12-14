@@ -3,8 +3,8 @@
 //! Handles saving and loading application state to disk.
 //! All data is stored in ~/.mercury/ directory.
 
-use crate::constants::{HISTORY_EXPIRY_SECONDS, MAX_TIMELINE_ENTRIES};
-use crate::types::{AppState, TempRequest, TimelineEntry};
+use super::constants::{HISTORY_EXPIRY_SECONDS, MAX_TIMELINE_ENTRIES};
+use super::types::{AppState, TempRequest, TimelineEntry};
 use std::fs;
 use std::path::PathBuf;
 

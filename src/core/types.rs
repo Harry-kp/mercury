@@ -2,7 +2,7 @@
 //!
 //! Shared data structures used across the application.
 
-use crate::http_parser::HttpMethod;
+use crate::parser::HttpMethod;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
