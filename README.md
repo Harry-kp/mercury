@@ -198,6 +198,7 @@ cargo build --release
 | `⌘ N` | New request |
 | `⌘ Shift F` | Focus mode |
 | `⌘ H` | History |
+| `Esc` | Cancel request |
 | `?` | All shortcuts |
 
 ---
@@ -239,6 +240,7 @@ Variables like `{{token}}` are loaded from `.env` files in your workspace.
 - **Focus Mode** — Distraction-free editing
 - **cURL Import** — Paste cURL commands directly
 - **Collection Import** — Import from Postman or Insomnia
+- **Request Cancellation** — Stop runaway requests instantly
 - **Syntax Highlighting** — JSON responses beautifully formatted
 - **Dark Mode** — Easy on the eyes, built for late nights
 
