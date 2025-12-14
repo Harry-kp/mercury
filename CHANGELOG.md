@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.1.0-beta] - 2025-12-10
 
 ### Added
-- HTTP methods: GET, POST, PUT, DELETE, PATCH, HEAD, OPTIONS
+- HTTP methods: GET, POST, PUT, DELETE, PATCH, HEAD, OPTIONS, CONNECT, TRACE
 - Plain text `.http` file format
 - Environment variables with `.env` files
 - Two-way file sync with external editors

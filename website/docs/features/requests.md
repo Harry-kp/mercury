@@ -75,13 +75,15 @@ Mercury supports all standard HTTP methods:
 
 | Method | Description | Color |
 |--------|-------------|-------|
-| <span class="method-badge method-get">GET</span> | Retrieve data | Green |
-| <span class="method-badge method-post">POST</span> | Create resource | Blue |
+| <span class="method-badge method-get">GET</span> | Retrieve data | Blue |
+| <span class="method-badge method-post">POST</span> | Create resource | Green |
 | <span class="method-badge method-put">PUT</span> | Replace resource | Orange |
-| <span class="method-badge method-patch">PATCH</span> | Partial update | Yellow |
+| <span class="method-badge method-patch">PATCH</span> | Partial update | Purple |
 | <span class="method-badge method-delete">DELETE</span> | Remove resource | Red |
 | HEAD | Get headers only | Cyan |
 | OPTIONS | Get allowed methods | Brown |
+| CONNECT | Tunnel connection | Teal |
+| TRACE | Debug request path | Gray |
 
 Click the method badge in the URL bar to change methods.
 

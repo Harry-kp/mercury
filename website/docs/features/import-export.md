@@ -143,6 +143,12 @@ Authorization: Bearer token123
 | `-d, --data` | ✅ Body |
 | `--data-raw` | ✅ Body |
 | `--data-binary` | ✅ Body |
+| `--json` | ✅ JSON body + Content-Type header |
+| `-u, --user` | ✅ Basic authentication |
+| `-A, --user-agent` | ✅ User-Agent header |
+| `-b, --cookie` | ✅ Cookie header |
+| `-I, --head` | ✅ HEAD request |
+| `-G, --get` | ✅ Force GET with data |
 | `-L, --location` | Ignored (Mercury handles redirects) |
 | `-k, --insecure` | Ignored |
 | `-s, --silent` | Ignored |
