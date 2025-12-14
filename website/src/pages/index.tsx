@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import Link from '@docusaurus/Link';
 import useBaseUrl from '@docusaurus/useBaseUrl';
 import Layout from '@theme/Layout';
+import CodeBlock from '@theme/CodeBlock';
 import styles from './index.module.css';
 
 export default function Home(): ReactNode {
@@ -232,11 +233,15 @@ export default function Home(): ReactNode {
           </div>
 
           <div className={styles.downloadAlt}>
-            <strong>Quick Install:</strong><br />
-            <code className={styles.installCmd}>curl --proto '=https' --tlsv1.2 -LsSf https://github.com/Harry-kp/mercury/releases/latest/download/mercury-installer.sh | sh</code>
-            <br /><br />
-            <strong>Windows:</strong><br />
-            <code className={styles.installCmd}>irm https://github.com/Harry-kp/mercury/releases/latest/download/mercury-installer.ps1 | iex</code>
+            <strong>Quick Install (macOS / Linux):</strong>
+            <CodeBlock language="bash">
+              {`curl --proto '=https' --tlsv1.2 -LsSf https://github.com/Harry-kp/mercury/releases/latest/download/mercury-installer.sh | sh`}
+            </CodeBlock>
+            <br />
+            <strong>Windows (PowerShell):</strong>
+            <CodeBlock language="powershell">
+              {`irm https://github.com/Harry-kp/mercury/releases/latest/download/mercury-installer.ps1 | iex`}
+            </CodeBlock>
           </div>
         </div>
       </section>
