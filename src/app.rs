@@ -11,53 +11,16 @@
 use crate::env_parser::{parse_env_file, substitute_variables};
 use crate::http_parser::{parse_http_file, HttpMethod, HttpRequest};
 use crate::request_executor::{execute_request, HttpResponse};
+use crate::types::{AppState, CollectionItem, TempRequest, TimelineEntry};
 
 use eframe::egui;
 use notify_debouncer_mini::new_debouncer;
-use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{channel, Receiver, RecvTimeoutError, Sender};
 use std::time::Duration;
 use walkdir::WalkDir;
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct TempRequest {
-    pub method: String,
-    pub url: String,
-    pub headers: String,
-    pub body: String,
-    pub timestamp: f64,
-}
-
-/// Persisted app state for restoring sessions
-#[derive(Clone, Debug, Serialize, Deserialize, Default)]
-pub struct AppState {
-    pub workspace_path: Option<String>,
-    pub method: String,
-    pub url: String,
-    pub headers_text: String,
-    pub body_text: String,
-    pub auth_text: String,
-    pub selected_tab: usize,
-    pub selected_env: usize,
-}
-
-#[derive(Clone, Debug)]
-pub enum CollectionItem {
-    Folder {
-        name: String,
-        path: PathBuf,
-        expanded: bool,
-        children: Vec<CollectionItem>,
-    },
-    Request {
-        name: String,
-        path: PathBuf,
-        method: Option<HttpMethod>,
-    },
-}
 
 pub struct MercuryApp {
     pub workspace_path: Option<PathBuf>,
@@ -149,26 +112,6 @@ pub struct MercuryApp {
     watched_path: Option<PathBuf>,
     expanded_folders: HashSet<PathBuf>,
     file_watcher_error: Option<String>,
-}
-
-// Timeline entry for request history
-// Note: response_body is intentionally omitted to save memory (~5MB for 50 entries)
-// Users can re-execute requests from history to see responses
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct TimelineEntry {
-    pub timestamp: f64,
-    pub method: HttpMethod,
-    pub url: String,
-    pub status: u16,
-    pub status_text: String,
-    pub duration_ms: u128,
-    pub request_body: String,
-    pub request_headers: String,
-    #[serde(default)]
-    pub response_body: String, // Kept small: first 500 chars max for preview
-    pub response_type: String, // "json", "xml", "image", "binary", etc.
-    pub response_size: usize,  // Size in bytes for display
-    pub content_type: String,  // Original Content-Type header
 }
 
 pub use crate::utils::AuthMode;

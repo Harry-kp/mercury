@@ -13,6 +13,7 @@ mod panels;
 mod postman_importer;
 mod request_executor;
 mod theme;
+mod types;
 mod utils;
 
 use eframe::egui;
