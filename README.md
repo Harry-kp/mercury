@@ -67,10 +67,16 @@ Mercury is built on principles, not features:
 
 ### Quick Install
 
-| Platform | Command |
-|----------|---------|
-| **macOS / Linux** | `curl --proto '=https' --tlsv1.2 -LsSf https://github.com/Harry-kp/mercury/releases/latest/download/mercury-installer.sh \| sh` |
-| **Windows** | `powershell -ExecutionPolicy Bypass -c "irm https://github.com/Harry-kp/mercury/releases/latest/download/mercury-installer.ps1 \| iex"` |
+**macOS / Linux:**
+```bash
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/Harry-kp/mercury/releases/latest/download/mercury-installer.sh | sh
+```
+
+**Windows (PowerShell):**
+```powershell
+irm https://github.com/Harry-kp/mercury/releases/latest/download/mercury-installer.ps1 | iex
+```
+
 
 ### Manual Download
 
