@@ -1009,8 +1009,9 @@ impl MercuryApp {
 
             // Animated send button
             // Send/Stop button
+            let time = ctx.input(|i| i.time);
             let is_executing = self.ongoing_request.is_some();
-            let send_response = send_stop_button(ui, is_executing);
+            let send_response = send_stop_button(ui, is_executing, time);
 
             if send_response.clicked() {
                 if is_executing {
@@ -1020,17 +1021,20 @@ impl MercuryApp {
                 }
             }
 
-            // Show elapsed time if executing > 1s
+            // Show elapsed time if executing (FixedWidth to prevent jitter)
             if let Some((_, start_time)) = self.ongoing_request {
-                let now = ctx.input(|i| i.time);
-                let elapsed = now - start_time;
-                if elapsed > 1.0 {
-                    ui.label(
-                        egui::RichText::new(format!("{:.1}s", elapsed))
-                            .size(crate::theme::FontSize::SM)
-                            .color(crate::theme::Colors::TEXT_MUTED),
+                let elapsed = time - start_time;
+                if elapsed > 0.5 {
+                    // Show starting from 0.5s slightly earlier
+                    ui.add_sized(
+                        egui::vec2(45.0, ui.available_height()),
+                        egui::Label::new(
+                            egui::RichText::new(format!("{:.1}s", elapsed))
+                                .size(crate::theme::FontSize::SM)
+                                .color(crate::theme::Colors::TEXT_MUTED)
+                                .monospace(),
+                        ),
                     );
-                    // Repaint needed for timer to update smoothly
                     ctx.request_repaint();
                 }
             }

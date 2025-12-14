@@ -3,7 +3,7 @@
 //! Reusable UI components with consistent styling.
 //! Includes status badges, method badges, buttons, tabs, and syntax highlighting.
 
-use super::theme::{Colors, FontSize, Radius, Spacing, StrokeWidth};
+use super::theme::{Animation, Colors, FontSize, Radius, Spacing, StrokeWidth};
 use egui::{self, Color32, RichText, Ui};
 
 /// Status badge for HTTP responses
@@ -226,19 +226,54 @@ pub fn copy_icon_button(ui: &mut Ui) -> bool {
 }
 
 /// Send/Stop button (Send = Play/Primary, Stop = Square/Error)
-pub fn send_stop_button(ui: &mut Ui, executing: bool) -> egui::Response {
-    let (icon, color, tooltip) = if executing {
-        ("■", Colors::ERROR, "Cancel request (Esc)")
+/// Send/Stop button (Send = Play/Primary, Stop = Square/Orange with Pulse)
+pub fn send_stop_button(ui: &mut Ui, executing: bool, time: f64) -> egui::Response {
+    let (icon, base_color, tooltip) = if executing {
+        ("■", Colors::STOP, "Cancel request (Esc)")
     } else {
         ("▶", Colors::PRIMARY, "Send request (⌘+Enter)")
     };
 
-    ui.add(
-        egui::Label::new(RichText::new(icon).size(FontSize::ICON).color(color))
-            .sense(egui::Sense::click()),
-    )
-    .on_hover_cursor(egui::CursorIcon::PointingHand)
-    .on_hover_text(tooltip)
+    // Calculate pulse
+    let pulse = if executing {
+        ((time * Animation::PULSE_SPEED as f64 * std::f64::consts::PI * 2.0).sin() * 0.5 + 0.5)
+            as f32
+    } else {
+        0.0
+    };
+
+    // Apply pulse to color if executing
+    let color = if executing {
+        let r = base_color.r() as f32 + pulse * 20.0;
+        let g = base_color.g() as f32 + pulse * 20.0;
+        let b = base_color.b() as f32 + pulse * 20.0;
+        Color32::from_rgb(r.min(255.0) as u8, g.min(255.0) as u8, b.min(255.0) as u8)
+    } else {
+        base_color
+    };
+
+    let response = ui
+        .add(
+            egui::Label::new(RichText::new(icon).size(FontSize::ICON).color(color))
+                .sense(egui::Sense::click()),
+        )
+        .on_hover_cursor(egui::CursorIcon::PointingHand)
+        .on_hover_text(tooltip);
+
+    // Draw glow effect if executing
+    if executing {
+        let rect = response.rect;
+        let glow_color = Color32::from_rgba_unmultiplied(
+            base_color.r(),
+            base_color.g(),
+            base_color.b(),
+            (pulse * Animation::GLOW_INTENSITY * 255.0) as u8,
+        );
+        ui.painter()
+            .circle_filled(rect.center(), rect.width() * 0.8, glow_color);
+    }
+
+    response
 }
 
 /// Standard close button with consistent vector icon (X)
