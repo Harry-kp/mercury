@@ -1,3 +1,7 @@
+//! Mercury - A fast, minimal API client
+//!
+//! Entry point and application initialization.
+
 mod app;
 mod components;
 mod constants;

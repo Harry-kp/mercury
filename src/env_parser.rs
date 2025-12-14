@@ -1,3 +1,7 @@
+//! Environment Parser Module
+//!
+//! Parses `.env` files and substitutes `{{variables}}` in request content.
+
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;

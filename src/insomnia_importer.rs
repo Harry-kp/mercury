@@ -1,3 +1,7 @@
+//! Insomnia Importer Module
+//!
+//! Converts Insomnia export files (JSON/YAML) to Mercury `.http` format.
+
 use serde::Deserialize;
 use serde_json::Value;
 use std::collections::HashMap;

@@ -1,3 +1,7 @@
+//! Application Constants
+//!
+//! Centralized configuration values: URLs, limits, and magic numbers.
+
 pub const GITHUB_USERNAME: &str = "Harry-kp";
 pub const GITHUB_REPO: &str = "mercury";
 

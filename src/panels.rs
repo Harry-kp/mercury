@@ -1,5 +1,6 @@
-// panels.rs - Main panel layouts
-// Clean, scrollable panels with proper overflow handling
+//! Panels Module
+//!
+//! Main UI panel layouts - sidebar, request editor, response viewer.
 
 use crate::app::AuthMode;
 use crate::app::MercuryApp;
