@@ -1,3 +1,8 @@
+//! Theme Module
+//!
+//! Defines the visual design system for Mercury - colors, spacing, fonts.
+//! Inspired by HEY.com's warm, purposeful aesthetic.
+
 // Calm, warm, purposeful colors for long coding sessions
 
 use egui::Color32;

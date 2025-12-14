@@ -1,3 +1,13 @@
+//! Mercury Application Core
+//!
+//! This module contains the main application state and logic for the Mercury API client.
+//! It handles:
+//! - Application state management (MercuryApp)
+//! - Workspace and file operations
+//! - Request execution coordination
+//! - UI state and rendering dispatch
+//! - Session persistence (state, history, recent requests)
+
 use crate::env_parser::{parse_env_file, substitute_variables};
 use crate::http_parser::{parse_http_file, HttpMethod, HttpRequest};
 use crate::request_executor::{execute_request, HttpResponse};

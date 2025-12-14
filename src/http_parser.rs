@@ -1,3 +1,8 @@
+//! HTTP Parser Module
+//!
+//! Parses `.http` file format and provides HTTP method/request types.
+//! The `.http` format is a simple text-based format for defining HTTP requests.
+
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
