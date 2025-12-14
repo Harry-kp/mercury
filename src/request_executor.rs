@@ -1,3 +1,7 @@
+//! Request Executor Module
+//!
+//! Executes HTTP requests using reqwest and returns structured responses.
+
 use crate::constants::MAX_RESPONSE_SIZE;
 use crate::http_parser::{HttpMethod, HttpRequest};
 use serde_json::Value;

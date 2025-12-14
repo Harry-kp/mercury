@@ -1,4 +1,8 @@
-// curl_parser.rs - Parse cURL commands into HTTP requests
+//! cURL Parser Module
+//!
+//! Parses cURL command strings into structured request objects.
+//! Supports common flags like -X, -H, -d, -u, -A, -b, -I, -G, --json.
+
 use crate::http_parser::HttpMethod;
 
 #[derive(Debug)]
@@ -66,18 +70,7 @@ pub fn parse_curl(curl_cmd: &str) -> Result<CurlRequest, String> {
         match token.as_str() {
             "-X" | "--request" => {
                 if i + 1 < tokens.len() {
-                    method = match tokens[i + 1].to_uppercase().as_str() {
-                        "GET" => HttpMethod::GET,
-                        "POST" => HttpMethod::POST,
-                        "PUT" => HttpMethod::PUT,
-                        "PATCH" => HttpMethod::PATCH,
-                        "DELETE" => HttpMethod::DELETE,
-                        "HEAD" => HttpMethod::HEAD,
-                        "OPTIONS" => HttpMethod::OPTIONS,
-                        "CONNECT" => HttpMethod::CONNECT,
-                        "TRACE" => HttpMethod::TRACE,
-                        _ => HttpMethod::GET,
-                    };
+                    method = HttpMethod::from_str(&tokens[i + 1]).unwrap_or(HttpMethod::GET);
                     i += 1;
                 }
             }

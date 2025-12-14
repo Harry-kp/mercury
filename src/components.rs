@@ -1,5 +1,7 @@
-// components.rs - Reusable UI components
-// Modular widgets with consistent styling
+//! UI Components Module
+//!
+//! Reusable UI components with consistent styling.
+//! Includes status badges, method badges, buttons, tabs, and syntax highlighting.
 
 use crate::theme::{Colors, FontSize, Radius, Spacing, StrokeWidth};
 use egui::{self, Color32, RichText, Ui};

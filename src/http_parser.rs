@@ -1,9 +1,15 @@
+//! HTTP Parser Module
+//!
+//! Parses `.http` file format and provides HTTP method/request types.
+//! The `.http` format is a simple text-based format for defining HTTP requests.
+
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 #[allow(clippy::upper_case_acronyms)]
 pub enum HttpMethod {
+    #[default]
     GET,
     POST,
     PUT,
@@ -44,23 +50,9 @@ impl HttpMethod {
             HttpMethod::TRACE => "TRACE",
         }
     }
-
-    pub fn color(&self) -> (u8, u8, u8) {
-        match self {
-            HttpMethod::GET => (97, 175, 239),      // Blue
-            HttpMethod::POST => (152, 195, 121),    // Green
-            HttpMethod::PUT => (229, 192, 123),     // Yellow/Orange
-            HttpMethod::PATCH => (198, 120, 221),   // Purple
-            HttpMethod::DELETE => (224, 108, 117),  // Red
-            HttpMethod::HEAD => (86, 182, 194),     // Cyan
-            HttpMethod::OPTIONS => (209, 154, 102), // Brown
-            HttpMethod::CONNECT => (0, 150, 136),   // Teal
-            HttpMethod::TRACE => (158, 158, 158),   // Gray
-        }
-    }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct HttpRequest {
     pub method: HttpMethod,
     pub url: String,
@@ -68,19 +60,8 @@ pub struct HttpRequest {
     pub body: Option<String>,
 }
 
-impl HttpRequest {
-    pub fn new() -> Self {
-        HttpRequest {
-            method: HttpMethod::GET,
-            url: String::new(),
-            headers: HashMap::new(),
-            body: None,
-        }
-    }
-}
-
 pub fn parse_http_file(content: &str) -> Result<HttpRequest, String> {
-    let mut request = HttpRequest::new();
+    let mut request = HttpRequest::default();
     let lines: Vec<&str> = content.lines().collect();
 
     if lines.is_empty() {

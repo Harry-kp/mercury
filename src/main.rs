@@ -1,3 +1,7 @@
+//! Mercury - A fast, minimal API client
+//!
+//! Entry point and application initialization.
+
 mod app;
 mod components;
 mod constants;
@@ -6,9 +10,11 @@ mod env_parser;
 mod http_parser;
 mod insomnia_importer;
 mod panels;
+mod persistence;
 mod postman_importer;
 mod request_executor;
 mod theme;
+mod types;
 mod utils;
 
 use eframe::egui;

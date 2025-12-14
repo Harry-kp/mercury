@@ -1,6 +1,8 @@
-use base64::prelude::*;
+//! Utility Functions
+//!
+//! Helper functions for auth, URL handling, and header processing.
 
-// Public Enum for Auth Mode
+use base64::prelude::*;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AuthMode {
     None,
