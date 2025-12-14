@@ -135,11 +135,15 @@ pub fn parse_curl(curl_cmd: &str) -> Result<CurlRequest, String> {
                 method = HttpMethod::GET;
             }
             "--compressed" | "-s" | "--silent" | "-L" | "--location" | "-k" | "--insecure"
-            | "-v" | "--verbose" | "-o" | "--output" => {
-                // Ignore these flags (some take an argument, handle below)
-                if token == "-o" || token == "--output" {
-                    i += 1; // Skip the output filename
-                }
+            | "-v" | "--verbose" | "-p" | "-#" | "--progress-bar" | "-f" | "--fail" | "-S"
+            | "--show-error" | "-N" | "--no-buffer" => {
+                // Ignore these boolean flags
+            }
+            "-o" | "--output" | "-x" | "--proxy" | "-c" | "--cookie-jar" | "-j"
+            | "--connect-timeout" | "--max-time" | "-m" | "-w" | "--write-out" | "--cacert"
+            | "--cert" | "--key" | "-e" | "--referer" => {
+                // Ignore these flags that take one argument
+                i += 1; // Skip the argument
             }
             arg if !arg.starts_with('-') => {
                 // Assume it's the URL
@@ -237,5 +241,14 @@ mod tests {
             .headers
             .iter()
             .any(|(k, v)| k == "Content-Type" && v == "application/json"));
+    }
+
+    #[test]
+    fn test_proxy_flags() {
+        // This should parse successfully, ignoring the proxy flags
+        let curl = "curl -v -p -x http://proxy.example.com:8080 https://httpbin.org/get";
+        let req = parse_curl(curl).unwrap();
+        assert_eq!(req.method, HttpMethod::GET);
+        assert_eq!(req.url, "https://httpbin.org/get");
     }
 }
