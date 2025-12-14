@@ -1628,17 +1628,8 @@ impl eframe::App for MercuryApp {
                                 .unwrap_or("Untitled");
 
                             // HTTP Method badge
-                            let method_color = match self.method {
-                                HttpMethod::GET => crate::theme::Colors::METHOD_GET,
-                                HttpMethod::POST => crate::theme::Colors::METHOD_POST,
-                                HttpMethod::PUT => crate::theme::Colors::METHOD_PUT,
-                                HttpMethod::PATCH => crate::theme::Colors::METHOD_PATCH,
-                                HttpMethod::DELETE => crate::theme::Colors::METHOD_DELETE,
-                                HttpMethod::HEAD => crate::theme::Colors::METHOD_HEAD,
-                                HttpMethod::OPTIONS => crate::theme::Colors::METHOD_OPTIONS,
-                                HttpMethod::CONNECT => crate::theme::Colors::METHOD_CONNECT,
-                                HttpMethod::TRACE => crate::theme::Colors::METHOD_TRACE,
-                            };
+                            let method_color =
+                                crate::theme::Colors::method_color(self.method.as_str());
                             ui.label(
                                 egui::RichText::new(format!("{:?}", self.method))
                                     .size(crate::theme::FontSize::SM)

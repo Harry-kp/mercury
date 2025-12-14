@@ -75,13 +75,7 @@ impl MercuryApp {
                                 for (idx, temp) in self.temp_requests.iter().enumerate().rev() {
                                     let row_response = ui.horizontal(|ui| {
                                         ui.add_space(Spacing::MD);
-                                        let method_color = match temp.method.as_str() {
-                                            "GET" => Colors::METHOD_GET,
-                                            "POST" => Colors::METHOD_POST,
-                                            "PUT" => Colors::METHOD_PUT,
-                                            "DELETE" => Colors::METHOD_DELETE,
-                                            _ => Colors::TEXT_MUTED,
-                                        };
+                                        let method_color = Colors::method_color(&temp.method);
                                         ui.label(
                                             egui::RichText::new(&temp.method)
                                                 .size(FontSize::XS)
@@ -916,18 +910,7 @@ impl MercuryApp {
             ui.spacing_mut().item_spacing.x = crate::theme::Spacing::SM;
 
             // Method - just colored text, clickable
-            let method_color = match self.method.as_str() {
-                "GET" => Colors::METHOD_GET,
-                "POST" => Colors::METHOD_POST,
-                "PUT" => Colors::METHOD_PUT,
-                "PATCH" => Colors::METHOD_PATCH,
-                "DELETE" => Colors::METHOD_DELETE,
-                "HEAD" => Colors::METHOD_HEAD,
-                "OPTIONS" => Colors::METHOD_OPTIONS,
-                "CONNECT" => Colors::METHOD_CONNECT,
-                "TRACE" => Colors::METHOD_TRACE,
-                _ => Colors::TEXT_SECONDARY,
-            };
+            let method_color = Colors::method_color(self.method.as_str());
 
             // Use a simple popup for method selection
             let method_response = ui
@@ -969,18 +952,7 @@ impl MercuryApp {
                         HttpMethod::CONNECT,
                         HttpMethod::TRACE,
                     ] {
-                        let color = match method.as_str() {
-                            "GET" => Colors::METHOD_GET,
-                            "POST" => Colors::METHOD_POST,
-                            "PUT" => Colors::METHOD_PUT,
-                            "PATCH" => Colors::METHOD_PATCH,
-                            "DELETE" => Colors::METHOD_DELETE,
-                            "HEAD" => Colors::METHOD_HEAD,
-                            "OPTIONS" => Colors::METHOD_OPTIONS,
-                            "CONNECT" => Colors::METHOD_CONNECT,
-                            "TRACE" => Colors::METHOD_TRACE,
-                            _ => Colors::TEXT_SECONDARY,
-                        };
+                        let color = Colors::method_color(method.as_str());
                         if ui
                             .selectable_label(
                                 self.method.as_str() == method.as_str(),

@@ -65,6 +65,22 @@ impl Colors {
     pub const METHOD_CONNECT: Color32 = Color32::from_rgb(0, 150, 136); // Teal - tunnel
     pub const METHOD_TRACE: Color32 = Color32::from_rgb(158, 158, 158); // Gray - debug
 
+    /// Get method color by string - single source of truth for HTTP method colors
+    pub fn method_color(method: &str) -> Color32 {
+        match method {
+            "GET" => Self::METHOD_GET,
+            "POST" => Self::METHOD_POST,
+            "PUT" => Self::METHOD_PUT,
+            "PATCH" => Self::METHOD_PATCH,
+            "DELETE" => Self::METHOD_DELETE,
+            "HEAD" => Self::METHOD_HEAD,
+            "OPTIONS" => Self::METHOD_OPTIONS,
+            "CONNECT" => Self::METHOD_CONNECT,
+            "TRACE" => Self::METHOD_TRACE,
+            _ => Self::TEXT_SECONDARY,
+        }
+    }
+
     pub const SELECTED_ITEM: Color32 = Color32::from_rgb(97, 175, 239);
     pub const ERROR_FLASH: Color32 = Color32::from_rgb(220, 80, 80);
     pub const SUCCESS_FLASH: Color32 = Color32::from_rgb(100, 200, 100);

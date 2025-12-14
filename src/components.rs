@@ -102,18 +102,7 @@ pub fn tab_bar(ui: &mut Ui, tabs: &[&str], selected: &mut usize) {
 
 /// Method badge with color
 pub fn method_badge(ui: &mut Ui, method: &str) -> egui::Response {
-    let color = match method {
-        "GET" => Colors::METHOD_GET,
-        "POST" => Colors::METHOD_POST,
-        "PUT" => Colors::METHOD_PUT,
-        "PATCH" => Colors::METHOD_PATCH,
-        "DELETE" => Colors::METHOD_DELETE,
-        "HEAD" => Colors::METHOD_HEAD,
-        "OPTIONS" => Colors::METHOD_OPTIONS,
-        "CONNECT" => Colors::METHOD_CONNECT,
-        "TRACE" => Colors::METHOD_TRACE,
-        _ => Colors::TEXT_SECONDARY,
-    };
+    let color = Colors::method_color(method);
 
     egui::Frame::NONE
         .fill(color.gamma_multiply(0.15))
