@@ -10,6 +10,7 @@ mod env_parser;
 mod http_parser;
 mod insomnia_importer;
 mod panels;
+mod persistence;
 mod postman_importer;
 mod request_executor;
 mod theme;
