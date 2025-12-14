@@ -72,6 +72,10 @@ pub fn parse_curl(curl_cmd: &str) -> Result<CurlRequest, String> {
                         "PUT" => HttpMethod::PUT,
                         "PATCH" => HttpMethod::PATCH,
                         "DELETE" => HttpMethod::DELETE,
+                        "HEAD" => HttpMethod::HEAD,
+                        "OPTIONS" => HttpMethod::OPTIONS,
+                        "CONNECT" => HttpMethod::CONNECT,
+                        "TRACE" => HttpMethod::TRACE,
                         _ => HttpMethod::GET,
                     };
                     i += 1;

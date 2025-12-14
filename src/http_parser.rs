@@ -11,6 +11,8 @@ pub enum HttpMethod {
     DELETE,
     HEAD,
     OPTIONS,
+    CONNECT,
+    TRACE,
 }
 
 impl HttpMethod {
@@ -23,6 +25,8 @@ impl HttpMethod {
             "DELETE" => Some(HttpMethod::DELETE),
             "HEAD" => Some(HttpMethod::HEAD),
             "OPTIONS" => Some(HttpMethod::OPTIONS),
+            "CONNECT" => Some(HttpMethod::CONNECT),
+            "TRACE" => Some(HttpMethod::TRACE),
             _ => None,
         }
     }
@@ -36,6 +40,8 @@ impl HttpMethod {
             HttpMethod::DELETE => "DELETE",
             HttpMethod::HEAD => "HEAD",
             HttpMethod::OPTIONS => "OPTIONS",
+            HttpMethod::CONNECT => "CONNECT",
+            HttpMethod::TRACE => "TRACE",
         }
     }
 
@@ -48,6 +54,8 @@ impl HttpMethod {
             HttpMethod::DELETE => (224, 108, 117),  // Red
             HttpMethod::HEAD => (86, 182, 194),     // Cyan
             HttpMethod::OPTIONS => (209, 154, 102), // Brown
+            HttpMethod::CONNECT => (0, 150, 136),   // Teal
+            HttpMethod::TRACE => (158, 158, 158),   // Gray
         }
     }
 }
@@ -175,5 +183,21 @@ Content-Type: application/json
 
         assert!(matches!(request.method, HttpMethod::GET));
         assert_eq!(request.url, "{{ base_url }}/users");
+    }
+
+    #[test]
+    fn test_parse_connect_method() {
+        let content = "CONNECT example.com:443";
+        let request = parse_http_file(content).unwrap();
+        assert!(matches!(request.method, HttpMethod::CONNECT));
+        assert_eq!(request.url, "example.com:443");
+    }
+
+    #[test]
+    fn test_parse_trace_method() {
+        let content = "TRACE https://api.example.com/users";
+        let request = parse_http_file(content).unwrap();
+        assert!(matches!(request.method, HttpMethod::TRACE));
+        assert_eq!(request.url, "https://api.example.com/users");
     }
 }

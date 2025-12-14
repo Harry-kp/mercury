@@ -150,6 +150,8 @@ pub fn execute_request(
         HttpMethod::DELETE => client.delete(&request.url),
         HttpMethod::HEAD => client.head(&request.url),
         HttpMethod::OPTIONS => client.request(reqwest::Method::OPTIONS, &request.url),
+        HttpMethod::CONNECT => client.request(reqwest::Method::CONNECT, &request.url),
+        HttpMethod::TRACE => client.request(reqwest::Method::TRACE, &request.url),
     };
 
     for (key, value) in &request.headers {
