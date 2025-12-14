@@ -229,7 +229,7 @@ pub fn copy_icon_button(ui: &mut Ui) -> bool {
 /// Send/Stop button (Send = Play/Primary, Stop = Square/Orange with Pulse)
 pub fn send_stop_button(ui: &mut Ui, executing: bool, time: f64) -> egui::Response {
     let (icon, base_color, tooltip) = if executing {
-        ("■", Colors::STOP, "Cancel request (Esc)")
+        ("■", Colors::PRIMARY, "Cancel request (Esc)")
     } else {
         ("▶", Colors::PRIMARY, "Send request (⌘+Enter)")
     };
