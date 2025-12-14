@@ -169,7 +169,12 @@ See [Environment Variables](/docs/features/environments) for more details.
 
 The button animates while the request is in progress.
 
-![Sending request - Replace with: Screenshot showing animated send button during request](/img/screenshots/placeholder.png)
+### Cancelling a Request
+
+Click the **Stop** button (which replaces **Send**) or press `Esc` to cancel a running request.
+The request is immediately stopped, and the UI is unblocked.
+
+![Sending request - Replace with: Screenshot showing animated send/stop button](/img/screenshots/placeholder.png)
 
 ## Defaults
 

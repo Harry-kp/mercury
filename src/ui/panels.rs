@@ -452,7 +452,7 @@ impl MercuryApp {
 
     /// Response body with proper scroll
     fn render_response_body(&mut self, ui: &mut Ui) {
-        if self.executing {
+        if self.ongoing_request.is_some() {
             loading_state(ui, "Sending request...");
         } else if let Some(response) = &self.response {
             // Status row
@@ -1008,10 +1008,21 @@ impl MercuryApp {
             }
 
             // Animated send button
+            // Send/Stop button
             let time = ctx.input(|i| i.time);
-            let send_response = animated_send_button(ui, self.executing, time);
-            if send_response.on_hover_text("Send (Cmd+Enter)").clicked() && !self.executing {
-                self.execute_request(ctx);
+            let is_executing = self.ongoing_request.is_some();
+            let send_response = send_stop_button(ui, is_executing, time);
+
+            if send_response.clicked() {
+                if is_executing {
+                    self.cancel_request();
+                } else {
+                    self.execute_request(ctx);
+                }
+            }
+
+            if is_executing {
+                ctx.request_repaint();
             }
         });
     }

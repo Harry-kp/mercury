@@ -94,9 +94,10 @@ pub struct MercuryApp {
 
     pub show_about: bool,
 
-    pub executing: bool,
-    response_rx: Receiver<Result<HttpResponse, String>>,
-    response_tx: Sender<Result<HttpResponse, String>>,
+    pub ongoing_request: Option<(u64, f64)>, // (id, start_time)
+    request_id_counter: u64,
+    response_rx: Receiver<(u64, Result<HttpResponse, String>)>,
+    response_tx: Sender<(u64, Result<HttpResponse, String>)>,
 
     folder_rx: Receiver<PathBuf>,
     folder_tx: Sender<PathBuf>,
@@ -185,7 +186,8 @@ impl MercuryApp {
             copied_feedback_until: 0.0,
             request_error: None,
             show_about: false,
-            executing: false,
+            ongoing_request: None,
+            request_id_counter: 0,
             response_rx,
             response_tx,
             folder_rx,
@@ -755,15 +757,28 @@ impl MercuryApp {
         };
 
         // Execute async request in background thread
+        // Execute async request in background thread
         let ctx = ctx.clone();
         let tx = self.response_tx.clone();
-        self.executing = true;
+
+        // Assign new ID
+        self.request_id_counter += 1;
+        let request_id = self.request_id_counter;
+        let start_time = ctx.input(|i| i.time);
+
+        self.ongoing_request = Some((request_id, start_time));
 
         std::thread::spawn(move || {
             let response = execute_request(&request, 30, true);
-            let _ = tx.send(response);
+            let _ = tx.send((request_id, response));
             ctx.request_repaint();
         });
+    }
+
+    /// Cancel the currently running request (soft cancel)
+    /// We can't easily kill the thread, so we just ignore its result
+    pub fn cancel_request(&mut self) {
+        self.ongoing_request = None;
     }
 
     fn generate_curl(&self) -> String {
@@ -1124,6 +1139,13 @@ impl MercuryApp {
 
 impl eframe::App for MercuryApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        // Global Shortcuts
+        // Escape cancels running request
+        if self.ongoing_request.is_some() && ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+            self.cancel_request();
+            ctx.request_repaint();
+        }
+
         // Check for changes and auto-save (every 5 seconds)
         let current_time = ctx.input(|i| i.time);
         self.check_for_changes();
@@ -1134,89 +1156,98 @@ impl eframe::App for MercuryApp {
             self.last_save_time = current_time;
         }
 
-        if let Ok(result) = self.response_rx.try_recv() {
-            self.executing = false;
-            match result {
-                Ok(response) => {
-                    let time = std::time::SystemTime::now()
-                        .duration_since(std::time::UNIX_EPOCH)
-                        .unwrap()
-                        .as_secs_f64();
+        if let Ok((id, result)) = self.response_rx.try_recv() {
+            // Only process if it matches ongoing request
+            let is_match = self
+                .ongoing_request
+                .is_some_and(|(ongoing_id, _)| ongoing_id == id);
 
-                    // Format response type as string for history
-                    let response_type_str = format!("{:?}", response.response_type);
+            if is_match {
+                self.ongoing_request = None;
+                match result {
+                    Ok(response) => {
+                        let time = std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .unwrap()
+                            .as_secs_f64();
 
-                    // Store only a small preview of response body to save memory
-                    // Full response is always viewable by re-running the request
-                    let stored_body = if response.body.len() > 500 {
-                        let preview: String = response.body.chars().take(500).collect();
-                        format!("{}...", preview)
-                    } else {
-                        response.body.clone()
-                    };
+                        // Format response type as string for history
+                        let response_type_str = format!("{:?}", response.response_type);
 
-                    let entry = TimelineEntry {
-                        timestamp: time,
-                        method: self.method.clone(),
-                        url: self.url.clone(),
-                        status: response.status,
-                        status_text: response.status_text.clone(),
-                        duration_ms: response.duration_ms,
-                        request_body: self.body_text.clone(),
-                        request_headers: self.headers_text.clone(),
-                        response_body: stored_body,
-                        response_type: response_type_str,
-                        response_size: response.size_bytes,
-                        content_type: response.content_type.clone(),
-                    };
-                    self.timeline.push(entry);
+                        // Store only a small preview of response body to save memory
+                        // Full response is always viewable by re-running the request
+                        let stored_body = if response.body.len() > 500 {
+                            let preview: String = response.body.chars().take(500).collect();
+                            format!("{}...", preview)
+                        } else {
+                            response.body.clone()
+                        };
 
-                    if self.timeline.len() > crate::core::constants::MAX_TIMELINE_ENTRIES {
-                        self.timeline.remove(0);
-                    }
+                        let entry = TimelineEntry {
+                            timestamp: time,
+                            method: self.method.clone(),
+                            url: self.url.clone(),
+                            status: response.status,
+                            status_text: response.status_text.clone(),
+                            duration_ms: response.duration_ms,
+                            request_body: self.body_text.clone(),
+                            request_headers: self.headers_text.clone(),
+                            response_body: stored_body,
+                            response_type: response_type_str,
+                            response_size: response.size_bytes,
+                            content_type: response.content_type.clone(),
+                        };
+                        self.timeline.push(entry);
 
-                    // Save history to disk after each request
-                    self.save_history();
-
-                    // Save to Recent (only if not a saved file AND it's a new unique request)
-                    if self.current_file.is_none() && !self.url.is_empty() {
-                        let method_str = format!("{:?}", self.method);
-                        // Check if this exact request already exists
-                        let exists = self.temp_requests.iter().any(|t| {
-                            t.url == self.url
-                                && t.method == method_str
-                                && t.headers == self.headers_text
-                                && t.body == self.body_text
-                        });
-
-                        if !exists {
-                            let temp_req = TempRequest {
-                                method: method_str,
-                                url: self.url.clone(),
-                                headers: self.headers_text.clone(),
-                                body: self.body_text.clone(),
-                                timestamp: time,
-                            };
-                            self.temp_requests.push(temp_req);
-                            self.save_temp_requests();
+                        if self.timeline.len() > crate::core::constants::MAX_TIMELINE_ENTRIES {
+                            self.timeline.remove(0);
                         }
-                    }
 
-                    // Track previous response for diff
-                    self.previous_response = self.response.take();
-                    self.response = Some(response);
-                    self.formatted_response_cache = None; // Invalidate cache
-                    self.request_error = None;
-                    self.last_action_message = Some(("Request completed".to_string(), time, false));
+                        // Save history to disk after each request
+                        self.save_history();
+
+                        // Save to Recent (only if not a saved file AND it's a new unique request)
+                        if self.current_file.is_none() && !self.url.is_empty() {
+                            let method_str = format!("{:?}", self.method);
+                            // Check if this exact request already exists
+                            let exists = self.temp_requests.iter().any(|t| {
+                                t.url == self.url
+                                    && t.method == method_str
+                                    && t.headers == self.headers_text
+                                    && t.body == self.body_text
+                            });
+
+                            if !exists {
+                                let temp_req = TempRequest {
+                                    method: method_str,
+                                    url: self.url.clone(),
+                                    headers: self.headers_text.clone(),
+                                    body: self.body_text.clone(),
+                                    timestamp: time,
+                                };
+                                self.temp_requests.push(temp_req);
+                                self.save_temp_requests();
+                            }
+                        }
+
+                        // Track previous response for diff
+                        self.previous_response = self.response.take();
+                        self.response = Some(response);
+                        self.formatted_response_cache = None; // Invalidate cache
+                        self.request_error = None;
+                        self.last_action_message =
+                            Some(("Request completed".to_string(), time, false));
+                    }
+                    Err(e) => {
+                        self.request_error = Some(e.clone());
+                        let time = ctx.input(|i| i.time);
+                        self.last_action_message =
+                            Some((format!("Request failed: {}", e), time, true));
+                        ctx.request_repaint();
+                    }
                 }
-                Err(e) => {
-                    self.request_error = Some(e.clone());
-                    let time = ctx.input(|i| i.time);
-                    self.last_action_message = Some((format!("Request failed: {}", e), time, true));
-                    ctx.request_repaint();
-                }
-            }
-        }
+            } // matched
+        } // received
 
         // Check for folder selection from async dialog
         if let Ok(path) = self.folder_rx.try_recv() {
@@ -2308,7 +2339,10 @@ impl eframe::App for MercuryApp {
             }
 
             // Cmd/Ctrl + Enter: Send request
-            if i.key_pressed(egui::Key::Enter) && i.modifiers.command && !self.executing {
+            if i.key_pressed(egui::Key::Enter)
+                && i.modifiers.command
+                && self.ongoing_request.is_none()
+            {
                 self.should_execute_request = true;
             }
 

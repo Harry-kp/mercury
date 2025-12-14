@@ -225,8 +225,14 @@ pub fn copy_icon_button(ui: &mut Ui) -> bool {
         .clicked()
 }
 
-/// Animated send button with pulsing glow when executing
-pub fn animated_send_button(ui: &mut Ui, executing: bool, time: f64) -> egui::Response {
+/// Send/Stop button (Send = Play/Primary, Stop = Square/Primary with Pulse)
+pub fn send_stop_button(ui: &mut Ui, executing: bool, time: f64) -> egui::Response {
+    let (icon, base_color, tooltip) = if executing {
+        ("■", Colors::PRIMARY, "Cancel request (Esc)")
+    } else {
+        ("▶", Colors::PRIMARY, "Send request (⌘+Enter)")
+    };
+
     // Calculate pulse effect (0.0 to 1.0)
     let pulse = if executing {
         ((time * Animation::PULSE_SPEED as f64 * std::f64::consts::PI * 2.0).sin() * 0.5 + 0.5)
@@ -235,33 +241,31 @@ pub fn animated_send_button(ui: &mut Ui, executing: bool, time: f64) -> egui::Re
         0.0
     };
 
-    // Base color with pulse intensity
-    let base_color = if executing {
-        // Interpolate between primary and brighter version
-        let r = Colors::PRIMARY.r() as f32 + pulse * 40.0;
-        let g = Colors::PRIMARY.g() as f32 + pulse * 40.0;
-        let b = Colors::PRIMARY.b() as f32 + pulse * 20.0;
+    // Apply pulse to color if executing
+    let color = if executing {
+        let r = base_color.r() as f32 + pulse * 20.0;
+        let g = base_color.g() as f32 + pulse * 20.0;
+        let b = base_color.b() as f32 + pulse * 20.0;
         Color32::from_rgb(r.min(255.0) as u8, g.min(255.0) as u8, b.min(255.0) as u8)
     } else {
-        Colors::PRIMARY
+        base_color
     };
-
-    let icon = if executing { "◌" } else { "▶" };
 
     let response = ui
         .add(
-            egui::Label::new(RichText::new(icon).size(FontSize::ICON).color(base_color))
+            egui::Label::new(RichText::new(icon).size(FontSize::ICON).color(color))
                 .sense(egui::Sense::click()),
         )
-        .on_hover_cursor(egui::CursorIcon::PointingHand);
+        .on_hover_cursor(egui::CursorIcon::PointingHand)
+        .on_hover_text(tooltip);
 
-    // Draw glow effect when executing
+    // Draw glow effect if executing
     if executing {
         let rect = response.rect;
         let glow_color = Color32::from_rgba_unmultiplied(
-            Colors::PRIMARY.r(),
-            Colors::PRIMARY.g(),
-            Colors::PRIMARY.b(),
+            base_color.r(),
+            base_color.g(),
+            base_color.b(),
             (pulse * Animation::GLOW_INTENSITY * 255.0) as u8,
         );
         ui.painter()
