@@ -1021,22 +1021,8 @@ impl MercuryApp {
                 }
             }
 
-            // Show elapsed time if executing (FixedWidth to prevent jitter)
-            if let Some((_, start_time)) = self.ongoing_request {
-                let elapsed = time - start_time;
-                if elapsed > 0.5 {
-                    // Show starting from 0.5s slightly earlier
-                    ui.add_sized(
-                        egui::vec2(45.0, ui.available_height()),
-                        egui::Label::new(
-                            egui::RichText::new(format!("{:.1}s", elapsed))
-                                .size(crate::theme::FontSize::SM)
-                                .color(crate::theme::Colors::TEXT_MUTED)
-                                .monospace(),
-                        ),
-                    );
-                    ctx.request_repaint();
-                }
+            if is_executing {
+                ctx.request_repaint();
             }
         });
     }
