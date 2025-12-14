@@ -1160,7 +1160,7 @@ impl eframe::App for MercuryApp {
             // Only process if it matches ongoing request
             let is_match = self
                 .ongoing_request
-                .map_or(false, |(ongoing_id, _)| ongoing_id == id);
+                .is_some_and(|(ongoing_id, _)| ongoing_id == id);
 
             if is_match {
                 self.ongoing_request = None;

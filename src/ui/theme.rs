@@ -102,14 +102,6 @@ impl Colors {
     pub const XML_TAG: Color32 = Color32::from_rgb(129, 140, 248); // Indigo (same as JSON_KEY)
 }
 
-/// Animation timing constants
-pub struct Animation;
-
-impl Animation {
-    pub const PULSE_SPEED: f32 = 3.0; // Pulses per second
-    pub const GLOW_INTENSITY: f32 = 0.4; // Max glow alpha
-}
-
 /// Spacing - 8px grid system
 pub struct Spacing;
 
