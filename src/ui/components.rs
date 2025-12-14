@@ -225,8 +225,7 @@ pub fn copy_icon_button(ui: &mut Ui) -> bool {
         .clicked()
 }
 
-/// Send/Stop button (Send = Play/Primary, Stop = Square/Error)
-/// Send/Stop button (Send = Play/Primary, Stop = Square/Orange with Pulse)
+/// Send/Stop button (Send = Play/Primary, Stop = Square/Primary with Pulse)
 pub fn send_stop_button(ui: &mut Ui, executing: bool, time: f64) -> egui::Response {
     let (icon, base_color, tooltip) = if executing {
         ("■", Colors::PRIMARY, "Cancel request (Esc)")
@@ -234,7 +233,7 @@ pub fn send_stop_button(ui: &mut Ui, executing: bool, time: f64) -> egui::Respon
         ("▶", Colors::PRIMARY, "Send request (⌘+Enter)")
     };
 
-    // Calculate pulse
+    // Calculate pulse effect (0.0 to 1.0)
     let pulse = if executing {
         ((time * Animation::PULSE_SPEED as f64 * std::f64::consts::PI * 2.0).sin() * 0.5 + 0.5)
             as f32
