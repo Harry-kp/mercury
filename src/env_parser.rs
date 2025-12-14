@@ -2,19 +2,11 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 
-/// Parse result with variables and any warnings encountered
-pub struct EnvParseResult {
-    pub vars: HashMap<String, String>,
-    #[allow(dead_code)]
-    pub warnings: Vec<String>,
-}
-
-pub fn parse_env_file(path: &Path) -> Result<EnvParseResult, std::io::Error> {
+pub fn parse_env_file(path: &Path) -> Result<HashMap<String, String>, std::io::Error> {
     let content = fs::read_to_string(path)?;
     let mut vars = HashMap::new();
-    let mut warnings = Vec::new();
 
-    for (line_num, line) in content.lines().enumerate() {
+    for line in content.lines() {
         let line = line.trim();
 
         // Skip empty lines and comments
@@ -26,7 +18,7 @@ pub fn parse_env_file(path: &Path) -> Result<EnvParseResult, std::io::Error> {
         if let Some((key, value)) = line.split_once('=') {
             let key = key.trim().to_string();
 
-            // Proper quote handling: only strip if both ends have matching quotes and len >= 2
+            // Proper quote handling: only strip if both ends have matching quotes
             let value = value.trim();
             let value = if value.len() >= 2
                 && ((value.starts_with('"') && value.ends_with('"'))
@@ -37,19 +29,11 @@ pub fn parse_env_file(path: &Path) -> Result<EnvParseResult, std::io::Error> {
                 value.to_string()
             };
 
-            // Warn on duplicate keys
-            if vars.contains_key(&key) {
-                warnings.push(format!("Line {}: duplicate key '{}'", line_num + 1, key));
-            }
-
             vars.insert(key, value);
-        } else {
-            // Malformed line - no = sign
-            warnings.push(format!("Line {}: skipped (no '=' found)", line_num + 1));
         }
     }
 
-    Ok(EnvParseResult { vars, warnings })
+    Ok(vars)
 }
 
 pub fn substitute_variables(text: &str, variables: &HashMap<String, String>) -> String {

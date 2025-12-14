@@ -426,8 +426,8 @@ impl MercuryApp {
         if self.selected_env > 0 && self.selected_env < self.env_files.len() {
             if let Some(workspace) = &self.workspace_path {
                 let env_file = workspace.join(&self.env_files[self.selected_env]);
-                if let Ok(result) = parse_env_file(&env_file) {
-                    self.env_variables = result.vars;
+                if let Ok(vars) = parse_env_file(&env_file) {
+                    self.env_variables = vars;
                 }
             }
         }
