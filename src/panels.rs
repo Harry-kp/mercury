@@ -924,6 +924,8 @@ impl MercuryApp {
                 "DELETE" => Colors::METHOD_DELETE,
                 "HEAD" => Colors::METHOD_HEAD,
                 "OPTIONS" => Colors::METHOD_OPTIONS,
+                "CONNECT" => Colors::METHOD_CONNECT,
+                "TRACE" => Colors::METHOD_TRACE,
                 _ => Colors::TEXT_SECONDARY,
             };
 
@@ -964,6 +966,8 @@ impl MercuryApp {
                         HttpMethod::DELETE,
                         HttpMethod::HEAD,
                         HttpMethod::OPTIONS,
+                        HttpMethod::CONNECT,
+                        HttpMethod::TRACE,
                     ] {
                         let color = match method.as_str() {
                             "GET" => Colors::METHOD_GET,
@@ -971,8 +975,10 @@ impl MercuryApp {
                             "PUT" => Colors::METHOD_PUT,
                             "PATCH" => Colors::METHOD_PATCH,
                             "DELETE" => Colors::METHOD_DELETE,
-                            "HEAD" => Colors::METHOD_HEAD, // Cyan-ish
-                            "OPTIONS" => Colors::METHOD_OPTIONS, // Orange
+                            "HEAD" => Colors::METHOD_HEAD,
+                            "OPTIONS" => Colors::METHOD_OPTIONS,
+                            "CONNECT" => Colors::METHOD_CONNECT,
+                            "TRACE" => Colors::METHOD_TRACE,
                             _ => Colors::TEXT_SECONDARY,
                         };
                         if ui

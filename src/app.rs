@@ -1634,10 +1634,10 @@ impl eframe::App for MercuryApp {
                                 HttpMethod::PUT => crate::theme::Colors::METHOD_PUT,
                                 HttpMethod::PATCH => crate::theme::Colors::METHOD_PATCH,
                                 HttpMethod::DELETE => crate::theme::Colors::METHOD_DELETE,
-                                HttpMethod::HEAD => crate::theme::Colors::TEXT_SECONDARY,
-                                HttpMethod::OPTIONS => crate::theme::Colors::TEXT_SECONDARY,
-                                HttpMethod::CONNECT => crate::theme::Colors::TEXT_SECONDARY,
-                                HttpMethod::TRACE => crate::theme::Colors::TEXT_SECONDARY,
+                                HttpMethod::HEAD => crate::theme::Colors::METHOD_HEAD,
+                                HttpMethod::OPTIONS => crate::theme::Colors::METHOD_OPTIONS,
+                                HttpMethod::CONNECT => crate::theme::Colors::METHOD_CONNECT,
+                                HttpMethod::TRACE => crate::theme::Colors::METHOD_TRACE,
                             };
                             ui.label(
                                 egui::RichText::new(format!("{:?}", self.method))
