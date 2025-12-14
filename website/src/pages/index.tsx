@@ -232,8 +232,11 @@ export default function Home(): ReactNode {
           </div>
 
           <div className={styles.downloadAlt}>
-            Or build from source:<br />
-            <code className={styles.installCmd}>cargo install mercury</code>
+            <strong>Quick Install:</strong><br />
+            <code className={styles.installCmd}>curl --proto '=https' --tlsv1.2 -LsSf https://github.com/Harry-kp/mercury/releases/latest/download/mercury-installer.sh | sh</code>
+            <br /><br />
+            <strong>Windows:</strong><br />
+            <code className={styles.installCmd}>irm https://github.com/Harry-kp/mercury/releases/latest/download/mercury-installer.ps1 | iex</code>
           </div>
         </div>
       </section>

@@ -65,15 +65,16 @@ Mercury is built on principles, not features:
 
 ## Installation
 
-### Download
-
-📦 **[Download latest release](https://github.com/Harry-kp/mercury/releases)** for macOS, Windows, or Linux.
+### Quick Install
 
 | Platform | Command |
 |----------|---------|
-| **macOS** | `curl -sL https://raw.githubusercontent.com/Harry-kp/mercury/master/install.sh \| bash` |
-| **Windows** | Download `.exe`, click "More info" → "Run anyway" |
-| **Linux** | `chmod +x mercury.AppImage && ./mercury.AppImage` |
+| **macOS / Linux** | `curl --proto '=https' --tlsv1.2 -LsSf https://github.com/Harry-kp/mercury/releases/latest/download/mercury-installer.sh \| sh` |
+| **Windows** | `powershell -ExecutionPolicy Bypass -c "irm https://github.com/Harry-kp/mercury/releases/latest/download/mercury-installer.ps1 \| iex"` |
+
+### Manual Download
+
+📦 **[Download latest release](https://github.com/Harry-kp/mercury/releases)** — Available for macOS (Intel/ARM), Windows, and Linux (x64/ARM64).
 
 ### Build from Source
 
