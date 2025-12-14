@@ -15,6 +15,14 @@ Before contributing, ask yourself:
 - Can this be solved outside the app (Git, text editor, shell)?
 - Does this add complexity that 80% of users won't need?
 
+## Finding Issues to Work On
+
+📋 **[Project Roadmap](https://github.com/users/Harry-kp/projects/5)** — See what's planned and in progress
+
+🏷️ **[Good First Issues](https://github.com/Harry-kp/mercury/issues?q=is%3Aopen+label%3A%22good+first+issue%22)** — Perfect for new contributors
+
+🆘 **[Help Wanted](https://github.com/Harry-kp/mercury/issues?q=is%3Aopen+label%3A%22help+wanted%22)** — Issues where we need community help
+
 ## What We're Looking For
 
 ✅ **Welcome**

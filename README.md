@@ -12,8 +12,9 @@
 <p align="center">
   <a href="https://harry-kp.github.io/mercury/docs/getting-started">Documentation</a> •
   <a href="https://github.com/Harry-kp/mercury/releases">Download</a> •
+  <a href="https://github.com/users/Harry-kp/projects/5">Roadmap</a> •
   <a href="#philosophy">Philosophy</a> •
-  <a href="#shortcuts">Shortcuts</a>
+  <a href="#contributing">Contributing</a>
 </p>
 
 <p align="center">
