@@ -662,114 +662,18 @@ impl MercuryApp {
                         });
                     });
 
-                    // Search box (if visible) - matches timeline/sidebar search pattern
+                    // Search box (if visible) - use reusable component
                     if self.response_search_visible {
                         ui.add_space(Spacing::SM);
 
-                        // Find matches (case-insensitive)
-                        let matches: Vec<usize> = if !self.response_search_query.is_empty() {
-                            let search_lower = self.response_search_query.to_lowercase();
-                            let body_lower = response.body.to_lowercase();
-                            body_lower
-                                .match_indices(&search_lower)
-                                .map(|(idx, _)| idx)
-                                .collect()
-                        } else {
-                            Vec::new()
-                        };
-
-                        let match_count = matches.len();
-
-                        // Ensure current match is within bounds
-                        if !self.response_search_query.is_empty()
-                            && match_count > 0
-                            && self.response_search_current_match >= match_count
-                        {
-                            self.response_search_current_match = 0;
-                        }
-
-                        ui.horizontal(|ui| {
-                            // Search input - consistent with other searches in Mercury
-                            let search_response = ui.add(
-                                egui::TextEdit::singleline(&mut self.response_search_query)
-                                    .hint_text(
-                                        egui::RichText::new("Search in response...")
-                                            .color(Colors::PLACEHOLDER),
-                                    )
-                                    .desired_width(ui.available_width() - 100.0)
-                                    .id(egui::Id::new("response_search_input")),
-                            );
-
-                            // Auto-focus when opened
-                            if self.response_search_query.is_empty() {
-                                search_response.request_focus();
-                            }
-
-                            // Match counter and nav - only visible when there are matches
-                            if !self.response_search_query.is_empty() && match_count > 0 {
-                                ui.label(
-                                    egui::RichText::new(format!(
-                                        "{}/{}",
-                                        self.response_search_current_match + 1,
-                                        match_count
-                                    ))
-                                    .size(FontSize::XS)
-                                    .color(Colors::TEXT_MUTED),
-                                );
-
-                                // Navigation arrows
-                                if ui
-                                    .add(
-                                        egui::Label::new(
-                                            egui::RichText::new("↑")
-                                                .size(FontSize::SM)
-                                                .color(Colors::TEXT_MUTED),
-                                        )
-                                        .sense(egui::Sense::click()),
-                                    )
-                                    .on_hover_cursor(egui::CursorIcon::PointingHand)
-                                    .on_hover_text("Previous match (Shift+F3)")
-                                    .clicked()
-                                    || (ui.input(|i| {
-                                        i.key_pressed(egui::Key::F3) && i.modifiers.shift
-                                    }) || (ui.input(|i| {
-                                        i.key_pressed(egui::Key::G)
-                                            && i.modifiers.command
-                                            && i.modifiers.shift
-                                    })))
-                                {
-                                    if self.response_search_current_match == 0 {
-                                        self.response_search_current_match = match_count - 1;
-                                    } else {
-                                        self.response_search_current_match -= 1;
-                                    }
-                                }
-
-                                if ui
-                                    .add(
-                                        egui::Label::new(
-                                            egui::RichText::new("↓")
-                                                .size(FontSize::SM)
-                                                .color(Colors::TEXT_MUTED),
-                                        )
-                                        .sense(egui::Sense::click()),
-                                    )
-                                    .on_hover_cursor(egui::CursorIcon::PointingHand)
-                                    .on_hover_text("Next match (F3)")
-                                    .clicked()
-                                    || (ui.input(|i| {
-                                        i.key_pressed(egui::Key::F3) && !i.modifiers.shift
-                                    }) || (ui.input(|i| {
-                                        i.key_pressed(egui::Key::G)
-                                            && i.modifiers.command
-                                            && !i.modifiers.shift
-                                    })))
-                                {
-                                    self.response_search_current_match =
-                                        (self.response_search_current_match + 1) % match_count;
-                                }
-                            }
-                        });
+                        // Use the reusable search component
+                        let (_matches, _navigated) = crate::ui::components::search_box(
+                            ui,
+                            &mut self.response_search_query,
+                            &response.body,
+                            &mut self.response_search_current_match,
+                            "Search in response...",
+                        );
 
                         ui.add_space(Spacing::SM);
                     }

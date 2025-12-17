@@ -1016,7 +1016,6 @@ fn format_bytes(bytes: usize) -> String {
 
 /// Reusable search box component - for use in response body, request body, etc.
 /// Returns (matches, should_navigate_next)
-#[allow(dead_code)] // Will be used for request body search soon
 pub fn search_box(
     ui: &mut Ui,
     search_query: &mut String,
