@@ -409,8 +409,7 @@ impl MercuryApp {
     }
 
     fn build_collection_tree(&mut self) {
-        // Clone the PathBuf (necessary for borrow checker) but avoid cloning the Option unnecessarily
-        if let Some(workspace) = self.workspace_path.as_ref().map(|p| p.clone()) {
+        if let Some(workspace) = self.workspace_path.clone() {
             // Save current expanded state before rebuilding
             let old_tree = std::mem::take(&mut self.collection_tree);
             self.save_expanded_state(&old_tree);
@@ -899,7 +898,7 @@ impl MercuryApp {
                     );
                     let folder_response = ui.interact(
                         full_rect,
-                        egui::Id::new(("folder", path.clone())),
+                        egui::Id::new(("folder", path.as_path())),
                         egui::Sense::click(),
                     );
 
@@ -997,7 +996,7 @@ impl MercuryApp {
                     );
                     let request_response = ui.interact(
                         full_rect,
-                        egui::Id::new(("request", path.clone())),
+                        egui::Id::new(("request", path.as_path())),
                         egui::Sense::click(),
                     );
 
