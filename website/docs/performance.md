@@ -98,6 +98,15 @@ Mercury achieves its performance through:
 
 The architecture prioritizes **perceived performance** over synthetic benchmarks. Every design decision optimizes for "does it feel fast?" rather than "is the number small?"
 
+### Smart Response Handling
+
+Mercury intelligently adapts to response size:
+
+- **Small responses (<100KB)** — Full syntax highlighting with color-coded JSON/XML/HTML
+- **Large responses (>100KB)** — Plain text display to maintain 60fps
+
+Syntax highlighting is character-intensive. By skipping it for large responses, Mercury stays responsive even when your API returns megabytes of data.
+
 ---
 
 ## FAQ
