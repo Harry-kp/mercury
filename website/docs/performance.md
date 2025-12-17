@@ -102,8 +102,8 @@ The architecture prioritizes **perceived performance** over synthetic benchmarks
 
 Mercury intelligently adapts to response size:
 
-- **Small responses (<100KB)** — Full syntax highlighting with color-coded JSON/XML/HTML
-- **Large responses (>100KB)** — Plain text display to maintain 60fps
+- **Small responses (\<100KB)** — Full syntax highlighting with color-coded JSON/XML/HTML
+- **Large responses (\>100KB)** — Plain text display to maintain 60fps
 
 Syntax highlighting is character-intensive. By skipping it for large responses, Mercury stays responsive even when your API returns megabytes of data.
 
