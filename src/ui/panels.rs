@@ -666,7 +666,7 @@ impl MercuryApp {
                                 );
                             } else {
                                 // Skip syntax highlighting for large responses to prevent UI lag
-                                const MAX_HIGHLIGHT_SIZE: usize = 100_000; // 100KB
+                                use crate::core::constants::MAX_HIGHLIGHT_SIZE;
 
                                 if body.len() > MAX_HIGHLIGHT_SIZE {
                                     // Too large - use plain text editor

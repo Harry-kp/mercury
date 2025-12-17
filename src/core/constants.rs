@@ -45,3 +45,8 @@ pub const MAX_RESPONSE_SIZE: usize = 10 * 1024 * 1024; // 10MB
 /// Larger responses show "Large Response" placeholder with Save option.
 /// User can download and view in their preferred editor.
 pub const MAX_TEXT_DISPLAY_SIZE: usize = 1000 * 1024; // 1000KB
+
+/// Maximum size for syntax highlighting in response panel.
+/// Responses larger than this skip highlighting to prevent UI lag.
+/// Character-by-character highlighting is expensive - this keeps the UI at 60fps.
+pub const MAX_HIGHLIGHT_SIZE: usize = 100_000; // 100KB
