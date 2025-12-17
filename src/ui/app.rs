@@ -409,7 +409,8 @@ impl MercuryApp {
     }
 
     fn build_collection_tree(&mut self) {
-        if let Some(workspace) = self.workspace_path.clone() {
+        // Clone the PathBuf (necessary for borrow checker) but avoid cloning the Option unnecessarily
+        if let Some(workspace) = self.workspace_path.as_ref().map(|p| p.clone()) {
             // Save current expanded state before rebuilding
             let old_tree = std::mem::take(&mut self.collection_tree);
             self.save_expanded_state(&old_tree);
@@ -2312,7 +2313,7 @@ impl eframe::App for MercuryApp {
                 && self.current_file.is_none()
                 && !self.url.is_empty()
             {
-                if let Some(workspace) = &self.workspace_path.clone() {
+                if let Some(workspace) = self.workspace_path.as_ref() {
                     self.show_new_request_dialog = true;
                     self.new_request_name = String::new();
                     self.context_menu_item = Some(workspace.clone());
