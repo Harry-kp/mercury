@@ -638,20 +638,21 @@ impl MercuryApp {
                         });
                     });
 
-                    // Search box (if visible)
+                    // Search box (if visible) - minimal and subtle
                     if self.response_search_visible {
-                        ui.add_space(Spacing::SM);
+                        ui.add_space(Spacing::XS);
 
                         ui.horizontal(|ui| {
-                            ui.label(egui::RichText::new("🔍").size(FontSize::SM));
-
+                            // Minimal search input - no icon
                             let search_response = ui.add(
                                 egui::TextEdit::singleline(&mut self.response_search_query)
                                     .hint_text(
-                                        egui::RichText::new("Search in response...")
-                                            .color(Colors::PLACEHOLDER),
+                                        egui::RichText::new("find...")
+                                            .size(FontSize::XS)
+                                            .color(Colors::TEXT_MUTED),
                                     )
-                                    .desired_width(200.0)
+                                    .desired_width(120.0)
+                                    .font(egui::TextStyle::Small)
                                     .id(egui::Id::new("response_search_input")),
                             );
 
@@ -674,32 +675,35 @@ impl MercuryApp {
 
                             let match_count = matches.len();
 
-                            // Match counter
-                            if !self.response_search_query.is_empty() {
-                                let counter_text = if match_count > 0 {
-                                    // Ensure current match is within bounds
-                                    if self.response_search_current_match >= match_count {
-                                        self.response_search_current_match = 0;
-                                    }
-                                    format!(
-                                        "{} of {}",
+                            // Subtle match counter - only show if searching
+                            if !self.response_search_query.is_empty() && match_count > 0 {
+                                // Ensure current match is within bounds
+                                if self.response_search_current_match >= match_count {
+                                    self.response_search_current_match = 0;
+                                }
+
+                                ui.label(
+                                    egui::RichText::new(format!(
+                                        "{}/{}",
                                         self.response_search_current_match + 1,
                                         match_count
-                                    )
-                                } else {
-                                    "0 of 0".to_string()
-                                };
-                                ui.label(
-                                    egui::RichText::new(counter_text)
-                                        .size(FontSize::XS)
-                                        .color(Colors::TEXT_MUTED),
+                                    ))
+                                    .size(FontSize::XS)
+                                    .color(Colors::TEXT_MUTED),
                                 );
-                            }
 
-                            // Navigation buttons
-                            if match_count > 0 {
-                                // Previous button
-                                if ui.button("◀").clicked()
+                                // Minimal nav - just text links, no buttons
+                                if ui
+                                    .add(
+                                        egui::Label::new(
+                                            egui::RichText::new("↑")
+                                                .size(FontSize::XS)
+                                                .color(Colors::TEXT_MUTED),
+                                        )
+                                        .sense(egui::Sense::click()),
+                                    )
+                                    .on_hover_cursor(egui::CursorIcon::PointingHand)
+                                    .clicked()
                                     || (ui.input(|i| {
                                         i.key_pressed(egui::Key::F3) && i.modifiers.shift
                                     }) || (ui.input(|i| {
@@ -715,8 +719,17 @@ impl MercuryApp {
                                     }
                                 }
 
-                                // Next button
-                                if ui.button("▶").clicked()
+                                if ui
+                                    .add(
+                                        egui::Label::new(
+                                            egui::RichText::new("↓")
+                                                .size(FontSize::XS)
+                                                .color(Colors::TEXT_MUTED),
+                                        )
+                                        .sense(egui::Sense::click()),
+                                    )
+                                    .on_hover_cursor(egui::CursorIcon::PointingHand)
+                                    .clicked()
                                     || (ui.input(|i| {
                                         i.key_pressed(egui::Key::F3) && !i.modifiers.shift
                                     }) || (ui.input(|i| {
@@ -729,14 +742,9 @@ impl MercuryApp {
                                         (self.response_search_current_match + 1) % match_count;
                                 }
                             }
-
-                            // Close button
-                            if ui.button("✕").clicked() {
-                                self.response_search_visible = false;
-                                self.response_search_query.clear();
-                                self.response_search_current_match = 0;
-                            }
                         });
+
+                        ui.add_space(Spacing::XS);
                     }
 
                     // Use cached formatted response to avoid expensive cloning every frame
