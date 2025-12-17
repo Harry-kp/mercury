@@ -628,60 +628,89 @@ impl MercuryApp {
                 | ResponseType::Xml
                 | ResponseType::Html
                 | ResponseType::PlainText => {
-                    // Body header with copy button
+                    // Body header with copy and search buttons
                     ui.horizontal(|ui| {
                         ui.label(egui::RichText::new("Body").size(FontSize::SM).strong());
+
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                             if copy_icon_button(ui) {
                                 ui.ctx().copy_text(response.body.clone());
                             }
+
+                            ui.add_space(Spacing::XS);
+
+                            // Search toggle - minimal text button
+                            let search_text = if self.response_search_visible {
+                                "🔍"
+                            } else {
+                                "🔍"
+                            };
+                            if ui
+                                .add(
+                                    egui::Label::new(
+                                        egui::RichText::new(search_text).size(FontSize::SM).color(
+                                            if self.response_search_visible {
+                                                Colors::PRIMARY
+                                            } else {
+                                                Colors::TEXT_MUTED
+                                            },
+                                        ),
+                                    )
+                                    .sense(egui::Sense::click()),
+                                )
+                                .on_hover_cursor(egui::CursorIcon::PointingHand)
+                                .on_hover_text("Toggle search (F3 to navigate)")
+                                .clicked()
+                            {
+                                self.response_search_visible = !self.response_search_visible;
+                            }
                         });
                     });
 
-                    // Search box (if visible) - minimal and subtle
+                    // Search box (if visible) - matches timeline/sidebar search pattern
                     if self.response_search_visible {
-                        ui.add_space(Spacing::XS);
+                        ui.add_space(Spacing::SM);
+
+                        // Find matches (case-insensitive)
+                        let matches: Vec<usize> = if !self.response_search_query.is_empty() {
+                            let search_lower = self.response_search_query.to_lowercase();
+                            let body_lower = response.body.to_lowercase();
+                            body_lower
+                                .match_indices(&search_lower)
+                                .map(|(idx, _)| idx)
+                                .collect()
+                        } else {
+                            Vec::new()
+                        };
+
+                        let match_count = matches.len();
+
+                        // Ensure current match is within bounds
+                        if !self.response_search_query.is_empty() && match_count > 0 {
+                            if self.response_search_current_match >= match_count {
+                                self.response_search_current_match = 0;
+                            }
+                        }
 
                         ui.horizontal(|ui| {
-                            // Minimal search input - no icon
+                            // Search input - consistent with other searches in Mercury
                             let search_response = ui.add(
                                 egui::TextEdit::singleline(&mut self.response_search_query)
                                     .hint_text(
-                                        egui::RichText::new("find...")
-                                            .size(FontSize::XS)
-                                            .color(Colors::TEXT_MUTED),
+                                        egui::RichText::new("Search in response...")
+                                            .color(Colors::PLACEHOLDER),
                                     )
-                                    .desired_width(120.0)
-                                    .font(egui::TextStyle::Small)
+                                    .desired_width(ui.available_width() - 100.0)
                                     .id(egui::Id::new("response_search_input")),
                             );
 
-                            // Auto-focus search box when first opened
+                            // Auto-focus when opened
                             if self.response_search_query.is_empty() {
                                 search_response.request_focus();
                             }
 
-                            // Find matches (case-insensitive)
-                            let matches: Vec<usize> = if !self.response_search_query.is_empty() {
-                                let search_lower = self.response_search_query.to_lowercase();
-                                let body_lower = response.body.to_lowercase();
-                                body_lower
-                                    .match_indices(&search_lower)
-                                    .map(|(idx, _)| idx)
-                                    .collect()
-                            } else {
-                                Vec::new()
-                            };
-
-                            let match_count = matches.len();
-
-                            // Subtle match counter - only show if searching
+                            // Match counter and nav - only visible when there are matches
                             if !self.response_search_query.is_empty() && match_count > 0 {
-                                // Ensure current match is within bounds
-                                if self.response_search_current_match >= match_count {
-                                    self.response_search_current_match = 0;
-                                }
-
                                 ui.label(
                                     egui::RichText::new(format!(
                                         "{}/{}",
@@ -692,17 +721,18 @@ impl MercuryApp {
                                     .color(Colors::TEXT_MUTED),
                                 );
 
-                                // Minimal nav - just text links, no buttons
+                                // Navigation arrows
                                 if ui
                                     .add(
                                         egui::Label::new(
                                             egui::RichText::new("↑")
-                                                .size(FontSize::XS)
+                                                .size(FontSize::SM)
                                                 .color(Colors::TEXT_MUTED),
                                         )
                                         .sense(egui::Sense::click()),
                                     )
                                     .on_hover_cursor(egui::CursorIcon::PointingHand)
+                                    .on_hover_text("Previous match (Shift+F3)")
                                     .clicked()
                                     || (ui.input(|i| {
                                         i.key_pressed(egui::Key::F3) && i.modifiers.shift
@@ -723,12 +753,13 @@ impl MercuryApp {
                                     .add(
                                         egui::Label::new(
                                             egui::RichText::new("↓")
-                                                .size(FontSize::XS)
+                                                .size(FontSize::SM)
                                                 .color(Colors::TEXT_MUTED),
                                         )
                                         .sense(egui::Sense::click()),
                                     )
                                     .on_hover_cursor(egui::CursorIcon::PointingHand)
+                                    .on_hover_text("Next match (F3)")
                                     .clicked()
                                     || (ui.input(|i| {
                                         i.key_pressed(egui::Key::F3) && !i.modifiers.shift
@@ -744,7 +775,7 @@ impl MercuryApp {
                             }
                         });
 
-                        ui.add_space(Spacing::XS);
+                        ui.add_space(Spacing::SM);
                     }
 
                     // Use cached formatted response to avoid expensive cloning every frame

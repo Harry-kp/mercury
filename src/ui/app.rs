@@ -2407,46 +2407,11 @@ impl eframe::App for MercuryApp {
                 self.show_timeline = !self.show_timeline;
             }
 
-            // Cmd/Ctrl + F: Open response search (only if response exists and is text)
-            if i.key_pressed(egui::Key::F) && i.modifiers.command && !i.modifiers.shift {
-                if let Some(response) = &self.response {
-                    use crate::core::ResponseType;
-                    let is_text_response = matches!(
-                        response.response_type,
-                        ResponseType::Json
-                            | ResponseType::Xml
-                            | ResponseType::Html
-                            | ResponseType::PlainText
-                    );
-                    if is_text_response {
-                        self.response_search_visible = true;
-                    }
-                }
-            }
-
             // Escape: Close response search
             if i.key_pressed(egui::Key::Escape) && self.response_search_visible {
                 self.response_search_visible = false;
                 self.response_search_query.clear();
                 self.response_search_current_match = 0;
-            }
-
-            // F3 or Cmd+G: Next match
-            if (i.key_pressed(egui::Key::F3)
-                || (i.key_pressed(egui::Key::G) && i.modifiers.command))
-                && !i.modifiers.shift
-                && self.response_search_visible
-            {
-                // Navigation will be handled in the render function where we have match count
-            }
-
-            // Shift+F3 or Shift+Cmd+G: Previous match
-            if (i.key_pressed(egui::Key::F3)
-                || (i.key_pressed(egui::Key::G) && i.modifiers.command))
-                && i.modifiers.shift
-                && self.response_search_visible
-            {
-                // Navigation will be handled in the render function where we have match count
             }
         });
     }
