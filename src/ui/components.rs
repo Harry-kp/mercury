@@ -1066,24 +1066,39 @@ pub fn search_box(
             *current_match = (*current_match + 1) % match_count;
         }
 
-        // Match counter - only visible when there are matches
+        // Match counter with preview - only visible when there are matches
         if !search_query.is_empty() && match_count > 0 {
-            // Calculate line and column for current match
+            // Show preview of the match with context
             let match_pos = matches[*current_match];
-            let text_before_match = &text_to_search[..match_pos];
-            let line = text_before_match.matches('\n').count() + 1;
-            let column = text_before_match
-                .rfind('\n')
-                .map(|pos| match_pos - pos)
-                .unwrap_or(match_pos + 1);
+            let match_len = search_query.len();
+
+            // Get some context before and after (max 20 chars each side)
+            let context_before = if match_pos > 20 {
+                format!("...{}", &text_to_search[match_pos - 20..match_pos])
+            } else {
+                text_to_search[..match_pos].to_string()
+            };
+
+            let context_after_end = (match_pos + match_len + 20).min(text_to_search.len());
+            let context_after = if context_after_end < text_to_search.len() {
+                format!(
+                    "{}...",
+                    &text_to_search[match_pos + match_len..context_after_end]
+                )
+            } else {
+                text_to_search[match_pos + match_len..].to_string()
+            };
+
+            let matched_text = &text_to_search[match_pos..match_pos + match_len];
 
             ui.label(
                 RichText::new(format!(
-                    "{}/{} (line {}:{})",
+                    "{}/{}: \"{}{}{}\"",
                     *current_match + 1,
                     match_count,
-                    line,
-                    column
+                    context_before.replace('\n', " "),
+                    matched_text,
+                    context_after.replace('\n', " ")
                 ))
                 .size(FontSize::XS)
                 .color(Colors::TEXT_MUTED),
