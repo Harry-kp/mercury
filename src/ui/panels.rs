@@ -665,16 +665,29 @@ impl MercuryApp {
                                         .code_editor(),
                                 );
                             } else {
-                                match &response.response_type {
-                                    ResponseType::Json => json_syntax_highlight(ui, body),
-                                    ResponseType::Xml => xml_syntax_highlight(ui, body),
-                                    ResponseType::Html => html_syntax_highlight(ui, body),
-                                    _ => {
-                                        ui.add(
-                                            egui::TextEdit::multiline(&mut body.as_str())
-                                                .desired_width(ui.available_width())
-                                                .code_editor(),
-                                        );
+                                // Skip syntax highlighting for large responses to prevent UI lag
+                                const MAX_HIGHLIGHT_SIZE: usize = 100_000; // 100KB
+
+                                if body.len() > MAX_HIGHLIGHT_SIZE {
+                                    // Too large - use plain text editor
+                                    ui.add(
+                                        egui::TextEdit::multiline(&mut body.as_str())
+                                            .desired_width(ui.available_width())
+                                            .code_editor(),
+                                    );
+                                } else {
+                                    // Small enough - apply syntax highlighting
+                                    match &response.response_type {
+                                        ResponseType::Json => json_syntax_highlight(ui, body),
+                                        ResponseType::Xml => xml_syntax_highlight(ui, body),
+                                        ResponseType::Html => html_syntax_highlight(ui, body),
+                                        _ => {
+                                            ui.add(
+                                                egui::TextEdit::multiline(&mut body.as_str())
+                                                    .desired_width(ui.available_width())
+                                                    .code_editor(),
+                                            );
+                                        }
                                     }
                                 }
                             }
