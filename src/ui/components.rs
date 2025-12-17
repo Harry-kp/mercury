@@ -1068,10 +1068,25 @@ pub fn search_box(
 
         // Match counter - only visible when there are matches
         if !search_query.is_empty() && match_count > 0 {
+            // Calculate line and column for current match
+            let match_pos = matches[*current_match];
+            let text_before_match = &text_to_search[..match_pos];
+            let line = text_before_match.matches('\n').count() + 1;
+            let column = text_before_match
+                .rfind('\n')
+                .map(|pos| match_pos - pos)
+                .unwrap_or(match_pos + 1);
+
             ui.label(
-                RichText::new(format!("{}/{}", *current_match + 1, match_count))
-                    .size(FontSize::XS)
-                    .color(Colors::TEXT_MUTED),
+                RichText::new(format!(
+                    "{}/{} (line {}:{})",
+                    *current_match + 1,
+                    match_count,
+                    line,
+                    column
+                ))
+                .size(FontSize::XS)
+                .color(Colors::TEXT_MUTED),
             );
         }
     });
