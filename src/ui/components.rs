@@ -1015,7 +1015,7 @@ fn format_bytes(bytes: usize) -> String {
 }
 
 /// Reusable search box component - for use in response body, request body, etc.
-/// Returns (matches, nav_next_clicked, nav_prev_clicked)
+/// Returns (matches, should_navigate_next)
 #[allow(dead_code)] // Will be used for request body search soon
 pub fn search_box(
     ui: &mut Ui,
@@ -1023,7 +1023,7 @@ pub fn search_box(
     text_to_search: &str,
     current_match: &mut usize,
     hint_text: &str,
-) -> (Vec<usize>, bool, bool) {
+) -> (Vec<usize>, bool) {
     // Find matches (case-insensitive)
     let matches: Vec<usize> = if !search_query.is_empty() {
         let search_lower = search_query.to_lowercase();
@@ -1043,15 +1043,14 @@ pub fn search_box(
         *current_match = 0;
     }
 
-    let mut nav_next = false;
-    let mut nav_prev = false;
+    let mut should_navigate = false;
 
     ui.horizontal(|ui| {
         // Search input - consistent with other searches in Mercury
         let search_response = ui.add(
             egui::TextEdit::singleline(search_query)
                 .hint_text(RichText::new(hint_text).color(Colors::PLACEHOLDER))
-                .desired_width(ui.available_width() - 100.0),
+                .desired_width(ui.available_width() - 80.0),
         );
 
         // Auto-focus when opened
@@ -1059,64 +1058,26 @@ pub fn search_box(
             search_response.request_focus();
         }
 
-        // Match counter and nav - only visible when there are matches
+        // Enter to navigate
+        if search_response.lost_focus()
+            && ui.input(|i| i.key_pressed(egui::Key::Enter))
+            && match_count > 0
+        {
+            should_navigate = true;
+            *current_match = (*current_match + 1) % match_count;
+        }
+
+        // Match counter - only visible when there are matches
         if !search_query.is_empty() && match_count > 0 {
             ui.label(
                 RichText::new(format!("{}/{}", *current_match + 1, match_count))
                     .size(FontSize::XS)
                     .color(Colors::TEXT_MUTED),
             );
-
-            // Navigation arrows
-            if ui
-                .add(
-                    egui::Label::new(
-                        RichText::new("↑")
-                            .size(FontSize::SM)
-                            .color(Colors::TEXT_MUTED),
-                    )
-                    .sense(egui::Sense::click()),
-                )
-                .on_hover_cursor(egui::CursorIcon::PointingHand)
-                .on_hover_text("Previous match (Shift+F3)")
-                .clicked()
-                || (ui.input(|i| i.key_pressed(egui::Key::F3) && i.modifiers.shift)
-                    || (ui.input(|i| {
-                        i.key_pressed(egui::Key::G) && i.modifiers.command && i.modifiers.shift
-                    })))
-            {
-                nav_prev = true;
-                if *current_match == 0 {
-                    *current_match = match_count - 1;
-                } else {
-                    *current_match -= 1;
-                }
-            }
-
-            if ui
-                .add(
-                    egui::Label::new(
-                        RichText::new("↓")
-                            .size(FontSize::SM)
-                            .color(Colors::TEXT_MUTED),
-                    )
-                    .sense(egui::Sense::click()),
-                )
-                .on_hover_cursor(egui::CursorIcon::PointingHand)
-                .on_hover_text("Next match (F3)")
-                .clicked()
-                || (ui.input(|i| i.key_pressed(egui::Key::F3) && !i.modifiers.shift)
-                    || (ui.input(|i| {
-                        i.key_pressed(egui::Key::G) && i.modifiers.command && !i.modifiers.shift
-                    })))
-            {
-                nav_next = true;
-                *current_match = (*current_match + 1) % match_count;
-            }
         }
     });
 
-    (matches, nav_next, nav_prev)
+    (matches, should_navigate)
 }
 
 #[cfg(test)]
