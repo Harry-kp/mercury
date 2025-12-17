@@ -67,9 +67,9 @@ fn detect_response_type(content_type: &str, body: &[u8], status: u16) -> Respons
         return ResponseType::Binary;
     }
 
-    // Large responses (>1MB) are treated as LargeText to prevent UI hangs
+    // Large responses (>100KB) are treated as LargeText to prevent UI hangs
     // Checked AFTER Image/Binary so large images are still classified as Image
-    if body.len() > super::constants::MAX_TEXT_DISPLAY_SIZE {
+    if body.len() > super::constants::MAX_HIGHLIGHT_SIZE {
         return ResponseType::LargeText;
     }
 
@@ -399,15 +399,15 @@ mod tests {
 
     #[test]
     fn test_detect_large_text() {
-        // Create body larger than MAX_TEXT_DISPLAY_SIZE (1MB)
-        let large_body: Vec<u8> = vec![b'a'; 1_100_000]; // 1.1MB
+        // Create body larger than MAX_HIGHLIGHT_SIZE (100KB)
+        let large_body: Vec<u8> = vec![b'a'; 110_000]; // 110KB
         let result = detect_response_type("application/json", &large_body, 200);
         assert_eq!(result, ResponseType::LargeText);
     }
 
     #[test]
     fn test_text_below_limit() {
-        // Body smaller than MAX_TEXT_DISPLAY_SIZE should render normally
+        // Body smaller than MAX_HIGHLIGHT_SIZE should render normally
         let small_body: Vec<u8> = vec![b'{'; 100]; // 100 bytes
         let result = detect_response_type("application/json", &small_body, 200);
         // Should be Json, not LargeText
@@ -444,16 +444,16 @@ mod tests {
 
     #[test]
     fn test_detect_large_image() {
-        // Large JPEG (>1MB) should be Image, not LargeText
-        let large_body = vec![0; 1_100_000];
+        // Large JPEG (>100KB) should be Image, not LargeText
+        let large_body = vec![0; 110_000]; // 110KB
         let result = detect_response_type("image/jpeg", &large_body, 200);
         assert!(matches!(result, ResponseType::Image));
     }
 
     #[test]
     fn test_detect_large_svg() {
-        // Large SVG (>1MB) should be LargeText (since it's text-based and excluded from Image)
-        let large_body = vec![b'<'; 1_100_000];
+        // Large SVG (>100KB) should be LargeText (since it's text-based and excluded from Image)
+        let large_body = vec![b'<'; 110_000]; // 110KB
         let result = detect_response_type("image/svg+xml", &large_body, 200);
         assert_eq!(result, ResponseType::LargeText);
     }

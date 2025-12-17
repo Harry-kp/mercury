@@ -192,10 +192,10 @@ If the send button keeps spinning:
 
 ### Response body not displaying
 
-Large responses (>1MB) or binary content show a placeholder instead of the raw content. You can:
+Large responses (>100KB) show plain text without syntax highlighting to keep the UI responsive at 60fps. You can:
 
-1. Click **Save Response** to download the full response
-2. View headers to confirm the response arrived
+1. Toggle **Raw View** to see the unformatted response
+2. Click **Save Response** to download the full response
 
 ---
 
