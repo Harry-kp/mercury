@@ -66,6 +66,11 @@ pub struct MercuryApp {
     pub temp_requests: Vec<TempRequest>,
     pub recent_expanded: bool,
 
+    // Response search
+    pub response_search_query: String,
+    pub response_search_visible: bool,
+    pub response_search_current_match: usize, // 0-indexed into matches
+
     pub context_menu_item: Option<PathBuf>,
     pub selected_folder: Option<PathBuf>,
     pub show_rename_dialog: bool,
@@ -162,6 +167,9 @@ impl MercuryApp {
             show_timeline: false,
             temp_requests: persistence::load_temp_requests(),
             recent_expanded: true,
+            response_search_query: String::new(),
+            response_search_visible: false,
+            response_search_current_match: 0,
             context_menu_item: None,
             selected_folder: None,
             show_rename_dialog: false,
@@ -2397,6 +2405,48 @@ impl eframe::App for MercuryApp {
             // Cmd+H: Toggle Timeline/History
             if i.key_pressed(egui::Key::H) && i.modifiers.command {
                 self.show_timeline = !self.show_timeline;
+            }
+
+            // Cmd/Ctrl + F: Open response search (only if response exists and is text)
+            if i.key_pressed(egui::Key::F) && i.modifiers.command && !i.modifiers.shift {
+                if let Some(response) = &self.response {
+                    use crate::core::ResponseType;
+                    let is_text_response = matches!(
+                        response.response_type,
+                        ResponseType::Json
+                            | ResponseType::Xml
+                            | ResponseType::Html
+                            | ResponseType::PlainText
+                    );
+                    if is_text_response {
+                        self.response_search_visible = true;
+                    }
+                }
+            }
+
+            // Escape: Close response search
+            if i.key_pressed(egui::Key::Escape) && self.response_search_visible {
+                self.response_search_visible = false;
+                self.response_search_query.clear();
+                self.response_search_current_match = 0;
+            }
+
+            // F3 or Cmd+G: Next match
+            if (i.key_pressed(egui::Key::F3)
+                || (i.key_pressed(egui::Key::G) && i.modifiers.command))
+                && !i.modifiers.shift
+                && self.response_search_visible
+            {
+                // Navigation will be handled in the render function where we have match count
+            }
+
+            // Shift+F3 or Shift+Cmd+G: Previous match
+            if (i.key_pressed(egui::Key::F3)
+                || (i.key_pressed(egui::Key::G) && i.modifiers.command))
+                && i.modifiers.shift
+                && self.response_search_visible
+            {
+                // Navigation will be handled in the render function where we have match count
             }
         });
     }

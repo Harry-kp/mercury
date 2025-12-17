@@ -638,6 +638,107 @@ impl MercuryApp {
                         });
                     });
 
+                    // Search box (if visible)
+                    if self.response_search_visible {
+                        ui.add_space(Spacing::SM);
+
+                        ui.horizontal(|ui| {
+                            ui.label(egui::RichText::new("🔍").size(FontSize::SM));
+
+                            let search_response = ui.add(
+                                egui::TextEdit::singleline(&mut self.response_search_query)
+                                    .hint_text(
+                                        egui::RichText::new("Search in response...")
+                                            .color(Colors::PLACEHOLDER),
+                                    )
+                                    .desired_width(200.0)
+                                    .id(egui::Id::new("response_search_input")),
+                            );
+
+                            // Auto-focus search box when first opened
+                            if self.response_search_query.is_empty() {
+                                search_response.request_focus();
+                            }
+
+                            // Find matches (case-insensitive)
+                            let matches: Vec<usize> = if !self.response_search_query.is_empty() {
+                                let search_lower = self.response_search_query.to_lowercase();
+                                let body_lower = response.body.to_lowercase();
+                                body_lower
+                                    .match_indices(&search_lower)
+                                    .map(|(idx, _)| idx)
+                                    .collect()
+                            } else {
+                                Vec::new()
+                            };
+
+                            let match_count = matches.len();
+
+                            // Match counter
+                            if !self.response_search_query.is_empty() {
+                                let counter_text = if match_count > 0 {
+                                    // Ensure current match is within bounds
+                                    if self.response_search_current_match >= match_count {
+                                        self.response_search_current_match = 0;
+                                    }
+                                    format!(
+                                        "{} of {}",
+                                        self.response_search_current_match + 1,
+                                        match_count
+                                    )
+                                } else {
+                                    "0 of 0".to_string()
+                                };
+                                ui.label(
+                                    egui::RichText::new(counter_text)
+                                        .size(FontSize::XS)
+                                        .color(Colors::TEXT_MUTED),
+                                );
+                            }
+
+                            // Navigation buttons
+                            if match_count > 0 {
+                                // Previous button
+                                if ui.button("◀").clicked()
+                                    || (ui.input(|i| {
+                                        i.key_pressed(egui::Key::F3) && i.modifiers.shift
+                                    }) || (ui.input(|i| {
+                                        i.key_pressed(egui::Key::G)
+                                            && i.modifiers.command
+                                            && i.modifiers.shift
+                                    })))
+                                {
+                                    if self.response_search_current_match == 0 {
+                                        self.response_search_current_match = match_count - 1;
+                                    } else {
+                                        self.response_search_current_match -= 1;
+                                    }
+                                }
+
+                                // Next button
+                                if ui.button("▶").clicked()
+                                    || (ui.input(|i| {
+                                        i.key_pressed(egui::Key::F3) && !i.modifiers.shift
+                                    }) || (ui.input(|i| {
+                                        i.key_pressed(egui::Key::G)
+                                            && i.modifiers.command
+                                            && !i.modifiers.shift
+                                    })))
+                                {
+                                    self.response_search_current_match =
+                                        (self.response_search_current_match + 1) % match_count;
+                                }
+                            }
+
+                            // Close button
+                            if ui.button("✕").clicked() {
+                                self.response_search_visible = false;
+                                self.response_search_query.clear();
+                                self.response_search_current_match = 0;
+                            }
+                        });
+                    }
+
                     // Use cached formatted response to avoid expensive cloning every frame
                     let body = if self.response_view_raw {
                         &response.body
