@@ -898,7 +898,7 @@ impl MercuryApp {
                     );
                     let folder_response = ui.interact(
                         full_rect,
-                        egui::Id::new(("folder", path.clone())),
+                        egui::Id::new(("folder", path.as_path())),
                         egui::Sense::click(),
                     );
 
@@ -996,7 +996,7 @@ impl MercuryApp {
                     );
                     let request_response = ui.interact(
                         full_rect,
-                        egui::Id::new(("request", path.clone())),
+                        egui::Id::new(("request", path.as_path())),
                         egui::Sense::click(),
                     );
 
@@ -2312,7 +2312,7 @@ impl eframe::App for MercuryApp {
                 && self.current_file.is_none()
                 && !self.url.is_empty()
             {
-                if let Some(workspace) = &self.workspace_path.clone() {
+                if let Some(workspace) = self.workspace_path.as_ref() {
                     self.show_new_request_dialog = true;
                     self.new_request_name = String::new();
                     self.context_menu_item = Some(workspace.clone());
