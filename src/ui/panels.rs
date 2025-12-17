@@ -640,15 +640,10 @@ impl MercuryApp {
                             ui.add_space(Spacing::XS);
 
                             // Search toggle - minimal text button
-                            let search_text = if self.response_search_visible {
-                                "🔍"
-                            } else {
-                                "🔍"
-                            };
                             if ui
                                 .add(
                                     egui::Label::new(
-                                        egui::RichText::new(search_text).size(FontSize::SM).color(
+                                        egui::RichText::new("🔍").size(FontSize::SM).color(
                                             if self.response_search_visible {
                                                 Colors::PRIMARY
                                             } else {
@@ -686,10 +681,11 @@ impl MercuryApp {
                         let match_count = matches.len();
 
                         // Ensure current match is within bounds
-                        if !self.response_search_query.is_empty() && match_count > 0 {
-                            if self.response_search_current_match >= match_count {
-                                self.response_search_current_match = 0;
-                            }
+                        if !self.response_search_query.is_empty()
+                            && match_count > 0
+                            && self.response_search_current_match >= match_count
+                        {
+                            self.response_search_current_match = 0;
                         }
 
                         ui.horizontal(|ui| {
