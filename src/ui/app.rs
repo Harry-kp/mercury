@@ -14,6 +14,7 @@ use crate::core::{execute_request, HttpResponse};
 use crate::parser::{
     parse_env_file, parse_http_file, substitute_variables, HttpMethod, HttpRequest,
 };
+use crate::ui::icons::Icons;
 
 use eframe::egui;
 use notify_debouncer_mini::new_debouncer;
@@ -906,7 +907,11 @@ impl MercuryApp {
                         );
 
                         // Folder icon (open/closed state)
-                        let folder_icon = if *expanded { "📂" } else { "📁" };
+                        let folder_icon = if *expanded {
+                            Icons::FOLDER_OPEN
+                        } else {
+                            Icons::FOLDER_CLOSED
+                        };
                         ui.label(egui::RichText::new(folder_icon).size(crate::theme::FontSize::MD));
 
                         let is_selected = self.selected_folder.as_ref() == Some(path);
@@ -945,32 +950,35 @@ impl MercuryApp {
                     }
 
                     folder_response.context_menu(|ui| {
-                        if ui.button("➕ New Request").clicked() {
+                        if ui.button(format!("{} New Request", Icons::ADD)).clicked() {
                             self.context_menu_item = Some(path.clone());
                             self.show_new_request_dialog = true;
                             self.new_request_name = String::new();
                             ui.close();
                         }
-                        if ui.button("📁 New Folder").clicked() {
+                        if ui
+                            .button(format!("{} New Folder", Icons::FOLDER_CLOSED))
+                            .clicked()
+                        {
                             self.context_menu_item = Some(path.clone());
                             self.show_new_folder_dialog = true;
                             self.new_folder_name = String::new();
                             ui.close();
                         }
                         ui.separator();
-                        if ui.button("✏️ Rename").clicked() {
+                        if ui.button(format!("{} Rename", Icons::EDIT)).clicked() {
                             self.context_menu_item = Some(path.clone());
                             self.show_rename_dialog = true;
                             self.rename_text = name.clone();
                             ui.close();
                         }
-                        if ui.button("🗑 Delete").clicked() {
+                        if ui.button(format!("{} Delete", Icons::DELETE)).clicked() {
                             self.delete_target = Some(path.clone());
                             self.show_delete_confirm = true;
                             ui.close();
                         }
                         ui.separator();
-                        if ui.button("📋 Copy Path").clicked() {
+                        if ui.button(format!("{} Copy Path", Icons::COPY)).clicked() {
                             if let Some(path_str) = path.to_str() {
                                 ui.ctx().copy_text(path_str.to_string());
                             }
@@ -995,7 +1003,7 @@ impl MercuryApp {
                         );
 
                         // Request/document icon
-                        ui.label(egui::RichText::new("📄").size(crate::theme::FontSize::SM));
+                        ui.label(egui::RichText::new(Icons::FILE).size(crate::theme::FontSize::SM));
 
                         if let Some(method) = method {
                             let color = crate::theme::Colors::method_color(method.as_str());
@@ -1042,23 +1050,26 @@ impl MercuryApp {
                     }
 
                     request_response.context_menu(|ui| {
-                        if ui.button("📋 Duplicate").clicked() {
+                        if ui
+                            .button(format!("{} Duplicate", Icons::DUPLICATE))
+                            .clicked()
+                        {
                             let _ = self.duplicate_request(path);
                             ui.close();
                         }
-                        if ui.button("✏️ Rename").clicked() {
+                        if ui.button(format!("{} Rename", Icons::EDIT)).clicked() {
                             self.context_menu_item = Some(path.clone());
                             self.show_rename_dialog = true;
                             self.rename_text = name.clone();
                             ui.close();
                         }
-                        if ui.button("🗑 Delete").clicked() {
+                        if ui.button(format!("{} Delete", Icons::DELETE)).clicked() {
                             self.delete_target = Some(path.clone());
                             self.show_delete_confirm = true;
                             ui.close();
                         }
                         ui.separator();
-                        if ui.button("📋 Copy Path").clicked() {
+                        if ui.button(format!("{} Copy Path", Icons::COPY)).clicked() {
                             if let Some(path_str) = path.to_str() {
                                 ui.ctx().copy_text(path_str.to_string());
                             }
@@ -1378,18 +1389,12 @@ impl eframe::App for MercuryApp {
                     if let Some(folder_path) = target_folder {
                         match crate::importer::import_insomnia_collection(&file_path, &folder_path)
                         {
-                            Ok((req_count, env_count)) => {
-                                println!(
-                                    "✅ Imported {} requests and {} environments to {}",
-                                    req_count,
-                                    env_count,
-                                    folder_path.display()
-                                );
+                            Ok((_req_count, _env_count)) => {
                                 // Always reload workspace (if we picked a new one, or just refreshed current)
                                 let _ = folder_tx.send(folder_path);
                             }
-                            Err(e) => {
-                                eprintln!("❌ Import failed: {}", e);
+                            Err(_e) => {
+                                // Import failed silently - user will see empty workspace
                             }
                         }
                     }
@@ -1426,18 +1431,12 @@ impl eframe::App for MercuryApp {
 
                     if let Some(folder_path) = target_folder {
                         match crate::importer::import_postman_collection(&file_path, &folder_path) {
-                            Ok((req_count, env_count)) => {
-                                println!(
-                                    "✅ Imported {} requests and {} environments to {}",
-                                    req_count,
-                                    env_count,
-                                    folder_path.display()
-                                );
+                            Ok((_req_count, _env_count)) => {
                                 // Always reload workspace (if we picked a new one, or just refreshed current)
                                 let _ = folder_tx.send(folder_path);
                             }
-                            Err(e) => {
-                                eprintln!("❌ Import failed: {}", e);
+                            Err(_e) => {
+                                // Import failed silently - user will see empty workspace
                             }
                         }
                     }
@@ -1545,7 +1544,7 @@ impl eframe::App for MercuryApp {
                             // Unsaved changes indicator
                             if self.has_unsaved_changes {
                                 ui.label(
-                                    egui::RichText::new("●")
+                                    egui::RichText::new(Icons::DOT)
                                         .size(crate::theme::FontSize::SM)
                                         .color(crate::theme::Colors::WARNING),
                                 );
@@ -2035,9 +2034,10 @@ impl eframe::App for MercuryApp {
                         if is_dir {
                             ui.add_space(crate::theme::Spacing::XS);
                             ui.label(
-                                egui::RichText::new(
-                                    "⚠ This will delete the folder and all its contents!",
-                                )
+                                egui::RichText::new(format!(
+                                    "{} This will delete the folder and all its contents!",
+                                    Icons::WARNING
+                                ))
                                 .color(crate::theme::Colors::ERROR),
                             );
                         }

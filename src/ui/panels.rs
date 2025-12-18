@@ -4,6 +4,7 @@
 
 use super::app::{AuthMode, MercuryApp};
 use super::components::*;
+use super::icons::Icons;
 use super::theme::{Colors, FontSize, Layout, Radius, Spacing, StrokeWidth};
 use crate::core::{format_json, format_xml, ResponseType};
 use crate::parser::HttpMethod;
@@ -40,7 +41,11 @@ impl MercuryApp {
                             ui.add_space(Spacing::SM);
                             let header_response = ui.horizontal(|ui| {
                                 ui.add_space(Spacing::XS);
-                                let icon = if self.recent_expanded { "v" } else { ">" };
+                                let icon = if self.recent_expanded {
+                                    Icons::CHEVRON_DOWN
+                                } else {
+                                    Icons::CHEVRON_RIGHT
+                                };
                                 ui.label(
                                     egui::RichText::new(icon)
                                         .size(FontSize::XS)
@@ -178,7 +183,7 @@ impl MercuryApp {
                             // Friendly onboarding message when no workspace
                             ui.add_space(Spacing::XL);
                             ui.vertical_centered(|ui| {
-                                ui.label(egui::RichText::new("👋").size(FontSize::EMOJI));
+                                ui.label(egui::RichText::new(Icons::WAVE).size(FontSize::EMOJI));
                                 ui.add_space(Spacing::SM);
                                 ui.label(
                                     egui::RichText::new("Start making requests!")
@@ -201,9 +206,12 @@ impl MercuryApp {
                                 ui.separator();
                                 ui.add_space(Spacing::MD);
                                 ui.label(
-                                    egui::RichText::new("📦 Switching from Insomnia?")
-                                        .size(FontSize::SM)
-                                        .color(Colors::TEXT_MUTED),
+                                    egui::RichText::new(format!(
+                                        "{} Switching from Insomnia?",
+                                        Icons::PACKAGE
+                                    ))
+                                    .size(FontSize::SM)
+                                    .color(Colors::TEXT_MUTED),
                                 );
                                 ui.add_space(Spacing::XS);
                                 if ui
@@ -226,7 +234,9 @@ impl MercuryApp {
                             // Has workspace but empty - show import hint
                             ui.add_space(Spacing::XL);
                             ui.vertical_centered(|ui| {
-                                ui.label(egui::RichText::new("📁").size(FontSize::EMOJI));
+                                ui.label(
+                                    egui::RichText::new(Icons::FOLDER_CLOSED).size(FontSize::EMOJI),
+                                );
                                 ui.add_space(Spacing::SM);
                                 ui.label(
                                     egui::RichText::new("Folder is empty")
@@ -244,10 +254,13 @@ impl MercuryApp {
                                 if ui
                                     .add(
                                         egui::Label::new(
-                                            egui::RichText::new("📦 Import Insomnia collection")
-                                                .size(FontSize::SM)
-                                                .underline()
-                                                .color(Colors::PRIMARY),
+                                            egui::RichText::new(format!(
+                                                "{} Import Insomnia collection",
+                                                Icons::PACKAGE
+                                            ))
+                                            .size(FontSize::SM)
+                                            .underline()
+                                            .color(Colors::PRIMARY),
                                         )
                                         .sense(egui::Sense::click()),
                                     )
@@ -323,7 +336,7 @@ impl MercuryApp {
         // Header with back link
         ui.horizontal(|ui| {
             ui.label(
-                egui::RichText::new("🕐 History")
+                egui::RichText::new(format!("{} History", Icons::HISTORY))
                     .size(FontSize::LG)
                     .strong()
                     .color(Colors::TEXT_PRIMARY),
@@ -543,7 +556,7 @@ impl MercuryApp {
                         if ui
                             .add(
                                 egui::Label::new(
-                                    egui::RichText::new("💾 Save")
+                                    egui::RichText::new(format!("{} Save", Icons::SAVE))
                                         .size(FontSize::SM)
                                         .color(Colors::PRIMARY),
                                 )
@@ -560,7 +573,7 @@ impl MercuryApp {
                     if ui
                         .add(
                             egui::Label::new(
-                                egui::RichText::new("🕐 History")
+                                egui::RichText::new(format!("{} History", Icons::HISTORY))
                                     .size(FontSize::SM)
                                     .color(Colors::TEXT_MUTED),
                             )
@@ -731,7 +744,7 @@ impl MercuryApp {
                 ui.add_space(Spacing::XXL * 2.0);
 
                 // Rocket icon
-                ui.label(egui::RichText::new("🚀").size(FontSize::HERO));
+                ui.label(egui::RichText::new(Icons::ROCKET).size(FontSize::HERO));
 
                 ui.add_space(Spacing::MD);
 
@@ -765,7 +778,7 @@ impl MercuryApp {
                         .show(ui, |ui| {
                             ui.horizontal(|ui| {
                                 ui.label(
-                                    egui::RichText::new("⌘")
+                                    egui::RichText::new(Icons::CMD_KEY)
                                         .size(FontSize::SM)
                                         .color(Colors::PRIMARY)
                                         .strong(),
@@ -795,7 +808,7 @@ impl MercuryApp {
 
                 // Tips
                 ui.label(
-                    egui::RichText::new("💡 Pro tips:")
+                    egui::RichText::new(format!("{} Pro tips:", Icons::LIGHTBULB))
                         .size(FontSize::SM)
                         .color(Colors::TEXT_MUTED),
                 );

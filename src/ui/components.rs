@@ -3,6 +3,7 @@
 //! Reusable UI components with consistent styling.
 //! Includes status badges, method badges, buttons, tabs, and syntax highlighting.
 
+use super::icons::Icons;
 use super::theme::{Animation, Colors, FontSize, Radius, Spacing, StrokeWidth};
 use egui::{self, Color32, RichText, Ui};
 
@@ -186,9 +187,9 @@ pub fn error_state(ui: &mut Ui, error: &str) {
 /// Variable indicator (for smart variables)
 pub fn variable_indicator(ui: &mut Ui, name: &str, is_defined: bool) {
     let (icon, color) = if is_defined {
-        ("✓", Colors::SUCCESS)
+        (Icons::CHECK, Colors::SUCCESS)
     } else {
-        ("✗", Colors::ERROR)
+        (Icons::CROSS, Colors::ERROR)
     };
 
     ui.label(
@@ -228,9 +229,9 @@ pub fn copy_icon_button(ui: &mut Ui) -> bool {
 /// Send/Stop button (Send = Play/Primary, Stop = Square/Primary with Pulse)
 pub fn send_stop_button(ui: &mut Ui, executing: bool, time: f64) -> egui::Response {
     let (icon, base_color, tooltip) = if executing {
-        ("■", Colors::PRIMARY, "Cancel request (Esc)")
+        (Icons::STOP, Colors::PRIMARY, "Cancel request (Esc)")
     } else {
-        ("▶", Colors::PRIMARY, "Send request (⌘+Enter)")
+        (Icons::PLAY, Colors::PRIMARY, "Send request (⌘+Enter)")
     };
 
     // Calculate pulse effect (0.0 to 1.0)
@@ -800,23 +801,23 @@ pub fn binary_placeholder(ui: &mut Ui, content_type: &str, size_bytes: usize) {
 fn get_content_type_info(content_type: &str) -> (&'static str, &'static str) {
     let ct = content_type.to_lowercase();
     if ct.starts_with("image/") {
-        ("🌄", "Image Content")
+        (Icons::IMAGE, "Image Content")
     } else if ct.starts_with("audio/") {
-        ("🎵", "Audio Content")
+        (Icons::AUDIO, "Audio Content")
     } else if ct.starts_with("video/") {
-        ("🎬", "Video Content")
+        (Icons::VIDEO, "Video Content")
     } else if ct.contains("pdf") {
-        ("📄", "PDF Document")
+        (Icons::FILE, "PDF Document")
     } else if ct.contains("zip")
         || ct.contains("tar")
         || ct.contains("gz")
         || ct.contains("archive")
     {
-        ("📦", "Archive File")
+        (Icons::PACKAGE, "Archive File")
     } else if ct.contains("octet-stream") {
-        ("💾", "Binary Data")
+        (Icons::BINARY, "Binary Data")
     } else {
-        ("📎", "Binary Content")
+        (Icons::ATTACHMENT, "Binary Content")
     }
 }
 
@@ -912,7 +913,7 @@ pub fn get_extension_for_content_type(content_type: &str) -> &'static str {
 pub fn too_large_placeholder(ui: &mut Ui, size_bytes: usize) {
     ui.vertical_centered(|ui| {
         ui.add_space(Spacing::XL);
-        ui.label(RichText::new("⚠️").size(FontSize::HERO));
+        ui.label(RichText::new(Icons::WARNING).size(FontSize::HERO));
         ui.add_space(Spacing::SM);
         ui.label(
             RichText::new("Response Too Large")
@@ -939,7 +940,7 @@ pub fn too_large_placeholder(ui: &mut Ui, size_bytes: usize) {
 pub fn large_text_placeholder(ui: &mut Ui, content_type: &str, size_bytes: usize) {
     ui.vertical_centered(|ui| {
         ui.add_space(Spacing::XL);
-        ui.label(RichText::new("📄").size(FontSize::HERO));
+        ui.label(RichText::new(Icons::FILE).size(FontSize::HERO));
         ui.add_space(Spacing::SM);
         ui.label(
             RichText::new("Large Response")
@@ -980,7 +981,7 @@ pub fn empty_response_placeholder(ui: &mut Ui, status: u16) {
     ui.vertical_centered(|ui| {
         ui.add_space(Spacing::XL);
         ui.label(
-            RichText::new("✓")
+            RichText::new(Icons::CHECK)
                 .size(FontSize::HERO)
                 .color(Colors::SUCCESS),
         );
