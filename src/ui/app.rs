@@ -14,6 +14,7 @@ use crate::core::{execute_request, HttpResponse};
 use crate::parser::{
     parse_env_file, parse_http_file, substitute_variables, HttpMethod, HttpRequest,
 };
+use crate::ui::components::{menu_button, modal_input_field, show_modal};
 use crate::ui::icons::Icons;
 
 use eframe::egui;
@@ -950,40 +951,7 @@ impl MercuryApp {
                     }
 
                     folder_response.context_menu(|ui| {
-                        if ui.button(format!("{} New Request", Icons::ADD)).clicked() {
-                            self.context_menu_item = Some(path.clone());
-                            self.show_new_request_dialog = true;
-                            self.new_request_name = String::new();
-                            ui.close();
-                        }
-                        if ui
-                            .button(format!("{} New Folder", Icons::FOLDER_CLOSED))
-                            .clicked()
-                        {
-                            self.context_menu_item = Some(path.clone());
-                            self.show_new_folder_dialog = true;
-                            self.new_folder_name = String::new();
-                            ui.close();
-                        }
-                        ui.separator();
-                        if ui.button(format!("{} Rename", Icons::EDIT)).clicked() {
-                            self.context_menu_item = Some(path.clone());
-                            self.show_rename_dialog = true;
-                            self.rename_text = name.clone();
-                            ui.close();
-                        }
-                        if ui.button(format!("{} Delete", Icons::DELETE)).clicked() {
-                            self.delete_target = Some(path.clone());
-                            self.show_delete_confirm = true;
-                            ui.close();
-                        }
-                        ui.separator();
-                        if ui.button(format!("{} Copy Path", Icons::COPY)).clicked() {
-                            if let Some(path_str) = path.to_str() {
-                                ui.ctx().copy_text(path_str.to_string());
-                            }
-                            ui.close();
-                        }
+                        self.render_folder_context_menu(ui, name.clone(), path.clone());
                     });
 
                     if *expanded || !search.is_empty() {
@@ -1050,35 +1018,60 @@ impl MercuryApp {
                     }
 
                     request_response.context_menu(|ui| {
-                        if ui
-                            .button(format!("{} Duplicate", Icons::DUPLICATE))
-                            .clicked()
-                        {
-                            let _ = self.duplicate_request(path);
-                            ui.close();
-                        }
-                        if ui.button(format!("{} Rename", Icons::EDIT)).clicked() {
-                            self.context_menu_item = Some(path.clone());
-                            self.show_rename_dialog = true;
-                            self.rename_text = name.clone();
-                            ui.close();
-                        }
-                        if ui.button(format!("{} Delete", Icons::DELETE)).clicked() {
-                            self.delete_target = Some(path.clone());
-                            self.show_delete_confirm = true;
-                            ui.close();
-                        }
-                        ui.separator();
-                        if ui.button(format!("{} Copy Path", Icons::COPY)).clicked() {
-                            if let Some(path_str) = path.to_str() {
-                                ui.ctx().copy_text(path_str.to_string());
-                            }
-                            ui.close();
-                        }
+                        self.render_request_context_menu(ui, name.clone(), path.clone());
                     });
                 }
             }
         }
+    }
+
+    /// Helper to render common context menu items (Rename, Delete, Copy Path)
+    fn render_context_menu_common(&mut self, ui: &mut egui::Ui, name: String, path: PathBuf) {
+        if menu_button(ui, Icons::EDIT, "Rename") {
+            self.context_menu_item = Some(path.clone());
+            self.show_rename_dialog = true;
+            self.rename_text = name;
+            ui.close();
+        }
+        if menu_button(ui, Icons::DELETE, "Delete") {
+            self.delete_target = Some(path.clone());
+            self.show_delete_confirm = true;
+            ui.close();
+        }
+        ui.separator();
+        if menu_button(ui, Icons::COPY, "Copy Path") {
+            if let Some(path_str) = path.to_str() {
+                ui.ctx().copy_text(path_str.to_string());
+            }
+            ui.close();
+        }
+    }
+
+    /// Context menu for folders
+    fn render_folder_context_menu(&mut self, ui: &mut egui::Ui, name: String, path: PathBuf) {
+        if menu_button(ui, Icons::ADD, "New Request") {
+            self.context_menu_item = Some(path.clone());
+            self.show_new_request_dialog = true;
+            self.new_request_name = String::new();
+            ui.close();
+        }
+        if menu_button(ui, Icons::FOLDER_CLOSED, "New Folder") {
+            self.context_menu_item = Some(path.clone());
+            self.show_new_folder_dialog = true;
+            self.new_folder_name = String::new();
+            ui.close();
+        }
+        ui.separator();
+        self.render_context_menu_common(ui, name, path);
+    }
+
+    /// Context menu for requests
+    fn render_request_context_menu(&mut self, ui: &mut egui::Ui, name: String, path: PathBuf) {
+        if menu_button(ui, Icons::DUPLICATE, "Duplicate") {
+            let _ = self.duplicate_request(&path);
+            ui.close();
+        }
+        self.render_context_menu_common(ui, name, path);
     }
 
     /// Helper to check if a folder has any matching children
@@ -1800,230 +1793,152 @@ impl eframe::App for MercuryApp {
         self.render_status_bar(ctx);
 
         // New Request Dialog
-        if self.show_new_request_dialog {
-            // Escape to close
-            if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
-                self.show_new_request_dialog = false;
-            }
-            egui::Window::new("New Request")
-                .collapsible(false)
-                .resizable(false)
-                .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
-                .frame(
-                    egui::Frame::NONE
-                        .fill(crate::theme::Colors::BG_MODAL)
-                        .stroke(egui::Stroke::new(
-                            crate::theme::StrokeWidth::THIN,
-                            crate::theme::Colors::BORDER_SUBTLE,
-                        ))
-                        .corner_radius(crate::theme::Radius::MD)
-                        .inner_margin(crate::theme::Spacing::MD),
-                )
-                .show(ctx, |ui| {
-                    ui.label(
-                        egui::RichText::new("Request name:")
-                            .color(crate::theme::Colors::TEXT_SECONDARY),
-                    );
-                    ui.add_space(crate::theme::Spacing::XS);
-                    let response = ui.text_edit_singleline(&mut self.new_request_name);
-                    if response.lost_focus()
-                        && ui.input(|i| i.key_pressed(egui::Key::Enter))
-                        && !self.new_request_name.is_empty()
-                    {
+        self.show_new_request_dialog = show_modal(
+            ctx,
+            "New Request",
+            self.show_new_request_dialog,
+            |ui, open| {
+                let response = modal_input_field(ui, "Request name:", &mut self.new_request_name);
+                if response.lost_focus()
+                    && ui.input(|i| i.key_pressed(egui::Key::Enter))
+                    && !self.new_request_name.is_empty()
+                {
+                    if let Some(parent) = self.context_menu_item.clone() {
+                        let name = self.new_request_name.clone();
+                        if let Err(e) = self.create_new_request(&parent, &name) {
+                            self.last_action_message = Some((e, ctx.input(|i| i.time), true));
+                        }
+                    }
+                    *open = false;
+                }
+                ui.add_space(crate::theme::Spacing::SM);
+                ui.horizontal(|ui| {
+                    if ui.button("Create").clicked() && !self.new_request_name.is_empty() {
                         if let Some(parent) = self.context_menu_item.clone() {
                             let name = self.new_request_name.clone();
                             if let Err(e) = self.create_new_request(&parent, &name) {
                                 self.last_action_message = Some((e, ctx.input(|i| i.time), true));
+                            } else {
+                                self.last_action_message = Some((
+                                    "Request created".to_string(),
+                                    ctx.input(|i| i.time),
+                                    false,
+                                ));
                             }
                         }
-                        self.show_new_request_dialog = false;
+                        *open = false;
                     }
-                    ui.add_space(crate::theme::Spacing::SM);
-                    ui.horizontal(|ui| {
-                        if ui.button("Create").clicked() && !self.new_request_name.is_empty() {
-                            if let Some(parent) = self.context_menu_item.clone() {
-                                let name = self.new_request_name.clone();
-                                if let Err(e) = self.create_new_request(&parent, &name) {
-                                    self.last_action_message =
-                                        Some((e, ctx.input(|i| i.time), true));
-                                } else {
-                                    self.last_action_message = Some((
-                                        "Request created".to_string(),
-                                        ctx.input(|i| i.time),
-                                        false,
-                                    ));
-                                }
-                            }
-                            self.show_new_request_dialog = false;
-                        }
-                        if ui.button("Cancel").clicked() {
-                            self.show_new_request_dialog = false;
-                        }
-                    });
+                    if ui.button("Cancel").clicked() {
+                        *open = false;
+                    }
                 });
-        }
+            },
+        );
 
         // New Folder Dialog
-        if self.show_new_folder_dialog {
-            // Escape to close
-            if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
-                self.show_new_folder_dialog = false;
-            }
-            egui::Window::new("New Folder")
-                .collapsible(false)
-                .resizable(false)
-                .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
-                .frame(
-                    egui::Frame::NONE
-                        .fill(crate::theme::Colors::BG_MODAL)
-                        .stroke(egui::Stroke::new(
-                            crate::theme::StrokeWidth::THIN,
-                            crate::theme::Colors::BORDER_SUBTLE,
-                        ))
-                        .corner_radius(crate::theme::Radius::MD)
-                        .inner_margin(crate::theme::Spacing::MD),
-                )
-                .show(ctx, |ui| {
-                    ui.label(
-                        egui::RichText::new("Folder name:")
-                            .color(crate::theme::Colors::TEXT_SECONDARY),
-                    );
-                    ui.add_space(crate::theme::Spacing::XS);
-                    let response = ui.text_edit_singleline(&mut self.new_folder_name);
-                    if response.lost_focus()
-                        && ui.input(|i| i.key_pressed(egui::Key::Enter))
-                        && !self.new_folder_name.is_empty()
-                    {
+        self.show_new_folder_dialog = show_modal(
+            ctx,
+            "New Folder",
+            self.show_new_folder_dialog,
+            |ui, open| {
+                let response = modal_input_field(ui, "Folder name:", &mut self.new_folder_name);
+                if response.lost_focus()
+                    && ui.input(|i| i.key_pressed(egui::Key::Enter))
+                    && !self.new_folder_name.is_empty()
+                {
+                    if let Some(parent) = self.context_menu_item.clone() {
+                        let name = self.new_folder_name.clone();
+                        if let Err(e) = self.create_new_folder(&parent, &name) {
+                            self.last_action_message = Some((e, ctx.input(|i| i.time), true));
+                        }
+                    }
+                    *open = false;
+                }
+                ui.add_space(crate::theme::Spacing::SM);
+                ui.horizontal(|ui| {
+                    if ui.button("Create").clicked() && !self.new_folder_name.is_empty() {
                         if let Some(parent) = self.context_menu_item.clone() {
                             let name = self.new_folder_name.clone();
                             if let Err(e) = self.create_new_folder(&parent, &name) {
                                 self.last_action_message = Some((e, ctx.input(|i| i.time), true));
+                            } else {
+                                self.last_action_message = Some((
+                                    "Folder created".to_string(),
+                                    ctx.input(|i| i.time),
+                                    false,
+                                ));
                             }
                         }
-                        self.show_new_folder_dialog = false;
+                        *open = false;
                     }
-                    ui.add_space(crate::theme::Spacing::SM);
-                    ui.horizontal(|ui| {
-                        if ui.button("Create").clicked() && !self.new_folder_name.is_empty() {
-                            if let Some(parent) = self.context_menu_item.clone() {
-                                let name = self.new_folder_name.clone();
-                                if let Err(e) = self.create_new_folder(&parent, &name) {
-                                    self.last_action_message =
-                                        Some((e, ctx.input(|i| i.time), true));
-                                } else {
-                                    self.last_action_message = Some((
-                                        "Folder created".to_string(),
-                                        ctx.input(|i| i.time),
-                                        false,
-                                    ));
-                                }
-                            }
-                            self.show_new_folder_dialog = false;
-                        }
-                        if ui.button("Cancel").clicked() {
-                            self.show_new_folder_dialog = false;
-                        }
-                    });
+                    if ui.button("Cancel").clicked() {
+                        *open = false;
+                    }
                 });
-        }
+            },
+        );
 
         // Rename Dialog
-        if self.show_rename_dialog {
-            // Escape to close
-            if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
-                self.show_rename_dialog = false;
-            }
-            egui::Window::new("Rename")
-                .collapsible(false)
-                .resizable(false)
-                .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
-                .frame(
-                    egui::Frame::NONE
-                        .fill(crate::theme::Colors::BG_MODAL)
-                        .stroke(egui::Stroke::new(
-                            crate::theme::StrokeWidth::THIN,
-                            crate::theme::Colors::BORDER_SUBTLE,
-                        ))
-                        .corner_radius(crate::theme::Radius::MD)
-                        .inner_margin(crate::theme::Spacing::MD),
-                )
-                .show(ctx, |ui| {
-                    ui.label(
-                        egui::RichText::new("New name:")
-                            .color(crate::theme::Colors::TEXT_SECONDARY),
-                    );
-                    ui.add_space(crate::theme::Spacing::XS);
-                    let response = ui.text_edit_singleline(&mut self.rename_text);
-                    if response.lost_focus()
-                        && ui.input(|i| i.key_pressed(egui::Key::Enter))
-                        && !self.rename_text.is_empty()
-                    {
-                        if let Some(old_path) = self.context_menu_item.clone() {
-                            let new_name = self.rename_text.clone();
-                            if let Err(e) = self.rename_item(&old_path, &new_name) {
-                                self.last_action_message = Some((e, ctx.input(|i| i.time), true));
-                            }
-                        }
-                        self.show_rename_dialog = false;
+        self.show_rename_dialog = show_modal(ctx, "Rename", self.show_rename_dialog, |ui, open| {
+            let response = modal_input_field(ui, "New name:", &mut self.rename_text);
+            if response.lost_focus()
+                && ui.input(|i| i.key_pressed(egui::Key::Enter))
+                && !self.rename_text.is_empty()
+            {
+                if let Some(old_path) = self.context_menu_item.clone() {
+                    let new_name = self.rename_text.clone();
+                    if let Err(e) = self.rename_item(&old_path, &new_name) {
+                        self.last_action_message = Some((e, ctx.input(|i| i.time), true));
                     }
-                    ui.add_space(crate::theme::Spacing::SM);
-                    ui.horizontal(|ui| {
-                        if ui.button("Rename").clicked() && !self.rename_text.is_empty() {
-                            if let Some(old_path) = self.context_menu_item.clone() {
-                                let new_name = self.rename_text.clone();
-                                if let Err(e) = self.rename_item(&old_path, &new_name) {
-                                    self.last_action_message =
-                                        Some((e, ctx.input(|i| i.time), true));
-                                } else {
-                                    self.last_action_message = Some((
-                                        "Renamed successfully".to_string(),
-                                        ctx.input(|i| i.time),
-                                        false,
-                                    ));
-                                }
-                            }
-                            self.show_rename_dialog = false;
+                }
+                *open = false;
+            }
+            ui.add_space(crate::theme::Spacing::SM);
+            ui.horizontal(|ui| {
+                if ui.button("Rename").clicked() && !self.rename_text.is_empty() {
+                    if let Some(old_path) = self.context_menu_item.clone() {
+                        let new_name = self.rename_text.clone();
+                        if let Err(e) = self.rename_item(&old_path, &new_name) {
+                            self.last_action_message = Some((e, ctx.input(|i| i.time), true));
+                        } else {
+                            self.last_action_message = Some((
+                                "Renamed successfully".to_string(),
+                                ctx.input(|i| i.time),
+                                false,
+                            ));
                         }
-                        if ui.button("Cancel").clicked() {
-                            self.show_rename_dialog = false;
-                        }
-                    });
-                });
-        }
+                    }
+                    *open = false;
+                }
+                if ui.button("Cancel").clicked() {
+                    *open = false;
+                }
+            });
+        });
 
         // Delete Confirmation Dialog
-        if self.show_delete_confirm {
-            // Escape to cancel
-            if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
-                self.show_delete_confirm = false;
-            }
-            egui::Window::new("Confirm Delete")
-                .collapsible(false)
-                .resizable(false)
-                .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
-                .frame(
-                    egui::Frame::NONE
-                        .fill(crate::theme::Colors::BG_MODAL)
-                        .stroke(egui::Stroke::new(
-                            crate::theme::StrokeWidth::THIN,
-                            crate::theme::Colors::BORDER_SUBTLE,
-                        ))
-                        .corner_radius(crate::theme::Radius::MD)
-                        .inner_margin(crate::theme::Spacing::MD),
-                )
-                .show(ctx, |ui| {
-                    let target_info = self.delete_target.as_ref().map(|t| {
-                        (
-                            t.file_name()
-                                .unwrap_or_default()
-                                .to_string_lossy()
-                                .to_string(),
-                            t.is_dir(),
-                            t.clone(),
-                        )
-                    });
+        self.show_delete_confirm = show_modal(
+            ctx,
+            "Confirm Delete",
+            self.show_delete_confirm,
+            |ui, open| {
+                let target_info = self.delete_target.as_ref().map(|t| {
+                    (
+                        t.file_name()
+                            .unwrap_or_default()
+                            .to_string_lossy()
+                            .into_owned(),
+                        t.clone(),
+                    )
+                });
 
-                    if let Some((name, is_dir, target_path)) = target_info {
+                if let Some((name, target_path)) = target_info {
+                    ui.horizontal(|ui| {
+                        ui.label(
+                            egui::RichText::new(Icons::WARNING)
+                                .color(crate::theme::Colors::ERROR)
+                                .size(crate::theme::FontSize::LG),
+                        );
                         ui.label(
                             egui::RichText::new(format!(
                                 "Are you sure you want to delete '{}'?",
@@ -2031,81 +1946,72 @@ impl eframe::App for MercuryApp {
                             ))
                             .color(crate::theme::Colors::TEXT_PRIMARY),
                         );
-                        if is_dir {
-                            ui.add_space(crate::theme::Spacing::XS);
-                            ui.label(
-                                egui::RichText::new(format!(
-                                    "{} This will delete the folder and all its contents!",
-                                    Icons::WARNING
-                                ))
-                                .color(crate::theme::Colors::ERROR),
-                            );
+                    });
+                    ui.add_space(crate::theme::Spacing::SM);
+                    ui.label(
+                        egui::RichText::new("This action cannot be undone.")
+                            .color(crate::theme::Colors::TEXT_MUTED)
+                            .size(crate::theme::FontSize::SM),
+                    );
+                    ui.add_space(crate::theme::Spacing::MD);
+
+                    ui.horizontal(|ui| {
+                        if ui
+                            .button(
+                                egui::RichText::new("Delete")
+                                    .color(crate::theme::Colors::ERROR)
+                                    .strong(),
+                            )
+                            .clicked()
+                        {
+                            if let Err(e) = self.delete_item(&target_path) {
+                                self.last_action_message = Some((e, ctx.input(|i| i.time), true));
+                            } else {
+                                self.last_action_message =
+                                    Some(("Deleted".to_string(), ctx.input(|i| i.time), false));
+                            }
+                            *open = false;
                         }
-                        ui.add_space(crate::theme::Spacing::MD);
-
-                        // Check for Enter key to confirm
-                        let enter_pressed = ui.input(|i| i.key_pressed(egui::Key::Enter));
-
-                        ui.horizontal(|ui| {
-                            if ui
-                                .button(
-                                    egui::RichText::new("Delete")
-                                        .color(crate::theme::Colors::ERROR),
-                                )
-                                .clicked()
-                                || enter_pressed
-                            {
-                                if let Err(e) = self.delete_item(&target_path) {
-                                    self.last_action_message =
-                                        Some((e, ctx.input(|i| i.time), true));
-                                } else {
-                                    self.last_action_message = Some((
-                                        "Deleted successfully".to_string(),
-                                        ctx.input(|i| i.time),
-                                        false,
-                                    ));
-                                }
-                                self.show_delete_confirm = false;
-                            }
-                            if ui.button("Cancel").clicked() {
-                                self.show_delete_confirm = false;
-                            }
-                        });
-                    }
-                });
-        }
+                        if ui.button("Cancel").clicked() {
+                            *open = false;
+                        }
+                    });
+                } else {
+                    *open = false;
+                }
+            },
+        );
 
         // New Environment Dialog
-        if self.show_new_env_dialog {
-            // Escape to close
-            if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
-                self.show_new_env_dialog = false;
-            }
-            egui::Window::new("New Environment")
-                .collapsible(false)
-                .resizable(false)
-                .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
-                .frame(
-                    egui::Frame::NONE
-                        .fill(crate::theme::Colors::BG_MODAL)
-                        .stroke(egui::Stroke::new(
-                            crate::theme::StrokeWidth::THIN,
-                            crate::theme::Colors::BORDER_SUBTLE,
-                        ))
-                        .corner_radius(crate::theme::Radius::MD)
-                        .inner_margin(crate::theme::Spacing::MD),
-                )
-                .show(ctx, |ui| {
-                    ui.label(
-                        egui::RichText::new("Environment name (e.g., 'staging', 'production'):")
-                            .color(crate::theme::Colors::TEXT_SECONDARY),
-                    );
-                    ui.add_space(crate::theme::Spacing::XS);
-                    let response = ui.text_edit_singleline(&mut self.new_env_name);
-                    if response.lost_focus()
-                        && ui.input(|i| i.key_pressed(egui::Key::Enter))
-                        && !self.new_env_name.is_empty()
-                    {
+        self.show_new_env_dialog = show_modal(
+            ctx,
+            "New Environment",
+            self.show_new_env_dialog,
+            |ui, open| {
+                let response = modal_input_field(
+                    ui,
+                    "Environment name (e.g., 'staging', 'production'):",
+                    &mut self.new_env_name,
+                );
+                if response.lost_focus()
+                    && ui.input(|i| i.key_pressed(egui::Key::Enter))
+                    && !self.new_env_name.is_empty()
+                {
+                    let name = self.new_env_name.clone();
+                    if let Err(e) = self.create_new_env(&name) {
+                        self.last_action_message = Some((e, ctx.input(|i| i.time), true));
+                    } else {
+                        self.last_action_message = Some((
+                            "Environment created".to_string(),
+                            ctx.input(|i| i.time),
+                            false,
+                        ));
+                    }
+                    *open = false;
+                }
+                ui.add_space(crate::theme::Spacing::SM);
+                ui.horizontal(|ui| {
+                    if ui.button("Create").clicked() && !self.new_env_name.is_empty() {
                         let name = self.new_env_name.clone();
                         if let Err(e) = self.create_new_env(&name) {
                             self.last_action_message = Some((e, ctx.input(|i| i.time), true));
@@ -2116,212 +2022,97 @@ impl eframe::App for MercuryApp {
                                 false,
                             ));
                         }
-                        self.show_new_env_dialog = false;
+                        *open = false;
                     }
-                    ui.add_space(crate::theme::Spacing::SM);
-                    ui.horizontal(|ui| {
-                        if ui.button("Create").clicked() && !self.new_env_name.is_empty() {
-                            let name = self.new_env_name.clone();
-                            if let Err(e) = self.create_new_env(&name) {
-                                self.last_action_message = Some((e, ctx.input(|i| i.time), true));
-                            } else {
-                                self.last_action_message = Some((
-                                    "Environment created".to_string(),
-                                    ctx.input(|i| i.time),
-                                    false,
-                                ));
-                            }
-                            self.show_new_env_dialog = false;
-                        }
-                        if ui.button("Cancel").clicked() {
-                            self.show_new_env_dialog = false;
-                        }
-                    });
+                    if ui.button("Cancel").clicked() {
+                        *open = false;
+                    }
                 });
-        }
+            },
+        );
 
         // Keyboard shortcuts help window
-        if self.show_shortcuts {
-            // Escape to close
-            if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
-                self.show_shortcuts = false;
-            }
-            egui::Window::new("Keyboard Shortcuts")
-                .collapsible(false)
-                .resizable(false)
-                .default_width(crate::theme::Layout::MODAL_WIDTH)
-                .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
-                .frame(
-                    egui::Frame::NONE
-                        .fill(crate::theme::Colors::BG_MODAL)
-                        .stroke(egui::Stroke::new(
-                            crate::theme::StrokeWidth::THIN,
-                            crate::theme::Colors::BORDER_SUBTLE,
-                        ))
-                        .corner_radius(crate::theme::Radius::MD)
-                        .inner_margin(crate::theme::Spacing::MD),
-                )
-                .show(ctx, |ui| {
-                    ui.add_space(crate::theme::Spacing::SM);
+        self.show_shortcuts = show_modal(
+            ctx,
+            "Keyboard Shortcuts",
+            self.show_shortcuts,
+            |ui, open| {
+                ui.add_space(crate::theme::Spacing::SM);
 
-                    egui::Grid::new("shortcuts_grid")
-                        .num_columns(2)
-                        .spacing([40.0, 8.0])
-                        .striped(true)
-                        .show(ui, |ui| {
-                            ui.label(
-                                egui::RichText::new("Action")
-                                    .strong()
-                                    .color(crate::theme::Colors::TEXT_PRIMARY),
-                            );
-                            ui.label(
-                                egui::RichText::new("Shortcut")
-                                    .strong()
-                                    .color(crate::theme::Colors::TEXT_PRIMARY),
-                            );
-                            ui.end_row();
+                egui::Grid::new("shortcuts_grid")
+                    .num_columns(2)
+                    .spacing([40.0, 12.0])
+                    .show(ui, |ui| {
+                        let shortcuts = [
+                            ("Send Request", "⌘ + Enter"),
+                            ("New Request", "⌘ + N"),
+                            ("Save Request", "⌘ + S"),
+                            ("Format JSON", "⌘ + I"),
+                            ("Clear Console", "⌘ + K"),
+                            ("Switch Environment", "⌘ + E"),
+                            ("History", "⌘ + H"),
+                            ("Focus URL Bar", "⌘ + L"),
+                            ("Close Modal", "Esc"),
+                        ];
 
+                        for (action, key) in shortcuts {
                             ui.label(
-                                egui::RichText::new("New Request")
+                                egui::RichText::new(action)
                                     .color(crate::theme::Colors::TEXT_SECONDARY),
                             );
-                            ui.label(
-                                egui::RichText::new("Cmd/Ctrl + N")
-                                    .color(crate::theme::Colors::TEXT_MUTED),
-                            );
+                            ui.horizontal(|ui| {
+                                let keys: Vec<&str> = key.split('+').collect();
+                                for (i, k) in keys.iter().enumerate() {
+                                    if i > 0 {
+                                        ui.label(
+                                            egui::RichText::new("+")
+                                                .color(crate::theme::Colors::TEXT_MUTED)
+                                                .size(crate::theme::FontSize::XS),
+                                        );
+                                    }
+                                    egui::Frame::NONE
+                                        .fill(crate::theme::Colors::BG_WIDGET_INACTIVE)
+                                        .stroke(egui::Stroke::new(
+                                            crate::theme::StrokeWidth::THIN,
+                                            crate::theme::Colors::BORDER_SUBTLE,
+                                        ))
+                                        .corner_radius(crate::theme::Radius::SM)
+                                        .inner_margin(egui::Margin::symmetric(6, 2))
+                                        .show(ui, |ui| {
+                                            ui.label(
+                                                egui::RichText::new(k.trim())
+                                                    .color(crate::theme::Colors::PRIMARY)
+                                                    .strong()
+                                                    .size(crate::theme::FontSize::XS)
+                                                    .monospace(),
+                                            );
+                                        });
+                                }
+                            });
                             ui.end_row();
+                        }
+                    });
 
-                            ui.label(
-                                egui::RichText::new("Send Request")
-                                    .color(crate::theme::Colors::TEXT_SECONDARY),
-                            );
-                            ui.label(
-                                egui::RichText::new("Cmd/Ctrl + Enter")
-                                    .color(crate::theme::Colors::TEXT_MUTED),
-                            );
-                            ui.end_row();
+                ui.add_space(crate::theme::Spacing::LG);
+                ui.separator();
+                ui.add_space(crate::theme::Spacing::MD);
 
-                            ui.label(
-                                egui::RichText::new("Focus Search")
-                                    .color(crate::theme::Colors::TEXT_SECONDARY),
-                            );
-                            ui.label(
-                                egui::RichText::new("Cmd/Ctrl + K")
-                                    .color(crate::theme::Colors::TEXT_MUTED),
-                            );
-                            ui.end_row();
-
-                            ui.label(
-                                egui::RichText::new("Focus URL Bar")
-                                    .color(crate::theme::Colors::TEXT_SECONDARY),
-                            );
-                            ui.label(
-                                egui::RichText::new("Cmd/Ctrl + L")
-                                    .color(crate::theme::Colors::TEXT_MUTED),
-                            );
-                            ui.end_row();
-
-                            ui.label(
-                                egui::RichText::new("Copy as cURL")
-                                    .color(crate::theme::Colors::TEXT_SECONDARY),
-                            );
-                            ui.label(
-                                egui::RichText::new("Cmd/Ctrl + Shift + C")
-                                    .color(crate::theme::Colors::TEXT_MUTED),
-                            );
-                            ui.end_row();
-
-                            ui.label(
-                                egui::RichText::new("Open Folder")
-                                    .color(crate::theme::Colors::TEXT_SECONDARY),
-                            );
-                            ui.label(
-                                egui::RichText::new("Cmd/Ctrl + O")
-                                    .color(crate::theme::Colors::TEXT_MUTED),
-                            );
-                            ui.end_row();
-
-                            ui.label(
-                                egui::RichText::new("Switch Environment")
-                                    .color(crate::theme::Colors::TEXT_SECONDARY),
-                            );
-                            ui.label(
-                                egui::RichText::new("Cmd/Ctrl + E")
-                                    .color(crate::theme::Colors::TEXT_MUTED),
-                            );
-                            ui.end_row();
-
-                            ui.label(
-                                egui::RichText::new("Delete Current Request")
-                                    .color(crate::theme::Colors::TEXT_SECONDARY),
-                            );
-                            ui.label(
-                                egui::RichText::new("Right-click > Delete")
-                                    .color(crate::theme::Colors::TEXT_MUTED),
-                            );
-                            ui.end_row();
-
-                            ui.label(
-                                egui::RichText::new("Toggle Raw View")
-                                    .color(crate::theme::Colors::TEXT_SECONDARY),
-                            );
-                            ui.label(
-                                egui::RichText::new("Cmd/Ctrl + R")
-                                    .color(crate::theme::Colors::TEXT_MUTED),
-                            );
-                            ui.end_row();
-
-                            ui.label(
-                                egui::RichText::new("Clear Search")
-                                    .color(crate::theme::Colors::TEXT_SECONDARY),
-                            );
-                            ui.label(
-                                egui::RichText::new("Escape")
-                                    .color(crate::theme::Colors::TEXT_MUTED),
-                            );
-                            ui.end_row();
-
-                            ui.label(
-                                egui::RichText::new("Show Shortcuts")
-                                    .color(crate::theme::Colors::TEXT_SECONDARY),
-                            );
-                            ui.label(
-                                egui::RichText::new("?").color(crate::theme::Colors::TEXT_MUTED),
-                            );
-                            ui.end_row();
-
-                            ui.label(
-                                egui::RichText::new("Focus Mode")
-                                    .color(crate::theme::Colors::TEXT_SECONDARY),
-                            );
-                            ui.label(
-                                egui::RichText::new("Cmd/Ctrl + Shift + F")
-                                    .color(crate::theme::Colors::TEXT_MUTED),
-                            );
-                            ui.end_row();
-
-                            ui.label(
-                                egui::RichText::new("Toggle History")
-                                    .color(crate::theme::Colors::TEXT_SECONDARY),
-                            );
-                            ui.label(
-                                egui::RichText::new("Cmd/Ctrl + H")
-                                    .color(crate::theme::Colors::TEXT_MUTED),
-                            );
-                            ui.end_row();
-                        });
-
-                    ui.add_space(crate::theme::Spacing::MD);
-
-                    ui.horizontal(|ui| {
-                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            if ui.button("Close").clicked() {
-                                self.show_shortcuts = false;
-                            }
-                        });
+                ui.horizontal(|ui| {
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if ui
+                            .button(
+                                egui::RichText::new("Close")
+                                    .color(crate::theme::Colors::PRIMARY)
+                                    .strong(),
+                            )
+                            .clicked()
+                        {
+                            *open = false;
+                        }
                     });
                 });
-        }
+            },
+        );
 
         // Handle keyboard shortcuts
         ctx.input(|i| {

@@ -7,6 +7,72 @@ use super::icons::Icons;
 use super::theme::{Animation, Colors, FontSize, Radius, Spacing, StrokeWidth};
 use egui::{self, Color32, RichText, Ui};
 
+// =============================================================================
+// Modal/Dialog Helpers
+// =============================================================================
+
+/// Standard frame styling for modal dialogs
+pub fn modal_frame() -> egui::Frame {
+    egui::Frame::NONE
+        .fill(Colors::BG_MODAL)
+        .stroke(egui::Stroke::new(StrokeWidth::THIN, Colors::BORDER_SUBTLE))
+        .corner_radius(Radius::MD)
+        .inner_margin(Spacing::MD)
+}
+
+/// Pre-configured modal window with consistent styling
+pub fn modal_window(title: &str) -> egui::Window<'_> {
+    egui::Window::new(title)
+        .collapsible(false)
+        .resizable(false)
+        .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+        .default_width(crate::theme::Layout::MODAL_WIDTH)
+        .frame(modal_frame())
+}
+
+/// Central helper to show a modal with Esc-to-close handling and styling.
+/// returns the new visibility state of the modal.
+pub fn show_modal<F>(ctx: &egui::Context, title: &str, mut open: bool, add_contents: F) -> bool
+where
+    F: FnOnce(&mut egui::Ui, &mut bool),
+{
+    if !open {
+        return false;
+    }
+
+    // Handle Escape key
+    if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+        return false;
+    }
+
+    modal_window(title).show(ctx, |ui| {
+        add_contents(ui, &mut open);
+    });
+
+    open
+}
+
+/// A standard labeled text input for modal dialogs.
+/// Returns the text edit response.
+pub fn modal_input_field(ui: &mut egui::Ui, label: &str, text: &mut String) -> egui::Response {
+    ui.label(egui::RichText::new(label).color(crate::theme::Colors::TEXT_SECONDARY));
+    ui.add_space(crate::theme::Spacing::XS);
+    ui.text_edit_singleline(text)
+}
+
+// =============================================================================
+// Context Menu Helpers
+// =============================================================================
+
+/// Context menu button with icon - returns true if clicked
+pub fn menu_button(ui: &mut Ui, icon: &str, label: &str) -> bool {
+    ui.button(format!("{} {}", icon, label)).clicked()
+}
+
+// =============================================================================
+// Status/Badge Components
+// =============================================================================
+
 /// Status badge for HTTP responses
 pub fn status_badge(ui: &mut Ui, status: u16, status_text: &str) {
     let (color, bg) = if status < 300 {
@@ -1081,5 +1147,43 @@ mod tests {
         assert_eq!(format_bytes(2048), "2.0 KB");
         assert_eq!(format_bytes(1_048_576), "1.0 MB");
         assert_eq!(format_bytes(5_242_880), "5.0 MB");
+    }
+
+    #[test]
+    fn test_modal_frame_config() {
+        let frame = modal_frame();
+        // Verify frame has expected styling (we can't check everything easily but we can verify it builds)
+        assert_eq!(frame.corner_radius, crate::theme::Radius::MD.into());
+        assert_eq!(frame.inner_margin, crate::theme::Spacing::MD.into());
+    }
+
+    #[test]
+    fn test_show_modal_visibility_logic() {
+        let ctx = egui::Context::default();
+        let open = true;
+        let mut called = false;
+
+        // When open is true, it should call the closure
+        let _ = ctx.run(egui::RawInput::default(), |ctx| {
+            let result = show_modal(ctx, "Test", open, |_, open_ref| {
+                called = true;
+                *open_ref = false; // Simulate closing from inside
+            });
+            assert!(called, "Closure should be called when open is true");
+            assert!(
+                !result,
+                "Result should be false after closure sets open to false"
+            );
+        });
+
+        // When open is false, it should NOT call the closure
+        called = false;
+        let _ = ctx.run(egui::RawInput::default(), |ctx| {
+            let result = show_modal(ctx, "Test", false, |_, _| {
+                called = true;
+            });
+            assert!(!called, "Closure should NOT be called when open is false");
+            assert!(!result, "Result should remain false");
+        });
     }
 }
