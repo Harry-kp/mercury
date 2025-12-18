@@ -161,6 +161,43 @@ Mercury shows indicators for each variable:
 
 See [Environment Variables](/docs/features/environments) for more details.
 
+## Query Parameters
+
+Mercury provides a dedicated **Params** tab for managing URL query parameters:
+
+```http
+GET https://api.example.com/search?q=mercury&page=1&limit=10
+```
+
+Instead of editing the URL directly, use the **Params** tab to:
+
+- **Add key-value pairs** — Click in the empty row and type
+- **Toggle parameters on/off** — Checkbox enables/disables without deleting
+- **See all parameters at a glance** — Clean table view
+- **Edit values easily** — No more navigating the URL string
+
+### Two-Way Sync
+
+The Params table stays in sync with the URL bar:
+- Edit the URL → Params table updates automatically
+- Edit in Params tab → URL updates automatically
+- Paste a cURL command → Params are parsed and shown
+
+### Variables in Parameters
+
+Use `{{variable}}` syntax in parameter values:
+
+| Key | Value |
+|-----|-------|
+| `api_key` | `{{API_KEY}}` |
+| `page` | `1` |
+
+Variable indicators show which variables are defined in your environment.
+
+:::tip Toggle vs Delete
+Use the checkbox to temporarily disable a parameter without losing it. This is useful for testing different API configurations.
+:::
+
 ## Sending Requests
 
 **Keyboard**: Press `⌘+Enter` (Mac) or `Ctrl+Enter` (Windows/Linux)

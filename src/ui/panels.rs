@@ -72,6 +72,14 @@ impl MercuryApp {
 
                             if self.recent_expanded {
                                 let mut to_remove = None;
+                                // Collect data for deferred loading (avoids borrow issues)
+                                let mut request_to_load: Option<(
+                                    crate::parser::HttpMethod,
+                                    String,
+                                    String,
+                                    String,
+                                )> = None;
+
                                 for (idx, temp) in self.temp_requests.iter().enumerate().rev() {
                                     let row_response = ui.horizontal(|ui| {
                                         ui.add_space(Spacing::MD);
@@ -132,9 +140,8 @@ impl MercuryApp {
                                     };
 
                                     if row_response.clicked() {
-                                        // Load this request into the form
-                                        self.current_file = None;
-                                        self.method = match temp.method.as_str() {
+                                        // Collect data for deferred loading
+                                        let method = match temp.method.as_str() {
                                             "POST" => crate::parser::HttpMethod::POST,
                                             "PUT" => crate::parser::HttpMethod::PUT,
                                             "DELETE" => crate::parser::HttpMethod::DELETE,
@@ -143,16 +150,22 @@ impl MercuryApp {
                                             "OPTIONS" => crate::parser::HttpMethod::OPTIONS,
                                             _ => crate::parser::HttpMethod::GET,
                                         };
-                                        self.url = temp.url.clone();
-                                        self.headers_text = temp.headers.clone();
-                                        self.body_text = temp.body.clone();
+                                        request_to_load = Some((
+                                            method,
+                                            temp.url.clone(),
+                                            temp.headers.clone(),
+                                            temp.body.clone(),
+                                        ));
                                     }
                                 }
 
-                                // Remove after iteration to avoid borrow issues
+                                // Apply deferred operations after iteration
                                 if let Some(idx) = to_remove {
                                     self.temp_requests.remove(idx);
                                     self.save_temp_requests();
+                                }
+                                if let Some((method, url, headers, body)) = request_to_load {
+                                    self.load_request_data(method, url, headers, body);
                                 }
                             }
 
@@ -363,6 +376,11 @@ impl MercuryApp {
         if self.timeline.is_empty() {
             empty_state(ui, "No requests yet", "Send a request to see it here");
         } else {
+            // Collect data for deferred loading (avoids borrow issues)
+            let mut request_to_load: Option<(crate::parser::HttpMethod, String, String, String)> =
+                None;
+            let mut should_close_timeline = false;
+
             ScrollArea::vertical()
                 .id_salt("timeline_scroll")
                 .auto_shrink([false, false])
@@ -437,16 +455,27 @@ impl MercuryApp {
                             .on_hover_cursor(egui::CursorIcon::PointingHand);
 
                         if row_response.clicked() {
-                            self.method = entry.method.clone();
-                            self.url = entry.url.clone();
-                            self.body_text = entry.request_body.clone();
-                            self.headers_text = entry.request_headers.clone();
-                            self.show_timeline = false;
+                            // Collect data for deferred loading
+                            request_to_load = Some((
+                                entry.method.clone(),
+                                entry.url.clone(),
+                                entry.request_headers.clone(),
+                                entry.request_body.clone(),
+                            ));
+                            should_close_timeline = true;
                         }
 
                         ui.add_space(Spacing::XS);
                     }
                 });
+
+            // Apply deferred operations after iteration
+            if let Some((method, url, headers, body)) = request_to_load {
+                self.load_request_data(method, url, headers, body);
+            }
+            if should_close_timeline {
+                self.show_timeline = false;
+            }
         }
     }
 
@@ -1017,7 +1046,13 @@ impl MercuryApp {
                     if let Some(body) = curl_req.body {
                         self.body_text = body;
                     }
+
+                    // Sync query params from parsed URL
+                    self.query_params = crate::utils::parse_query_params(&self.url);
                 }
+            } else if url_response.changed() {
+                // URL edited directly - sync params from new URL
+                self.query_params = crate::utils::parse_query_params(&self.url);
             }
 
             // Animated send button
@@ -1043,13 +1078,25 @@ impl MercuryApp {
     /// Request body with tabs
     fn render_request_body_new(&mut self, ui: &mut Ui) {
         // Tabs
+        let params_count = crate::utils::count_enabled_params(&self.query_params);
+        let params_label = if params_count > 0 {
+            format!("Params ({})", params_count)
+        } else {
+            "Params".to_string()
+        };
+
         let header_count = crate::utils::count_active_headers(&self.headers_text);
         let headers_label = if header_count > 0 {
             format!("Headers ({})", header_count)
         } else {
             "Headers".to_string()
         };
-        let tabs = ["Body", headers_label.as_str(), "Auth"];
+        let tabs = [
+            "Body",
+            params_label.as_str(),
+            headers_label.as_str(),
+            "Auth",
+        ];
         tab_bar(ui, &tabs, &mut self.selected_tab);
 
         ui.add_space(Spacing::SM);
@@ -1116,10 +1163,14 @@ impl MercuryApp {
                         }
                     }
                     1 => {
+                        // Query parameters editor
+                        self.render_query_params(ui);
+                    }
+                    2 => {
                         // Headers with smart variables
                         self.render_smart_headers(ui);
                     }
-                    2 => {
+                    3 => {
                         // Revamped Auth UI
                         ui.horizontal(|ui| {
                             ui.label("Auth Type:");
@@ -1447,6 +1498,101 @@ impl MercuryApp {
             ui.horizontal_wrapped(|ui| {
                 for var in &vars {
                     variable_indicator(ui, var, self.env_variables.contains_key(var));
+                    ui.add_space(Spacing::SM);
+                }
+            });
+        }
+    }
+
+    /// Query parameters editor with key-value table and URL sync
+    fn render_query_params(&mut self, ui: &mut Ui) {
+        // Always have at least one empty row for adding
+        if self.query_params.is_empty()
+            || !self
+                .query_params
+                .last()
+                .map(|p| p.key.is_empty() && p.value.is_empty())
+                .unwrap_or(false)
+        {
+            self.query_params
+                .push(crate::utils::QueryParam::new(String::new(), String::new()));
+        }
+
+        let mut changed = false;
+        let mut to_remove: Option<usize> = None;
+
+        for (idx, param) in self.query_params.iter_mut().enumerate() {
+            ui.horizontal(|ui| {
+                // Checkbox for enable/disable (only for non-empty rows)
+                if !param.key.is_empty() || !param.value.is_empty() {
+                    if ui.checkbox(&mut param.enabled, "").changed() {
+                        changed = true;
+                    }
+                } else {
+                    ui.add_space(Spacing::LG + 2.0); // Placeholder space for empty row
+                }
+
+                let key_response = ui.add(
+                    egui::TextEdit::singleline(&mut param.key)
+                        .hint_text(egui::RichText::new("Key").color(Colors::PLACEHOLDER))
+                        .desired_width(super::theme::Layout::INPUT_FIELD_WIDTH)
+                        .frame(false)
+                        .font(egui::TextStyle::Monospace),
+                );
+
+                ui.label(egui::RichText::new("=").color(Colors::TEXT_MUTED));
+
+                let value_response = ui.add(
+                    egui::TextEdit::singleline(&mut param.value)
+                        .hint_text(egui::RichText::new("Value").color(Colors::PLACEHOLDER))
+                        .desired_width(ui.available_width() - 40.0)
+                        .frame(false)
+                        .font(egui::TextStyle::Monospace),
+                );
+
+                if key_response.changed() || value_response.changed() {
+                    changed = true;
+                }
+
+                // Remove button (only for non-empty rows)
+                if (!param.key.is_empty() || !param.value.is_empty())
+                    && close_button(ui, FontSize::SM)
+                        .on_hover_text("Remove")
+                        .clicked()
+                {
+                    to_remove = Some(idx);
+                }
+            });
+        }
+
+        // Remove deleted row
+        if let Some(idx) = to_remove {
+            self.query_params.remove(idx);
+            changed = true;
+        }
+
+        // Rebuild URL from params when changed
+        if changed {
+            self.url = crate::utils::build_url_with_params(&self.url, &self.query_params);
+        }
+
+        // Show variable indicators for params
+        let all_vars: Vec<String> = self
+            .query_params
+            .iter()
+            .flat_map(|p| {
+                let mut vars = super::app::MercuryApp::extract_variables(&p.key);
+                vars.extend(super::app::MercuryApp::extract_variables(&p.value));
+                vars
+            })
+            .collect();
+
+        if !all_vars.is_empty() {
+            ui.add_space(Spacing::SM);
+            ui.horizontal_wrapped(|ui| {
+                let unique_vars: std::collections::HashSet<_> = all_vars.into_iter().collect();
+                for var in unique_vars {
+                    variable_indicator(ui, &var, self.env_variables.contains_key(&var));
                     ui.add_space(Spacing::SM);
                 }
             });

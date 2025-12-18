@@ -32,6 +32,7 @@ pub struct MercuryApp {
     pub current_file: Option<PathBuf>,
     pub method: HttpMethod,
     pub url: String,
+    pub query_params: Vec<crate::utils::QueryParam>,
     pub headers_text: String,
     pub body_text: String,
     pub auth_text: String,
@@ -135,6 +136,7 @@ impl MercuryApp {
             current_file: None,
             method: HttpMethod::GET,
             url: String::new(),
+            query_params: Vec::new(),
             headers_text: String::new(),
             body_text: String::new(),
             auth_text: String::new(),
@@ -322,6 +324,9 @@ impl MercuryApp {
                 self.body_text = request.body.unwrap_or_default();
                 self.response = None;
 
+                // Sync query params from URL
+                self.query_params = crate::utils::parse_query_params(&self.url);
+
                 // Track the loaded content for change detection
                 self.last_saved_content = Some(self.get_current_content());
                 self.has_unsaved_changes = false;
@@ -365,6 +370,38 @@ impl MercuryApp {
             let current = self.get_current_content();
             self.has_unsaved_changes = self.last_saved_content.as_ref() != Some(&current);
         }
+    }
+
+    /// Clear the request form to empty state (used by new request, delete, etc.)
+    pub fn clear_request_form(&mut self) {
+        self.current_file = None;
+        self.method = HttpMethod::GET;
+        self.url = String::new();
+        self.query_params.clear();
+        self.headers_text = String::new();
+        self.body_text = String::new();
+        self.auth_text = String::new();
+        self.response = None;
+        self.previous_response = None;
+        self.has_unsaved_changes = false;
+        self.last_saved_content = None;
+    }
+
+    /// Load request data into the form (used by history, recent, cURL, file load)
+    pub fn load_request_data(
+        &mut self,
+        method: HttpMethod,
+        url: String,
+        headers: String,
+        body: String,
+    ) {
+        self.current_file = None;
+        self.method = method;
+        self.url = url;
+        self.headers_text = headers;
+        self.body_text = body;
+        self.query_params = crate::utils::parse_query_params(&self.url);
+        self.response = None;
     }
 
     fn load_env(&mut self) {
@@ -632,11 +669,7 @@ impl MercuryApp {
 
         self.build_collection_tree();
         if self.current_file.as_ref() == Some(&path.to_path_buf()) {
-            self.current_file = None;
-            self.url = String::new();
-            self.headers_text = String::new();
-            self.body_text = String::new();
-            self.response = None;
+            self.clear_request_form();
         }
         Ok(())
     }
@@ -1293,16 +1326,7 @@ impl eframe::App for MercuryApp {
         // Execute deferred actions (after keyboard input processing)
         if self.should_create_new_request {
             self.should_create_new_request = false;
-
-            // Always just clear the form - no dialog, no save required
-            self.current_file = None;
-            self.method = HttpMethod::GET;
-            self.url = String::new();
-            self.headers_text = String::new();
-            self.body_text = String::new();
-            self.auth_text = String::new();
-            self.response = None;
-            self.previous_response = None;
+            self.clear_request_form();
             self.should_focus_url_bar = true;
             self.last_action_message =
                 Some(("New request".to_string(), ctx.input(|i| i.time), false));
