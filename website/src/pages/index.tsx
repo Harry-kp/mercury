@@ -16,7 +16,7 @@ export default function Home(): ReactNode {
         <div className={styles.heroContainer}>
           <div className={styles.heroBadge}>
             <span className={styles.badgeDot}>●</span>
-            <span>v0.1.0-beta — Open Source</span>
+            <span>v0.2.0 — Open Source</span>
           </div>
 
           <h1 className={styles.heroTitle}>
