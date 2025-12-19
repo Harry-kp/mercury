@@ -4,6 +4,7 @@
 //! Supports common flags like -X, -H, -d, -u, -A, -b, -I, -G, --json.
 
 use super::http::HttpMethod;
+use crate::core::error::MercuryError;
 
 #[derive(Debug)]
 pub struct CurlRequest {
@@ -14,7 +15,7 @@ pub struct CurlRequest {
 }
 
 /// Parse a cURL command into a structured request
-pub fn parse_curl(curl_cmd: &str) -> Result<CurlRequest, String> {
+pub fn parse_curl(curl_cmd: &str) -> Result<CurlRequest, MercuryError> {
     let curl_cmd = curl_cmd.trim();
 
     // Remove leading 'curl' command
@@ -153,7 +154,9 @@ pub fn parse_curl(curl_cmd: &str) -> Result<CurlRequest, String> {
     }
 
     if url.is_empty() {
-        return Err("No URL found in cURL command".to_string());
+        return Err(MercuryError::CurlParseError(
+            "No URL found in cURL command".to_string(),
+        ));
     }
 
     Ok(CurlRequest {

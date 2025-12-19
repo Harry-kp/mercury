@@ -2,6 +2,7 @@
 //!
 //! Converts Insomnia export files (JSON/YAML) to Mercury `.http` format.
 
+use crate::core::error::MercuryError;
 use serde::Deserialize;
 use serde_json::Value;
 use std::collections::HashMap;
@@ -74,19 +75,21 @@ struct InsomniaBody {
 pub fn import_insomnia_collection(
     json_path: &Path,
     output_dir: &Path,
-) -> Result<(usize, usize), String> {
-    let content =
-        fs::read_to_string(json_path).map_err(|e| format!("Failed to read file: {}", e))?;
+) -> Result<(usize, usize), MercuryError> {
+    let content = fs::read_to_string(json_path).map_err(|e| MercuryError::FileRead {
+        path: json_path.display().to_string(),
+        reason: e.to_string(),
+    })?;
 
     let export: InsomniaExport = match serde_json::from_str(&content) {
         Ok(json) => json,
         Err(json_err) => {
             // Try parsing as YAML if JSON fails
             serde_yaml::from_str(&content).map_err(|yaml_err| {
-                format!(
+                MercuryError::InsomniaImportError(format!(
                     "Failed to parse as JSON ({}) or YAML ({})",
                     json_err, yaml_err
-                )
+                ))
             })?
         }
     };
@@ -118,8 +121,10 @@ pub fn import_insomnia_collection(
                     env_content.push_str(&format!("{}={}\n", key, value_str));
                 }
 
-                fs::write(&env_path, env_content)
-                    .map_err(|e| format!("Failed to write environment file: {}", e))?;
+                fs::write(&env_path, env_content).map_err(|e| MercuryError::FileWrite {
+                    path: env_path.display().to_string(),
+                    reason: e.to_string(),
+                })?;
                 env_count += 1;
             }
         }
@@ -137,8 +142,10 @@ pub fn import_insomnia_collection(
                 .unwrap_or_else(|| "imported".to_string());
 
             let folder_path = output_dir.join(&folder_name);
-            fs::create_dir_all(&folder_path)
-                .map_err(|e| format!("Failed to create folder: {}", e))?;
+            fs::create_dir_all(&folder_path).map_err(|e| MercuryError::FileWrite {
+                path: folder_path.display().to_string(),
+                reason: e.to_string(),
+            })?;
 
             let file_name = format!("{}.http", request.name.to_lowercase().replace(' ', "-"));
             let file_path = folder_path.join(&file_name);
@@ -166,8 +173,10 @@ pub fn import_insomnia_collection(
                 }
             }
 
-            fs::write(&file_path, http_content)
-                .map_err(|e| format!("Failed to write request file: {}", e))?;
+            fs::write(&file_path, http_content).map_err(|e| MercuryError::FileWrite {
+                path: file_path.display().to_string(),
+                reason: e.to_string(),
+            })?;
             request_count += 1;
         }
     }
@@ -247,7 +256,7 @@ mod tests {
 
         let result = import_insomnia_collection(&file_path, &output_dir);
         assert!(result.is_err());
-        let err_msg = result.unwrap_err();
+        let err_msg = result.unwrap_err().to_string();
         assert!(err_msg.contains("Failed to parse as JSON"));
         assert!(err_msg.contains("or YAML"));
     }

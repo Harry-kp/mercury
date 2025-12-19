@@ -10,7 +10,7 @@
 
 use crate::core::persistence;
 use crate::core::types::{AppState, CollectionItem, TempRequest, TimelineEntry};
-use crate::core::{execute_request, HttpResponse};
+use crate::core::{execute_request, HttpResponse, MercuryError};
 use crate::parser::{
     parse_env_file, parse_http_file, substitute_variables, HttpMethod, HttpRequest,
 };
@@ -254,6 +254,16 @@ impl MercuryApp {
     }
 
     fn load_workspace(&mut self, path: PathBuf) {
+        // Validate workspace exists
+        if !path.exists() || !path.is_dir() {
+            self.last_action_message = Some((
+                MercuryError::WorkspaceNotFound(path.display().to_string()).to_string(),
+                0.0,
+                true,
+            ));
+            return;
+        }
+
         self.workspace_path = Some(path.clone());
 
         // Scan for .env files
@@ -517,7 +527,11 @@ impl MercuryApp {
                 let mut debouncer = match new_debouncer(Duration::from_millis(500), debouncer_tx) {
                     Ok(d) => d,
                     Err(e) => {
-                        let _ = tx.send(Err(format!("Failed to create file watcher: {}", e)));
+                        let _ = tx.send(Err(MercuryError::FileWatcherError(format!(
+                            "Failed to create file watcher: {}",
+                            e
+                        ))
+                        .to_string()));
                         return;
                     }
                 };
@@ -527,7 +541,11 @@ impl MercuryApp {
                     .watcher()
                     .watch(&workspace_path, notify::RecursiveMode::Recursive)
                 {
-                    let _ = tx.send(Err(format!("Failed to watch directory: {}", e)));
+                    let _ = tx.send(Err(MercuryError::FileWatcherError(format!(
+                        "Failed to watch directory: {}",
+                        e
+                    ))
+                    .to_string()));
                     return;
                 }
 
@@ -550,7 +568,11 @@ impl MercuryApp {
                             }
                         }
                         Ok(Err(error)) => {
-                            let _ = tx.send(Err(format!("File watcher error: {:?}", error)));
+                            let _ = tx.send(Err(MercuryError::FileWatcherError(format!(
+                                "File watcher error: {:?}",
+                                error
+                            ))
+                            .to_string()));
                         }
                         Err(RecvTimeoutError::Timeout) => {
                             // Timeout hit, loop back to check shutdown
@@ -619,7 +641,7 @@ impl MercuryApp {
         folders
     }
 
-    fn create_new_request(&mut self, parent_path: &Path, name: &str) -> Result<(), String> {
+    fn create_new_request(&mut self, parent_path: &Path, name: &str) -> Result<(), MercuryError> {
         let file_name = if name.ends_with(".http") {
             name.to_string()
         } else {
@@ -629,7 +651,10 @@ impl MercuryApp {
         let file_path = parent_path.join(&file_name);
 
         if file_path.exists() {
-            return Err("File already exists".to_string());
+            return Err(MercuryError::AlreadyExists {
+                kind: "File".to_string(),
+                name: file_name,
+            });
         }
 
         // Use current form content instead of template
@@ -649,7 +674,10 @@ impl MercuryApp {
             }
         );
 
-        fs::write(&file_path, content).map_err(|e| format!("Failed to create file: {}", e))?;
+        fs::write(&file_path, content).map_err(|e| MercuryError::FileWrite {
+            path: file_path.display().to_string(),
+            reason: e.to_string(),
+        })?;
 
         // Remove from temp requests if it exists
         if let Some(pos) = self.temp_requests.iter().position(|t| t.url == self.url) {
@@ -662,11 +690,17 @@ impl MercuryApp {
         Ok(())
     }
 
-    fn delete_item(&mut self, path: &Path) -> Result<(), String> {
+    fn delete_item(&mut self, path: &Path) -> Result<(), MercuryError> {
         if path.is_dir() {
-            fs::remove_dir_all(path).map_err(|e| format!("Failed to delete folder: {}", e))?;
+            fs::remove_dir_all(path).map_err(|e| MercuryError::DeleteFailed {
+                path: path.display().to_string(),
+                reason: e.to_string(),
+            })?;
         } else {
-            fs::remove_file(path).map_err(|e| format!("Failed to delete file: {}", e))?;
+            fs::remove_file(path).map_err(|e| MercuryError::DeleteFailed {
+                path: path.display().to_string(),
+                reason: e.to_string(),
+            })?;
         }
 
         self.build_collection_tree();
@@ -676,15 +710,24 @@ impl MercuryApp {
         Ok(())
     }
 
-    fn rename_item(&mut self, old_path: &Path, new_name: &str) -> Result<(), String> {
-        let parent = old_path.parent().ok_or("No parent directory")?;
+    fn rename_item(&mut self, old_path: &Path, new_name: &str) -> Result<(), MercuryError> {
+        let parent = old_path.parent().ok_or(MercuryError::FileNotFound(
+            "No parent directory".to_string(),
+        ))?;
         let new_path = parent.join(new_name);
 
         if new_path.exists() {
-            return Err("Name already exists".to_string());
+            return Err(MercuryError::AlreadyExists {
+                kind: "Name".to_string(),
+                name: new_name.to_string(),
+            });
         }
 
-        fs::rename(old_path, &new_path).map_err(|e| format!("Failed to rename: {}", e))?;
+        fs::rename(old_path, &new_path).map_err(|e| MercuryError::RenameFailed {
+            from: old_path.display().to_string(),
+            to: new_path.display().to_string(),
+            reason: e.to_string(),
+        })?;
 
         // Update current file if it was renamed
         if self.current_file.as_ref() == Some(&old_path.to_path_buf()) {
@@ -695,28 +738,38 @@ impl MercuryApp {
         Ok(())
     }
 
-    fn create_new_folder(&mut self, parent_path: &Path, name: &str) -> Result<(), String> {
+    fn create_new_folder(&mut self, parent_path: &Path, name: &str) -> Result<(), MercuryError> {
         let folder_path = parent_path.join(name);
 
         if folder_path.exists() {
-            return Err("Folder already exists".to_string());
+            return Err(MercuryError::AlreadyExists {
+                kind: "Folder".to_string(),
+                name: name.to_string(),
+            });
         }
 
-        fs::create_dir(&folder_path).map_err(|e| format!("Failed to create folder: {}", e))?;
+        fs::create_dir(&folder_path).map_err(|e| MercuryError::FileWrite {
+            path: folder_path.display().to_string(),
+            reason: e.to_string(),
+        })?;
 
         self.build_collection_tree();
         Ok(())
     }
 
-    fn duplicate_request(&mut self, path: &Path) -> Result<(), String> {
+    fn duplicate_request(&mut self, path: &Path) -> Result<(), MercuryError> {
         if !path.is_file() {
-            return Err("Not a file".to_string());
+            return Err(MercuryError::FileNotFound(path.display().to_string()));
         }
 
-        let content =
-            fs::read_to_string(path).map_err(|e| format!("Failed to read file: {}", e))?;
+        let content = fs::read_to_string(path).map_err(|e| MercuryError::FileRead {
+            path: path.display().to_string(),
+            reason: e.to_string(),
+        })?;
 
-        let parent = path.parent().ok_or("No parent directory")?;
+        let parent = path.parent().ok_or(MercuryError::FileNotFound(
+            "No parent directory".to_string(),
+        ))?;
         let stem = path.file_stem().unwrap_or_default().to_string_lossy();
         let ext = path.extension().unwrap_or_default().to_string_lossy();
 
@@ -730,13 +783,16 @@ impl MercuryApp {
             counter += 1;
         }
 
-        fs::write(&new_path, content).map_err(|e| format!("Failed to duplicate file: {}", e))?;
+        fs::write(&new_path, content).map_err(|e| MercuryError::FileWrite {
+            path: new_path.display().to_string(),
+            reason: e.to_string(),
+        })?;
 
         self.build_collection_tree();
         Ok(())
     }
 
-    fn create_new_env(&mut self, name: &str) -> Result<(), String> {
+    fn create_new_env(&mut self, name: &str) -> Result<(), MercuryError> {
         if let Some(workspace) = &self.workspace_path {
             let env_name = if name.starts_with(".env") {
                 name.to_string()
@@ -747,16 +803,16 @@ impl MercuryApp {
             let env_path = workspace.join(&env_name);
 
             if env_path.exists() {
-                return Err("Environment already exists".to_string());
+                return Err(MercuryError::EnvironmentExists(name.to_string()));
             }
 
             fs::write(&env_path, "# Environment variables\n")
-                .map_err(|e| format!("Failed to create environment: {}", e))?;
+                .map_err(|e| MercuryError::EnvironmentCreateFailed(e.to_string()))?;
 
             self.load_workspace(workspace.clone());
             Ok(())
         } else {
-            Err("No workspace loaded".to_string())
+            Err(MercuryError::NoWorkspace)
         }
     }
 
@@ -804,7 +860,7 @@ impl MercuryApp {
         self.ongoing_request = Some((request_id, start_time));
 
         std::thread::spawn(move || {
-            let response = execute_request(&request, 30, true);
+            let response = execute_request(&request, 30, true).map_err(|e| e.to_string());
             let _ = tx.send((request_id, response));
             ctx.request_repaint();
         });
@@ -1110,35 +1166,8 @@ impl MercuryApp {
             )
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
-                    let current_time = ui.input(|i| i.time);
-
                     if let Some((msg, timestamp, is_error)) = &self.last_action_message {
-                        if current_time - timestamp < crate::core::constants::FADE_DURATION_SECONDS
-                        {
-                            let alpha = ((crate::core::constants::FADE_DURATION_SECONDS
-                                - (current_time - timestamp))
-                                / crate::core::constants::FADE_DURATION_SECONDS
-                                * 255.0) as u8;
-                            let color = if *is_error {
-                                egui::Color32::from_rgba_unmultiplied(
-                                    crate::theme::Colors::ERROR_FLASH.r(),
-                                    crate::theme::Colors::ERROR_FLASH.g(),
-                                    crate::theme::Colors::ERROR_FLASH.b(),
-                                    alpha,
-                                )
-                            } else {
-                                egui::Color32::from_rgba_unmultiplied(
-                                    crate::theme::Colors::SUCCESS_FLASH.r(),
-                                    crate::theme::Colors::SUCCESS_FLASH.g(),
-                                    crate::theme::Colors::SUCCESS_FLASH.b(),
-                                    alpha,
-                                )
-                            };
-                            ui.label(
-                                egui::RichText::new(msg)
-                                    .color(color)
-                                    .size(crate::theme::FontSize::SM),
-                            );
+                        if super::components::fading_toast(ui, ctx, msg, *timestamp, *is_error) {
                             ctx.request_repaint();
                         }
                     }
@@ -1806,7 +1835,8 @@ impl eframe::App for MercuryApp {
                     if let Some(parent) = self.context_menu_item.clone() {
                         let name = self.new_request_name.clone();
                         if let Err(e) = self.create_new_request(&parent, &name) {
-                            self.last_action_message = Some((e, ctx.input(|i| i.time), true));
+                            self.last_action_message =
+                                Some((e.user_message().to_string(), ctx.input(|i| i.time), true));
                         }
                     }
                     *open = false;
@@ -1817,7 +1847,11 @@ impl eframe::App for MercuryApp {
                         if let Some(parent) = self.context_menu_item.clone() {
                             let name = self.new_request_name.clone();
                             if let Err(e) = self.create_new_request(&parent, &name) {
-                                self.last_action_message = Some((e, ctx.input(|i| i.time), true));
+                                self.last_action_message = Some((
+                                    e.user_message().to_string(),
+                                    ctx.input(|i| i.time),
+                                    true,
+                                ));
                             } else {
                                 self.last_action_message = Some((
                                     "Request created".to_string(),
@@ -1849,7 +1883,8 @@ impl eframe::App for MercuryApp {
                     if let Some(parent) = self.context_menu_item.clone() {
                         let name = self.new_folder_name.clone();
                         if let Err(e) = self.create_new_folder(&parent, &name) {
-                            self.last_action_message = Some((e, ctx.input(|i| i.time), true));
+                            self.last_action_message =
+                                Some((e.user_message().to_string(), ctx.input(|i| i.time), true));
                         }
                     }
                     *open = false;
@@ -1860,7 +1895,11 @@ impl eframe::App for MercuryApp {
                         if let Some(parent) = self.context_menu_item.clone() {
                             let name = self.new_folder_name.clone();
                             if let Err(e) = self.create_new_folder(&parent, &name) {
-                                self.last_action_message = Some((e, ctx.input(|i| i.time), true));
+                                self.last_action_message = Some((
+                                    e.user_message().to_string(),
+                                    ctx.input(|i| i.time),
+                                    true,
+                                ));
                             } else {
                                 self.last_action_message = Some((
                                     "Folder created".to_string(),
@@ -1888,7 +1927,8 @@ impl eframe::App for MercuryApp {
                 if let Some(old_path) = self.context_menu_item.clone() {
                     let new_name = self.rename_text.clone();
                     if let Err(e) = self.rename_item(&old_path, &new_name) {
-                        self.last_action_message = Some((e, ctx.input(|i| i.time), true));
+                        self.last_action_message =
+                            Some((e.user_message().to_string(), ctx.input(|i| i.time), true));
                     }
                 }
                 *open = false;
@@ -1899,7 +1939,8 @@ impl eframe::App for MercuryApp {
                     if let Some(old_path) = self.context_menu_item.clone() {
                         let new_name = self.rename_text.clone();
                         if let Err(e) = self.rename_item(&old_path, &new_name) {
-                            self.last_action_message = Some((e, ctx.input(|i| i.time), true));
+                            self.last_action_message =
+                                Some((e.user_message().to_string(), ctx.input(|i| i.time), true));
                         } else {
                             self.last_action_message = Some((
                                 "Renamed successfully".to_string(),
@@ -1965,7 +2006,11 @@ impl eframe::App for MercuryApp {
                             .clicked()
                         {
                             if let Err(e) = self.delete_item(&target_path) {
-                                self.last_action_message = Some((e, ctx.input(|i| i.time), true));
+                                self.last_action_message = Some((
+                                    e.user_message().to_string(),
+                                    ctx.input(|i| i.time),
+                                    true,
+                                ));
                             } else {
                                 self.last_action_message =
                                     Some(("Deleted".to_string(), ctx.input(|i| i.time), false));
@@ -1999,7 +2044,8 @@ impl eframe::App for MercuryApp {
                 {
                     let name = self.new_env_name.clone();
                     if let Err(e) = self.create_new_env(&name) {
-                        self.last_action_message = Some((e, ctx.input(|i| i.time), true));
+                        self.last_action_message =
+                            Some((e.user_message().to_string(), ctx.input(|i| i.time), true));
                     } else {
                         self.last_action_message = Some((
                             "Environment created".to_string(),
@@ -2014,7 +2060,8 @@ impl eframe::App for MercuryApp {
                     if ui.button("Create").clicked() && !self.new_env_name.is_empty() {
                         let name = self.new_env_name.clone();
                         if let Err(e) = self.create_new_env(&name) {
-                            self.last_action_message = Some((e, ctx.input(|i| i.time), true));
+                            self.last_action_message =
+                                Some((e.user_message().to_string(), ctx.input(|i| i.time), true));
                         } else {
                             self.last_action_message = Some((
                                 "Environment created".to_string(),

@@ -266,6 +266,106 @@ pub fn variable_indicator(ui: &mut Ui, name: &str, is_defined: bool) {
     );
 }
 
+/// Fading toast message with optional copy-to-clipboard on click.
+/// Shows truncated message with full text in tooltip. For errors, clicking copies to clipboard.
+/// Returns true if the toast is still visible (for repaint scheduling).
+pub fn fading_toast(
+    ui: &mut Ui,
+    ctx: &egui::Context,
+    message: &str,
+    timestamp: f64,
+    is_error: bool,
+) -> bool {
+    let current_time = ui.input(|i| i.time);
+    let elapsed = current_time - timestamp;
+
+    if elapsed >= crate::core::constants::FADE_DURATION_SECONDS {
+        return false;
+    }
+
+    // Track copy confirmation state in egui memory
+    let copy_confirm_id = egui::Id::new("toast_copy_confirm");
+    let copy_confirm_time: Option<f64> = ctx.memory(|m| m.data.get_temp(copy_confirm_id));
+    let show_copied = copy_confirm_time
+        .map(|t| current_time - t < crate::core::constants::COPY_CONFIRM_DURATION_SECONDS)
+        .unwrap_or(false);
+
+    // Calculate fade alpha
+    let alpha = ((crate::core::constants::FADE_DURATION_SECONDS - elapsed)
+        / crate::core::constants::FADE_DURATION_SECONDS
+        * 255.0) as u8;
+
+    let color = if show_copied {
+        // Green flash for "Copied" confirmation
+        egui::Color32::from_rgba_unmultiplied(
+            Colors::SUCCESS_FLASH.r(),
+            Colors::SUCCESS_FLASH.g(),
+            Colors::SUCCESS_FLASH.b(),
+            alpha,
+        )
+    } else if is_error {
+        egui::Color32::from_rgba_unmultiplied(
+            Colors::ERROR_FLASH.r(),
+            Colors::ERROR_FLASH.g(),
+            Colors::ERROR_FLASH.b(),
+            alpha,
+        )
+    } else {
+        egui::Color32::from_rgba_unmultiplied(
+            Colors::SUCCESS_FLASH.r(),
+            Colors::SUCCESS_FLASH.g(),
+            Colors::SUCCESS_FLASH.b(),
+            alpha,
+        )
+    };
+
+    // Display message or "Copied"
+    let display_msg = if show_copied {
+        format!("{} Copied", Icons::CHECK)
+    } else if message.len() > crate::core::constants::STATUS_MSG_TRUNCATE_LENGTH {
+        format!(
+            "{}…",
+            &message[..crate::core::constants::STATUS_MSG_TRUNCATE_LENGTH]
+        )
+    } else {
+        message.to_string()
+    };
+
+    let label = ui.add(
+        egui::Label::new(RichText::new(&display_msg).color(color).size(FontSize::SM)).sense(
+            if is_error && !show_copied {
+                egui::Sense::click()
+            } else {
+                egui::Sense::hover()
+            },
+        ),
+    );
+
+    // Error: show tooltip with copy hint and copy on click
+    if is_error && !show_copied {
+        let clicked = label.clicked();
+        label.on_hover_ui(|ui| {
+            ui.label(message);
+            ui.add_space(4.0);
+            ui.label(
+                RichText::new("Click to copy")
+                    .size(FontSize::XS)
+                    .color(Colors::TEXT_MUTED),
+            );
+        });
+        if clicked {
+            ctx.copy_text(message.to_string());
+            // Store copy confirmation time
+            ctx.memory_mut(|m| m.data.insert_temp(copy_confirm_id, current_time));
+        }
+    } else if !is_error && message.len() > crate::core::constants::STATUS_MSG_TRUNCATE_LENGTH {
+        // Success: just show full text on hover if truncated
+        label.on_hover_text(message);
+    }
+
+    true // Still visible
+}
+
 /// Minimal copy icon button - returns true if clicked
 pub fn copy_icon_button(ui: &mut Ui) -> bool {
     let response = ui.add(

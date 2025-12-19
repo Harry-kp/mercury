@@ -2,6 +2,7 @@
 //!
 //! Converts Postman collection exports to Mercury `.http` format.
 
+use crate::core::error::MercuryError;
 use serde::Deserialize;
 use serde_json::Value;
 use std::fs;
@@ -245,7 +246,7 @@ fn reconstruct_url(url: &PostmanUrl) -> String {
 /// - If item contains a request: creates a .http file
 /// - If item contains sub-items: creates a folder and recursively processes children
 /// - If item is empty: returns 0
-fn process_item(item: &PostmanItem, parent_dir: &Path) -> Result<usize, String> {
+fn process_item(item: &PostmanItem, parent_dir: &Path) -> Result<usize, MercuryError> {
     if let Some(request) = &item.request {
         // This is a request - create .http file
         let file_name = format!("{}.http", sanitize_filename(&item.name));
@@ -275,14 +276,19 @@ fn process_item(item: &PostmanItem, parent_dir: &Path) -> Result<usize, String> 
             }
         }
 
-        fs::write(&file_path, http_content)
-            .map_err(|e| format!("Failed to write request file: {}", e))?;
+        fs::write(&file_path, http_content).map_err(|e| MercuryError::FileWrite {
+            path: file_path.display().to_string(),
+            reason: e.to_string(),
+        })?;
         Ok(1)
     } else if !item.item.is_empty() {
         // This is a folder - create directory and recurse
         let folder_name = sanitize_filename(&item.name);
         let folder_path = parent_dir.join(&folder_name);
-        fs::create_dir_all(&folder_path).map_err(|e| format!("Failed to create folder: {}", e))?;
+        fs::create_dir_all(&folder_path).map_err(|e| MercuryError::FileWrite {
+            path: folder_path.display().to_string(),
+            reason: e.to_string(),
+        })?;
 
         let mut count = 0;
         for child in &item.item {
@@ -319,12 +325,14 @@ fn process_item(item: &PostmanItem, parent_dir: &Path) -> Result<usize, String> 
 pub fn import_postman_collection(
     json_path: &Path,
     output_dir: &Path,
-) -> Result<(usize, usize), String> {
-    let content =
-        fs::read_to_string(json_path).map_err(|e| format!("Failed to read file: {}", e))?;
+) -> Result<(usize, usize), MercuryError> {
+    let content = fs::read_to_string(json_path).map_err(|e| MercuryError::FileRead {
+        path: json_path.display().to_string(),
+        reason: e.to_string(),
+    })?;
 
     let collection: PostmanCollection = serde_json::from_str(&content)
-        .map_err(|e| format!("Failed to parse Postman collection: {}", e))?;
+        .map_err(|e| MercuryError::PostmanImportError(e.to_string()))?;
 
     // Extract collection variables to .env file
     let mut env_count = 0;
@@ -347,8 +355,10 @@ pub fn import_postman_collection(
             ));
         }
 
-        fs::write(&env_path, env_content)
-            .map_err(|e| format!("Failed to write environment file: {}", e))?;
+        fs::write(&env_path, env_content).map_err(|e| MercuryError::FileWrite {
+            path: env_path.display().to_string(),
+            reason: e.to_string(),
+        })?;
         env_count = 1;
     }
 
@@ -692,8 +702,8 @@ mod tests {
 
         let result = import_postman_collection(&file_path, &output_dir);
         assert!(result.is_err());
-        let err_msg = result.unwrap_err();
-        assert!(err_msg.contains("Failed to parse Postman collection"));
+        let err_msg = result.unwrap_err().to_string();
+        assert!(err_msg.contains("Postman import failed"));
     }
 
     #[test]
