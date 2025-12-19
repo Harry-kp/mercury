@@ -963,13 +963,15 @@ impl MercuryApp {
                             (depth * crate::theme::Indent::TREE_LEVEL as usize) as f32 + 12.0,
                         );
 
-                        // Folder icon (open/closed state)
-                        let folder_icon = if *expanded {
-                            Icons::FOLDER_OPEN
+                        // Chevron icon (expand/collapse state)
+                        let chevron_icon = if *expanded {
+                            Icons::CHEVRON_DOWN
                         } else {
-                            Icons::FOLDER_CLOSED
+                            Icons::CHEVRON_RIGHT
                         };
-                        ui.label(egui::RichText::new(folder_icon).size(crate::theme::FontSize::MD));
+                        ui.label(
+                            egui::RichText::new(chevron_icon).size(crate::theme::FontSize::SM),
+                        );
 
                         let is_selected = self.selected_folder.as_ref() == Some(path);
 
@@ -1111,7 +1113,7 @@ impl MercuryApp {
             self.new_request_name = String::new();
             ui.close();
         }
-        if menu_button(ui, Icons::FOLDER_CLOSED, "New Folder") {
+        if menu_button(ui, Icons::FOLDER, "New Folder") {
             self.context_menu_item = Some(path.clone());
             self.show_new_folder_dialog = true;
             self.new_folder_name = String::new();
@@ -1567,9 +1569,10 @@ impl eframe::App for MercuryApp {
                             if self.has_unsaved_changes {
                                 ui.label(
                                     egui::RichText::new(Icons::DOT)
-                                        .size(crate::theme::FontSize::SM)
+                                        .size(14.0)
                                         .color(crate::theme::Colors::WARNING),
-                                );
+                                )
+                                .on_hover_text("Unsaved changes");
                             }
                         } else {
                             ui.label(
