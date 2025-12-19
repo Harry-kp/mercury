@@ -3,6 +3,7 @@
 //! Executes HTTP requests using reqwest and returns structured responses.
 
 use super::constants::MAX_RESPONSE_SIZE;
+use super::error::MercuryError;
 use crate::parser::{HttpMethod, HttpRequest};
 use serde_json::Value;
 use std::time::Instant;
@@ -131,7 +132,7 @@ pub fn execute_request(
     request: &HttpRequest,
     timeout_secs: u64,
     follow_redirects: bool,
-) -> Result<HttpResponse, String> {
+) -> Result<HttpResponse, MercuryError> {
     let start = Instant::now();
 
     let redirect_policy = if follow_redirects {
@@ -144,7 +145,7 @@ pub fn execute_request(
         .timeout(std::time::Duration::from_secs(timeout_secs))
         .redirect(redirect_policy)
         .build()
-        .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
+        .map_err(|e| MercuryError::RequestFailed(format!("Failed to create HTTP client: {}", e)))?;
 
     let mut req_builder = match request.method {
         HttpMethod::GET => client.get(&request.url),
@@ -166,7 +167,9 @@ pub fn execute_request(
         req_builder = req_builder.body(body.clone());
     }
 
-    let response = req_builder.send().map_err(format_request_error)?;
+    let response = req_builder
+        .send()
+        .map_err(|e| format_request_error(e, timeout_secs))?;
 
     let status = response.status().as_u16();
     let status_text = response.status().to_string();
@@ -198,10 +201,9 @@ pub fn execute_request(
         }
     }
 
-    // Read response as bytes first
     let raw_bytes = response
         .bytes()
-        .map_err(|e| format!("Failed to read response body: {}", e))?;
+        .map_err(|e| MercuryError::RequestFailed(format!("Failed to read response body: {}", e)))?;
 
     let size_bytes = raw_bytes.len();
 
@@ -242,17 +244,27 @@ pub fn execute_request(
 }
 
 /// Format request errors with user-friendly messages
-fn format_request_error(e: reqwest::Error) -> String {
+fn format_request_error(e: reqwest::Error, timeout_secs: u64) -> MercuryError {
+    let err_str = e.to_string().to_lowercase();
+
     if e.is_timeout() {
-        return "Request timed out after 30 seconds".to_string();
+        MercuryError::Timeout(timeout_secs * 1000)
+    } else if e.is_connect() {
+        // Check for TLS/SSL errors in connection failures
+        if err_str.contains("certificate")
+            || err_str.contains("ssl")
+            || err_str.contains("tls")
+            || err_str.contains("handshake")
+        {
+            MercuryError::TlsError(e.to_string())
+        } else {
+            MercuryError::ConnectionFailed(e.to_string())
+        }
+    } else if e.is_builder() {
+        MercuryError::InvalidUrl(e.to_string())
+    } else {
+        MercuryError::RequestFailed(e.to_string())
     }
-    if e.is_connect() {
-        return format!("Connection failed: {}", e);
-    }
-    if e.is_builder() {
-        return format!("Invalid request: {}", e);
-    }
-    format!("Request failed: {}", e)
 }
 
 pub fn format_json(body: &str) -> String {

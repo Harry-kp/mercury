@@ -3,6 +3,7 @@
 //! Parses `.http` file format and provides HTTP method/request types.
 //! The `.http` format is a simple text-based format for defining HTTP requests.
 
+use crate::core::error::MercuryError;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -60,12 +61,12 @@ pub struct HttpRequest {
     pub body: Option<String>,
 }
 
-pub fn parse_http_file(content: &str) -> Result<HttpRequest, String> {
+pub fn parse_http_file(content: &str) -> Result<HttpRequest, MercuryError> {
     let mut request = HttpRequest::default();
     let lines: Vec<&str> = content.lines().collect();
 
     if lines.is_empty() {
-        return Err("Empty file".to_string());
+        return Err(MercuryError::HttpParseError("Empty file".to_string()));
     }
 
     // Parse first line: METHOD URL
@@ -75,11 +76,14 @@ pub fn parse_http_file(content: &str) -> Result<HttpRequest, String> {
     let parts: Vec<&str> = first_line.splitn(2, |c: char| c.is_whitespace()).collect();
 
     if parts.len() < 2 {
-        return Err("Invalid first line. Expected: METHOD URL".to_string());
+        return Err(MercuryError::HttpParseError(
+            "Invalid first line. Expected: METHOD URL".to_string(),
+        ));
     }
 
-    request.method = HttpMethod::from_str(parts[0])
-        .ok_or_else(|| format!("Invalid HTTP method: {}", parts[0]))?;
+    request.method = HttpMethod::from_str(parts[0]).ok_or_else(|| {
+        MercuryError::HttpParseError(format!("Invalid HTTP method: {}", parts[0]))
+    })?;
     request.url = parts[1].trim().to_string();
 
     // Parse headers and body
