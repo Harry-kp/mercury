@@ -48,10 +48,9 @@ impl MercuryApp {
                                 };
                                 ui.label(
                                     egui::RichText::new(icon)
-                                        .size(FontSize::XS)
+                                        .size(FontSize::SM)
                                         .color(Colors::TEXT_MUTED),
                                 );
-                                ui.add_space(Spacing::XS);
                                 ui.label(
                                     egui::RichText::new("Recent")
                                         .size(FontSize::SM)
@@ -234,9 +233,7 @@ impl MercuryApp {
                             // Has workspace but empty - show import hint
                             ui.add_space(Spacing::XL);
                             ui.vertical_centered(|ui| {
-                                ui.label(
-                                    egui::RichText::new(Icons::FOLDER_CLOSED).size(FontSize::EMOJI),
-                                );
+                                ui.label(egui::RichText::new(Icons::FOLDER).size(FontSize::EMOJI));
                                 ui.add_space(Spacing::SM);
                                 ui.label(
                                     egui::RichText::new("Folder is empty")
@@ -343,6 +340,7 @@ impl MercuryApp {
             );
 
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                // Close button
                 if close_button(ui, FontSize::MD).clicked() {
                     self.show_timeline = false;
                 }
@@ -350,19 +348,8 @@ impl MercuryApp {
                 // Clear history button
                 if !self.timeline.is_empty() {
                     ui.add_space(Spacing::SM);
-                    if ui
-                        .add(
-                            egui::Label::new(
-                                egui::RichText::new("Clear")
-                                    .size(FontSize::XS)
-                                    .color(Colors::TEXT_MUTED),
-                            )
-                            .sense(egui::Sense::click()),
-                        )
-                        .on_hover_cursor(egui::CursorIcon::PointingHand)
-                        .on_hover_text("Clear all history")
-                        .clicked()
-                    {
+                    let ctx = ui.ctx().clone();
+                    if clear_icon_button(ui, &ctx, "timeline_history") {
                         should_clear = true;
                     }
                 }
@@ -605,7 +592,8 @@ impl MercuryApp {
                 ui.horizontal(|ui| {
                     ui.label(egui::RichText::new("Headers").size(FontSize::SM).strong());
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if copy_icon_button(ui) {
+                        let ctx = ui.ctx().clone();
+                        if copy_icon_button(ui, &ctx, "response_headers") {
                             let headers_text: String = response
                                 .headers
                                 .iter()
@@ -674,7 +662,8 @@ impl MercuryApp {
                     ui.horizontal(|ui| {
                         ui.label(egui::RichText::new("Body").size(FontSize::SM).strong());
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            if copy_icon_button(ui) {
+                            let ctx = ui.ctx().clone();
+                            if copy_icon_button(ui, &ctx, "response_body") {
                                 ui.ctx().copy_text(response.body.clone());
                             }
                         });
@@ -1155,9 +1144,8 @@ impl MercuryApp {
                             .put(
                                 button_rect,
                                 egui::Label::new(
-                                    egui::RichText::new("{ }")
+                                    egui::RichText::new(Icons::FORMAT)
                                         .size(FontSize::LG)
-                                        .strong()
                                         .color(Colors::PRIMARY),
                                 )
                                 .sense(egui::Sense::click()),

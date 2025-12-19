@@ -8,24 +8,24 @@ pub struct Icons;
 
 impl Icons {
     // File/Folder Icons
-    pub const FOLDER_OPEN: &'static str = "📂";
-    pub const FOLDER_CLOSED: &'static str = "📁";
+    pub const FOLDER: &'static str = "📁";
     pub const FILE: &'static str = "📄";
     pub const PACKAGE: &'static str = "📦";
 
     // Action Icons
     pub const ADD: &'static str = "➕";
     pub const DELETE: &'static str = "🗑";
-    pub const EDIT: &'static str = "✏️";
+    pub const EDIT: &'static str = "✏";
     pub const COPY: &'static str = "📋";
     pub const DUPLICATE: &'static str = "📋";
     pub const SAVE: &'static str = "💾";
+    pub const FORMAT: &'static str = "✨";
 
     // Status/Indicator Icons
-    pub const CHECK: &'static str = "✓";
-    pub const CROSS: &'static str = "✗";
-    pub const DOT: &'static str = "●";
-    pub const WARNING: &'static str = "⚠️";
+    pub const CHECK: &'static str = "✅";
+    pub const CROSS: &'static str = "×";
+    pub const DOT: &'static str = "•";
+    pub const WARNING: &'static str = "⚠";
 
     // Media/Content Type Icons
     pub const IMAGE: &'static str = "🌄";
@@ -43,7 +43,7 @@ impl Icons {
     pub const LIGHTBULB: &'static str = "💡";
     pub const CMD_KEY: &'static str = "⌘";
 
-    // Chevron/Expand Icons
-    pub const CHEVRON_RIGHT: &'static str = ">";
-    pub const CHEVRON_DOWN: &'static str = "v";
+    // Chevron/Expand Icons (⏵⏷ are from same Unicode block for consistent sizing)
+    pub const CHEVRON_RIGHT: &'static str = "⏵";
+    pub const CHEVRON_DOWN: &'static str = "⏷";
 }

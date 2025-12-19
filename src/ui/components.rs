@@ -366,30 +366,72 @@ pub fn fading_toast(
     true // Still visible
 }
 
-/// Minimal copy icon button - returns true if clicked
-pub fn copy_icon_button(ui: &mut Ui) -> bool {
+/// Generic action icon button with visual feedback
+/// Shows CHECK icon temporarily after click, then returns to original icon
+/// - `icon`: The default icon to show
+/// - `tooltip`: Tooltip on hover
+/// - `confirm_tooltip`: Tooltip shown during confirmation (e.g., "Copied!")
+/// - `id`: Unique identifier for state tracking
+pub fn action_icon_button(
+    ui: &mut Ui,
+    ctx: &egui::Context,
+    icon: &str,
+    tooltip: &str,
+    confirm_tooltip: &str,
+    id: &str,
+) -> bool {
+    let current_time = ui.input(|i| i.time);
+
+    // Track confirmation state using unique ID
+    let confirm_id = egui::Id::new(format!("action_btn_{}", id));
+    let confirm_time: Option<f64> = ctx.memory(|m| m.data.get_temp(confirm_id));
+    let show_confirmed = confirm_time
+        .map(|t| current_time - t < crate::core::constants::COPY_CONFIRM_DURATION_SECONDS)
+        .unwrap_or(false);
+
+    let (display_icon, color) = if show_confirmed {
+        (Icons::CHECK, Colors::SUCCESS)
+    } else {
+        (icon, Colors::TEXT_MUTED)
+    };
+
     let response = ui.add(
-        egui::Label::new(
-            RichText::new("Copy")
-                .size(FontSize::XS)
-                .color(Colors::TEXT_MUTED),
-        )
-        .sense(egui::Sense::click()),
+        egui::Label::new(RichText::new(display_icon).size(FontSize::SM).color(color))
+            .sense(egui::Sense::click()),
     );
 
-    if response.hovered() {
-        ui.painter().rect_stroke(
-            response.rect.expand(2.0),
-            egui::CornerRadius::same(2),
-            egui::Stroke::new(super::theme::StrokeWidth::THIN, Colors::PRIMARY),
-            egui::StrokeKind::Middle,
-        );
+    let clicked = response
+        .on_hover_cursor(egui::CursorIcon::PointingHand)
+        .on_hover_text(if show_confirmed {
+            confirm_tooltip
+        } else {
+            tooltip
+        })
+        .clicked();
+
+    if clicked {
+        ctx.memory_mut(|m| m.data.insert_temp(confirm_id, current_time));
+        ctx.request_repaint();
     }
 
-    response
-        .on_hover_cursor(egui::CursorIcon::PointingHand)
-        .on_hover_text("Copy to clipboard")
-        .clicked()
+    // Request repaint while showing confirmation
+    if show_confirmed {
+        ctx.request_repaint();
+    }
+
+    clicked
+}
+
+/// Copy icon button - returns true if clicked
+/// Shows CHECK icon temporarily after click for visual feedback
+pub fn copy_icon_button(ui: &mut Ui, ctx: &egui::Context, id: &str) -> bool {
+    action_icon_button(ui, ctx, Icons::COPY, "Copy to clipboard", "Copied!", id)
+}
+
+/// Clear icon button - returns true if clicked
+/// Shows CHECK icon temporarily after click for visual feedback
+pub fn clear_icon_button(ui: &mut Ui, ctx: &egui::Context, id: &str) -> bool {
+    action_icon_button(ui, ctx, Icons::DELETE, "Clear all", "Cleared!", id)
 }
 
 /// Send/Stop button (Send = Play/Primary, Stop = Square/Primary with Pulse)
@@ -442,29 +484,16 @@ pub fn send_stop_button(ui: &mut Ui, executing: bool, time: f64) -> egui::Respon
     response
 }
 
-/// Standard close button with consistent vector icon (X)
+/// Standard close button using Icons::CROSS
 pub fn close_button(ui: &mut Ui, size: f32) -> egui::Response {
-    let (rect, response) = ui.allocate_exact_size(egui::vec2(size, size), egui::Sense::click());
-
-    if ui.is_rect_visible(rect) {
-        let color = if response.hovered() {
-            Colors::TEXT_PRIMARY
-        } else {
-            Colors::TEXT_MUTED
-        };
-        // Use a stroke for crisp vector lines
-        let stroke = egui::Stroke::new(StrokeWidth::MEDIUM, color);
-
-        const CLOSE_BUTTON_PADDING_RATIO: f32 = 0.25;
-        let padding = size * CLOSE_BUTTON_PADDING_RATIO;
-        let p1 = rect.min + egui::vec2(padding, padding);
-        let p2 = rect.max - egui::vec2(padding, padding);
-        let p3 = egui::pos2(rect.max.x - padding, rect.min.y + padding);
-        let p4 = egui::pos2(rect.min.x + padding, rect.max.y - padding);
-
-        ui.painter().line_segment([p1, p2], stroke);
-        ui.painter().line_segment([p3, p4], stroke);
-    }
+    let response = ui.add(
+        egui::Label::new(
+            RichText::new(Icons::CROSS)
+                .size(size * 1.3) // Slightly larger for visibility
+                .color(Colors::TEXT_MUTED),
+        )
+        .sense(egui::Sense::click()),
+    );
 
     response
         .on_hover_cursor(egui::CursorIcon::PointingHand)
