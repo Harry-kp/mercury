@@ -88,9 +88,9 @@ brew tap harry-kp/mercury
 brew install mercury
 ```
 
-**Windows (Winget):**
+**Windows (PowerShell):**
 ```powershell
-winget install Harry-kp.Mercury
+irm https://github.com/Harry-kp/mercury/releases/latest/download/mercury-installer.ps1 | iex
 ```
 > 💡 If you get "command not found", restart your terminal or run `source ~/.zshrc`
 
