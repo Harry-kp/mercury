@@ -73,14 +73,24 @@ Mercury is built on principles, not features:
 curl --proto '=https' --tlsv1.2 -LsSf https://github.com/Harry-kp/mercury/releases/latest/download/mercury-installer.sh | sh
 ```
 
-**Windows (PowerShell):**
-```powershell
-irm https://github.com/Harry-kp/mercury/releases/latest/download/mercury-installer.ps1 | iex
-```
-
 **Then launch:**
 ```bash
 mercury
+```
+
+---
+
+### 📦 Package Managers
+
+**macOS (Homebrew):**
+```bash
+brew tap harry-kp/mercury
+brew install mercury
+```
+
+**Windows (Winget):**
+```powershell
+winget install Harry-kp.Mercury
 ```
 > 💡 If you get "command not found", restart your terminal or run `source ~/.zshrc`
 
