@@ -47,19 +47,6 @@ curl --proto '=https' --tlsv1.2 -LsSf https://github.com/Harry-kp/mercury/releas
 irm https://github.com/Harry-kp/mercury/releases/latest/download/mercury-installer.ps1 | iex
 ```
 
-### 📦 Package Managers
-
-**macOS (Homebrew):**
-```bash
-brew tap harry-kp/mercury
-brew install mercury
-```
-
-**Windows (Winget):**
-```powershell
-winget install Harry-kp.Mercury
-```
-
 **Then launch:**
 ```bash
 mercury
