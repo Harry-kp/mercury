@@ -55,9 +55,9 @@ brew tap harry-kp/mercury
 brew install mercury
 ```
 
-**Windows (PowerShell):**
+**Windows (Winget):**
 ```powershell
-irm https://github.com/Harry-kp/mercury/releases/latest/download/mercury-installer.ps1 | iex
+winget install Harry-kp.Mercury
 ```
 
 **Then launch:**
