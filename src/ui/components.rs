@@ -149,19 +149,6 @@ pub fn tab_bar(ui: &mut Ui, tabs: &[&str], selected: &mut usize) {
                 *selected = i;
             }
 
-            // Underline indicator for selected tab
-            if is_selected {
-                let rect = response.rect;
-                ui.painter().rect_filled(
-                    egui::Rect::from_min_size(
-                        egui::pos2(rect.left(), rect.bottom() - 2.0),
-                        egui::vec2(rect.width(), 2.0),
-                    ),
-                    0.0,
-                    Colors::PRIMARY,
-                );
-            }
-
             if i < tabs.len() - 1 {
                 ui.add_space(Spacing::MD);
             }
@@ -495,9 +482,246 @@ pub fn close_button(ui: &mut Ui, size: f32) -> egui::Response {
         .sense(egui::Sense::click()),
     );
 
-    response
+    response.on_hover_cursor(egui::CursorIcon::PointingHand)
+}
+
+// =============================================================================
+// Key-Value Editor Component
+// =============================================================================
+
+/// A single key-value row with enabled state (used internally and for data conversion)
+#[derive(Clone, Debug, PartialEq)]
+pub struct KeyValueRow {
+    pub enabled: bool,
+    pub key: String,
+    pub value: String,
+}
+
+impl KeyValueRow {
+    pub fn new(enabled: bool, key: String, value: String) -> Self {
+        Self {
+            enabled,
+            key,
+            value,
+        }
+    }
+
+    fn is_empty(&self) -> bool {
+        self.key.is_empty() && self.value.is_empty()
+    }
+}
+
+/// Result indicating if the key-value editor data was modified
+pub struct KeyValueEditorResult {
+    pub changed: bool,
+}
+
+/// Key-value editor with bulk edit mode toggle.
+///
+/// A complete, reusable component for editing key-value pairs like headers or params.
+/// Features:
+/// - Key-Value mode: table with checkbox, purplish keys, green values, X button
+/// - Bulk Edit mode: raw text editing (toggle via button)
+/// - Auto-adds empty row for new entries
+/// - Supports `# prefix` for disabled rows
+///
+/// # Arguments
+/// * `ui` - The egui UI context
+/// * `text` - The text storage (mutated in-place)
+/// * `separator` - ":" for headers, "=" for params
+/// * `bulk_edit_mode` - Toggle state for bulk edit mode
+/// * `hint_text` - Placeholder shown in bulk edit mode
+///
+/// # Example
+/// ```rust
+/// key_value_editor(ui, &mut self.headers_text, ":", &mut self.bulk_edit, "Key: Value");
+/// ```
+pub fn key_value_editor(
+    ui: &mut Ui,
+    text: &mut String,
+    separator: &str,
+    bulk_edit_mode: &mut bool,
+    hint_text: &str,
+) -> KeyValueEditorResult {
+    // Save cursor for overlay button
+    let top_right = ui.cursor().min + egui::vec2(ui.available_width(), 0.0);
+
+    let changed = if *bulk_edit_mode {
+        // Bulk edit mode - raw text
+        let font_id = egui::FontId::monospace(FontSize::SM);
+        let response = ui.add(
+            egui::TextEdit::multiline(text)
+                .hint_text(RichText::new(hint_text).color(Colors::PLACEHOLDER))
+                .desired_width(ui.available_width())
+                .desired_rows(8)
+                .frame(false)
+                .font(font_id),
+        );
+        response.changed()
+    } else {
+        // Key-Value mode
+        let mut rows = parse_text_to_rows(text, separator);
+        let result = render_key_value_rows(ui, &mut rows, separator);
+
+        if result.changed {
+            *text = rows_to_text(&rows, separator);
+        }
+        result.changed
+    };
+
+    // Overlay toggle button
+    render_mode_toggle(ui, top_right, bulk_edit_mode);
+
+    KeyValueEditorResult { changed }
+}
+
+/// Serialize rows to text (for params URL sync)
+pub fn rows_to_text(rows: &[KeyValueRow], separator: &str) -> String {
+    rows.iter()
+        .filter(|r| !r.is_empty())
+        .map(|r| {
+            let line = if r.value.is_empty() {
+                r.key.clone()
+            } else {
+                format!("{}{}{}", r.key, separator, r.value)
+            };
+            if r.enabled {
+                line
+            } else {
+                format!("# {}", line)
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+// =============================================================================
+// Private Implementation Details (with one public helper for params sync)
+// =============================================================================
+
+/// Parse key-value text into rows (for use with params URL sync)
+pub fn parse_text_to_rows(text: &str, separator: &str) -> Vec<KeyValueRow> {
+    text.lines()
+        .filter_map(|line| {
+            let line = line.trim();
+            if line.is_empty() {
+                return None;
+            }
+
+            let (enabled, line) = if line.starts_with('#') {
+                (false, line.trim_start_matches('#').trim())
+            } else {
+                (true, line)
+            };
+
+            if let Some((k, v)) = line.split_once(separator) {
+                Some(KeyValueRow::new(
+                    enabled,
+                    k.trim().to_string(),
+                    v.trim().to_string(),
+                ))
+            } else {
+                Some(KeyValueRow::new(enabled, line.to_string(), String::new()))
+            }
+        })
+        .collect()
+}
+
+fn render_key_value_rows(
+    ui: &mut Ui,
+    rows: &mut Vec<KeyValueRow>,
+    separator: &str,
+) -> KeyValueEditorResult {
+    use super::theme::Layout;
+
+    // Auto-add empty row
+    if rows.is_empty() || !rows.last().map(|r| r.is_empty()).unwrap_or(false) {
+        rows.push(KeyValueRow::new(true, String::new(), String::new()));
+    }
+
+    let mut changed = false;
+    let mut to_remove: Option<usize> = None;
+    let font_id = egui::FontId::monospace(FontSize::SM);
+
+    for (idx, row) in rows.iter_mut().enumerate() {
+        ui.horizontal(|ui| {
+            // Always render checkbox to keep widget IDs stable, but hide/disable for empty rows
+            if ui
+                .add_visible(!row.is_empty(), egui::Checkbox::new(&mut row.enabled, ""))
+                .changed()
+            {
+                changed = true;
+            }
+
+            // Use push_id with idx to ensure stable IDs for the text inputs
+            ui.push_id(idx, |ui| {
+                let key_resp = ui.add(
+                    egui::TextEdit::singleline(&mut row.key)
+                        .hint_text(RichText::new("Key").color(Colors::PLACEHOLDER))
+                        .desired_width(Layout::INPUT_FIELD_WIDTH)
+                        .frame(false)
+                        .text_color(Colors::PRIMARY)
+                        .font(font_id.clone()),
+                );
+
+                ui.label(RichText::new(separator).color(Colors::TEXT_MUTED));
+
+                let val_resp = ui.add(
+                    egui::TextEdit::singleline(&mut row.value)
+                        .hint_text(RichText::new("Value").color(Colors::PLACEHOLDER))
+                        .desired_width(ui.available_width() - 40.0)
+                        .frame(false)
+                        .text_color(Colors::TEXT_SECONDARY)
+                        .font(font_id.clone()),
+                );
+
+                if key_resp.changed() || val_resp.changed() {
+                    changed = true;
+                }
+            });
+
+            if !row.is_empty()
+                && close_button(ui, FontSize::SM)
+                    .on_hover_text("Remove")
+                    .clicked()
+            {
+                to_remove = Some(idx);
+            }
+        });
+    }
+
+    if let Some(idx) = to_remove {
+        rows.remove(idx);
+        changed = true;
+    }
+
+    KeyValueEditorResult { changed }
+}
+
+fn render_mode_toggle(ui: &mut Ui, top_right: egui::Pos2, bulk_edit_mode: &mut bool) {
+    let rect = egui::Rect::from_min_size(top_right - egui::vec2(60.0, 0.0), egui::vec2(60.0, 20.0));
+    let text = if *bulk_edit_mode {
+        "Key-Value"
+    } else {
+        "Bulk Edit"
+    };
+
+    if ui
+        .put(
+            rect,
+            egui::Label::new(
+                RichText::new(text)
+                    .size(FontSize::XS)
+                    .color(Colors::PRIMARY),
+            )
+            .sense(egui::Sense::click()),
+        )
         .on_hover_cursor(egui::CursorIcon::PointingHand)
-        .on_hover_text("Close")
+        .on_hover_text("Toggle edit mode")
+        .clicked()
+    {
+        *bulk_edit_mode = !*bulk_edit_mode;
+    }
 }
 
 /// Render JSON with syntax highlighting

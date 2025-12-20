@@ -107,9 +107,6 @@ Cache-Control: no-cache
 | `Accept` | Expected response format |
 | `User-Agent` | Client identification |
 
-:::tip Auto-Headers
-Mercury automatically adds `Content-Type: application/json` when your body starts with `{` or `[`.
-:::
 
 ## Request Body
 
@@ -221,13 +218,10 @@ Mercury uses sensible defaults so you can focus on your API, not configuration:
 |---------|---------|----------|
 | **Timeout** | 30 seconds | Requests fail after 30s of no response |
 | **Redirects** | Followed | HTTP redirects followed automatically (up to 10) |
-| **Content-Type** | Auto-detect | JSON body → `application/json` header added automatically |
-| **URL Scheme** | Auto-prefix | `example.com` → `http://example.com` |
 
 :::tip URL Validation
 Mercury validates URLs before sending:
 - Empty URLs show an error
-- Missing protocol is auto-prefixed with `http://`
 - Unresolved `{{variables}}` show a warning
 :::
 

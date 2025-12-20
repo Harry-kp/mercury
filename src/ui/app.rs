@@ -35,6 +35,7 @@ pub struct MercuryApp {
     pub method: HttpMethod,
     pub url: String,
     pub query_params: Vec<crate::utils::QueryParam>,
+    pub params_text: String, // Text representation for bulk edit
     pub headers_text: String,
     pub body_text: String,
     pub auth_text: String,
@@ -61,6 +62,7 @@ pub struct MercuryApp {
     pub selected_tab: usize,
     pub focus_mode: bool,
     pub headers_bulk_edit: bool, // Toggle between key-value and bulk edit
+    pub params_bulk_edit: bool,  // Toggle between key-value and bulk edit for params
 
     pub timeline: Vec<TimelineEntry>,
     pub timeline_search: String,
@@ -139,6 +141,7 @@ impl MercuryApp {
             method: HttpMethod::GET,
             url: String::new(),
             query_params: Vec::new(),
+            params_text: String::new(),
             headers_text: String::new(),
             body_text: String::new(),
             auth_text: String::new(),
@@ -161,6 +164,7 @@ impl MercuryApp {
             selected_tab: 0,
             focus_mode: false,
             headers_bulk_edit: false,
+            params_bulk_edit: false,
             timeline: persistence::load_history(),
             timeline_search: String::new(),
             show_timeline: false,
@@ -817,17 +821,6 @@ impl MercuryApp {
     }
 
     pub fn execute_request(&mut self, ctx: &egui::Context) {
-        // Auto-prefix http://
-        self.url = crate::utils::sanitize_url(&self.url);
-
-        // Auto-add Content-Type for JSON
-        if crate::utils::should_add_json_header(&self.body_text, &self.headers_text) {
-            if !self.headers_text.is_empty() && !self.headers_text.ends_with('\n') {
-                self.headers_text.push('\n');
-            }
-            self.headers_text.push_str("Content-Type: application/json");
-        }
-
         let url = substitute_variables(&self.url, &self.env_variables);
         let headers_text = substitute_variables(&self.headers_text, &self.env_variables);
         let body = substitute_variables(&self.body_text, &self.env_variables);
@@ -835,6 +828,10 @@ impl MercuryApp {
         // Parse headers
         let mut headers = HashMap::new();
         for line in headers_text.lines() {
+            let line = line.trim();
+            if line.is_empty() || line.starts_with('#') {
+                continue;
+            }
             if let Some((key, value)) = line.split_once(':') {
                 headers.insert(key.trim().to_string(), value.trim().to_string());
             }
