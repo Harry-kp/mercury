@@ -16,6 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Advanced HTTP Methods**: Support for `CONNECT` and `TRACE` methods in the request editor and dropdown.
 - **JSON Beautification**: Added a sparkle icon (✨) for one-click pretty-printing of request bodies.
 - **Standardized UI**: Unified iconography across the application (Chevrons, Cross, Checkmarks, and Tooltips).
+- **Enhanced Documentation**: Updated `README.md` and Docusaurus with professional package manager installation instructions.
+- **Automated Distribution**: Added Homebrew (macOS) and Winget (Windows) support via `cargo-dist` for a professional, single-trigger release process.
 - **Dot Indicator**: Visual cue for unsaved changes with a descriptive tooltip.
 
 ### Changed
