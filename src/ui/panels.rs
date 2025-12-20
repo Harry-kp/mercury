@@ -51,18 +51,26 @@ impl MercuryApp {
                                         .size(FontSize::SM)
                                         .color(Colors::TEXT_MUTED),
                                 );
-                                ui.label(
-                                    egui::RichText::new("Recent")
-                                        .size(FontSize::SM)
-                                        .strong()
-                                        .color(Colors::TEXT_SECONDARY),
+                                let mut job = egui::text::LayoutJob::default();
+                                job.append(
+                                    "Recent",
+                                    0.0,
+                                    egui::TextFormat {
+                                        font_id: egui::FontId::proportional(FontSize::SM),
+                                        color: Colors::TEXT_SECONDARY,
+                                        ..Default::default()
+                                    },
                                 );
-                                ui.add_space(Spacing::XS);
-                                ui.label(
-                                    egui::RichText::new(format!("({})", self.temp_requests.len()))
-                                        .size(FontSize::XS)
-                                        .color(Colors::TEXT_MUTED),
+                                job.append(
+                                    &format!(" ({})", self.temp_requests.len()),
+                                    0.0, // No extra pixels, use the space in the string
+                                    egui::TextFormat {
+                                        font_id: egui::FontId::proportional(FontSize::XS),
+                                        color: Colors::TEXT_MUTED,
+                                        ..Default::default()
+                                    },
                                 );
+                                ui.label(job);
                             });
 
                             if header_response
@@ -341,7 +349,10 @@ impl MercuryApp {
 
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 // Close button
-                if close_button(ui, FontSize::MD).clicked() {
+                if close_button(ui, FontSize::MD)
+                    .on_hover_text("Close")
+                    .clicked()
+                {
                     self.show_timeline = false;
                 }
 
@@ -1309,161 +1320,17 @@ impl MercuryApp {
 
     /// Headers tab with variable indicators
     fn render_smart_headers(&mut self, ui: &mut Ui) {
-        // Save cursor for overlay
-        let top_right = ui.cursor().min + egui::vec2(ui.available_width(), 0.0);
+        // Save cursor for undefined vars overlay
         let start_pos = ui.cursor().min;
 
-        if self.headers_bulk_edit {
-            // Bulk edit mode - raw text
-            ui.add(
-                egui::TextEdit::multiline(&mut self.headers_text)
-                    .hint_text(
-                        egui::RichText::new(
-                            "Content-Type: application/json\nAuthorization: Bearer {{token}}",
-                        )
-                        .color(Colors::PLACEHOLDER),
-                    )
-                    .desired_width(ui.available_width())
-                    .desired_rows(8)
-                    .frame(false)
-                    .font(egui::TextStyle::Monospace),
-            );
-        } else {
-            // Key-Value mode with enable/disable checkbox
-            // Parse lines with enabled state (# prefix = disabled)
-            let mut lines: Vec<(bool, String, String)> = self
-                .headers_text
-                .lines()
-                .filter_map(|line| {
-                    let line = line.trim();
-                    if line.is_empty() {
-                        return None;
-                    }
-
-                    // Check if disabled (starts with #)
-                    let (enabled, line) = if line.starts_with('#') {
-                        (false, line.trim_start_matches('#').trim())
-                    } else {
-                        (true, line)
-                    };
-
-                    if let Some((k, v)) = line.split_once(':') {
-                        Some((enabled, k.trim().to_string(), v.trim().to_string()))
-                    } else {
-                        Some((enabled, line.to_string(), String::new()))
-                    }
-                })
-                .collect();
-
-            // Always have at least one empty row for adding
-            if lines.is_empty()
-                || !lines
-                    .last()
-                    .map(|(_, k, v)| k.is_empty() && v.is_empty())
-                    .unwrap_or(false)
-            {
-                lines.push((true, String::new(), String::new()));
-            }
-
-            let mut changed = false;
-            let mut to_remove: Option<usize> = None;
-
-            for (idx, (enabled, key, value)) in lines.iter_mut().enumerate() {
-                ui.horizontal(|ui| {
-                    // Checkbox for enable/disable (only for non-empty rows)
-                    if !key.is_empty() || !value.is_empty() {
-                        if ui.checkbox(enabled, "").changed() {
-                            changed = true;
-                        }
-                    } else {
-                        ui.add_space(Spacing::LG + 2.0); // Placeholder space for empty row (checkbox width)
-                    }
-
-                    let key_response = ui.add(
-                        egui::TextEdit::singleline(key)
-                            .hint_text(egui::RichText::new("Key").color(Colors::PLACEHOLDER))
-                            .desired_width(Layout::INPUT_FIELD_WIDTH)
-                            .frame(false)
-                            .font(egui::TextStyle::Monospace),
-                    );
-
-                    ui.label(egui::RichText::new(":").color(Colors::TEXT_MUTED));
-
-                    let value_response = ui.add(
-                        egui::TextEdit::singleline(value)
-                            .hint_text(egui::RichText::new("Value").color(Colors::PLACEHOLDER))
-                            .desired_width(ui.available_width() - 40.0)
-                            .frame(false)
-                            .font(egui::TextStyle::Monospace),
-                    );
-
-                    if key_response.changed() || value_response.changed() {
-                        changed = true;
-                    }
-
-                    // Remove button - bigger, closer
-                    if (!key.is_empty() || !value.is_empty())
-                        && close_button(ui, FontSize::SM)
-                            .on_hover_text("Remove")
-                            .clicked()
-                    {
-                        to_remove = Some(idx);
-                    }
-                });
-            }
-
-            // Remove deleted row
-            if let Some(idx) = to_remove {
-                lines.remove(idx);
-                changed = true;
-            }
-
-            // Rebuild headers_text from lines (with # prefix for disabled)
-            if changed {
-                self.headers_text = lines
-                    .iter()
-                    .filter(|(_, k, v)| !k.is_empty() || !v.is_empty())
-                    .map(|(enabled, k, v)| {
-                        let line = if v.is_empty() {
-                            k.clone()
-                        } else {
-                            format!("{}: {}", k, v)
-                        };
-                        if *enabled {
-                            line
-                        } else {
-                            format!("# {}", line)
-                        }
-                    })
-                    .collect::<Vec<_>>()
-                    .join("\n");
-            }
-        }
-
-        // Overlay Bulk Edit Button (Rendered Last)
-        let button_rect =
-            egui::Rect::from_min_size(top_right - egui::vec2(60.0, 0.0), egui::vec2(60.0, 20.0));
-        let mode_text = if self.headers_bulk_edit {
-            "Key-Value"
-        } else {
-            "Bulk Edit"
-        };
-        if ui
-            .put(
-                button_rect,
-                egui::Label::new(
-                    egui::RichText::new(mode_text)
-                        .size(FontSize::XS)
-                        .color(Colors::PRIMARY),
-                )
-                .sense(egui::Sense::click()),
-            )
-            .on_hover_cursor(egui::CursorIcon::PointingHand)
-            .on_hover_text("Toggle edit mode")
-            .clicked()
-        {
-            self.headers_bulk_edit = !self.headers_bulk_edit;
-        }
+        // Use the reusable key-value text editor with ":" separator
+        key_value_editor(
+            ui,
+            &mut self.headers_text,
+            ":",
+            &mut self.headers_bulk_edit,
+            "Content-Type: application/json\nAuthorization: Bearer {{token}}",
+        );
 
         // Overlay Undefined Warning (Rendered Last) - show names, not just count
         let undefined_vars: Vec<_> = Self::extract_variables(&self.headers_text)
@@ -1507,73 +1374,40 @@ impl MercuryApp {
 
     /// Query parameters editor with key-value table and URL sync
     fn render_query_params(&mut self, ui: &mut Ui) {
-        // Always have at least one empty row for adding
-        if self.query_params.is_empty()
-            || !self
+        // Convert query_params to params_text from URL bar changes (if not in bulk edit mode)
+        if !self.params_bulk_edit {
+            // Convert QueryParams to KeyValueRows then to text
+            let rows: Vec<KeyValueRow> = self
                 .query_params
-                .last()
-                .map(|p| p.key.is_empty() && p.value.is_empty())
-                .unwrap_or(false)
-        {
-            self.query_params
-                .push(crate::utils::QueryParam::new(String::new(), String::new()));
+                .iter()
+                .filter(|p| !p.key.is_empty())
+                .map(|p| KeyValueRow::new(p.enabled, p.key.clone(), p.value.clone()))
+                .collect();
+            self.params_text = rows_to_text(&rows, "=");
         }
 
-        let mut changed = false;
-        let mut to_remove: Option<usize> = None;
+        // Use the reusable key-value text editor with "=" separator
+        let result = key_value_editor(
+            ui,
+            &mut self.params_text,
+            "=",
+            &mut self.params_bulk_edit,
+            "key=value\npage=1\n# disabled=param",
+        );
 
-        for (idx, param) in self.query_params.iter_mut().enumerate() {
-            ui.horizontal(|ui| {
-                // Checkbox for enable/disable (only for non-empty rows)
-                if !param.key.is_empty() || !param.value.is_empty() {
-                    if ui.checkbox(&mut param.enabled, "").changed() {
-                        changed = true;
-                    }
-                } else {
-                    ui.add_space(Spacing::LG + 2.0); // Placeholder space for empty row
-                }
+        // Sync params_text back to query_params and URL if changed
+        if result.changed {
+            // Use the helper to parse text into rows, then convert to QueryParams
+            self.query_params = parse_text_to_rows(&self.params_text, "=")
+                .into_iter()
+                .map(|r| crate::utils::QueryParam {
+                    enabled: r.enabled,
+                    key: r.key,
+                    value: r.value,
+                })
+                .collect();
 
-                let key_response = ui.add(
-                    egui::TextEdit::singleline(&mut param.key)
-                        .hint_text(egui::RichText::new("Key").color(Colors::PLACEHOLDER))
-                        .desired_width(super::theme::Layout::INPUT_FIELD_WIDTH)
-                        .frame(false)
-                        .font(egui::TextStyle::Monospace),
-                );
-
-                ui.label(egui::RichText::new("=").color(Colors::TEXT_MUTED));
-
-                let value_response = ui.add(
-                    egui::TextEdit::singleline(&mut param.value)
-                        .hint_text(egui::RichText::new("Value").color(Colors::PLACEHOLDER))
-                        .desired_width(ui.available_width() - 40.0)
-                        .frame(false)
-                        .font(egui::TextStyle::Monospace),
-                );
-
-                if key_response.changed() || value_response.changed() {
-                    changed = true;
-                }
-
-                // Remove button (only for non-empty rows)
-                if (!param.key.is_empty() || !param.value.is_empty())
-                    && close_button(ui, FontSize::SM)
-                        .on_hover_text("Remove")
-                        .clicked()
-                {
-                    to_remove = Some(idx);
-                }
-            });
-        }
-
-        // Remove deleted row
-        if let Some(idx) = to_remove {
-            self.query_params.remove(idx);
-            changed = true;
-        }
-
-        // Rebuild URL from params when changed
-        if changed {
+            // Rebuild URL from params
             self.url = crate::utils::build_url_with_params(&self.url, &self.query_params);
         }
 

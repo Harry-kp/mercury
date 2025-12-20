@@ -254,8 +254,6 @@ Mercury uses sensible defaults so you can focus on your API, not configuration:
 |---------|---------|----------|
 | **Timeout** | 30 seconds | Requests fail after 30s of no response |
 | **Redirects** | Followed | HTTP redirects are followed automatically (up to 10) |
-| **Content-Type** | Auto-detect | JSON body → `application/json` header added automatically |
-| **URL Scheme** | Auto-prefix | `example.com` → `http://example.com` |
 
 ---
 

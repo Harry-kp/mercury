@@ -54,7 +54,6 @@ GET https://api.example.com/users
 GET api.example.com/users
 ```
 
-Mercury automatically prepends `http://` if no protocol is specified.
 
 ## Headers
 
@@ -112,10 +111,6 @@ Content-Type: application/json
   }
 }
 ```
-
-:::tip Auto Content-Type
-Mercury automatically adds `Content-Type: application/json` when your body starts with `{` or `[`.
-:::
 
 ### Form Data
 
