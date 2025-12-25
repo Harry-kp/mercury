@@ -16,6 +16,7 @@ use crate::parser::{
 };
 use crate::ui::components::{menu_button, modal_input_field, show_modal};
 use crate::ui::icons::Icons;
+use std::sync::Arc;
 
 use eframe::egui;
 use notify_debouncer_mini::new_debouncer;
@@ -49,6 +50,7 @@ pub struct MercuryApp {
     pub previous_response: Option<HttpResponse>,
     pub response_view_raw: bool,
     pub show_response_headers: bool,
+    pub show_response_cookies: bool,
     pub show_response_diff: bool,
     // Cached formatted response to avoid cloning every frame
     pub formatted_response_cache: Option<String>,
@@ -120,6 +122,9 @@ pub struct MercuryApp {
     watched_path: Option<PathBuf>,
     expanded_folders: HashSet<PathBuf>,
     file_watcher_error: Option<String>,
+
+    // Shared HTTP client with cookie store for automatic cookie handling
+    http_client: Arc<reqwest::blocking::Client>,
 }
 
 pub use crate::utils::AuthMode;
@@ -153,6 +158,7 @@ impl MercuryApp {
             previous_response: None,
             response_view_raw: false,
             show_response_headers: false,
+            show_response_cookies: false,
             show_response_diff: false,
             formatted_response_cache: None,
 
@@ -209,6 +215,14 @@ impl MercuryApp {
             watched_path: None,
             expanded_folders: HashSet::new(),
             file_watcher_error: None,
+            // Initialize shared HTTP client with cookie store
+            http_client: Arc::new(
+                reqwest::blocking::Client::builder()
+                    .cookie_store(true)
+                    .timeout(std::time::Duration::from_secs(30))
+                    .build()
+                    .expect("Failed to create HTTP client"),
+            ),
         };
 
         // Restore saved state
@@ -845,9 +859,9 @@ impl MercuryApp {
         };
 
         // Execute async request in background thread
-        // Execute async request in background thread
         let ctx = ctx.clone();
         let tx = self.response_tx.clone();
+        let client = self.http_client.clone();
 
         // Assign new ID
         self.request_id_counter += 1;
@@ -857,7 +871,8 @@ impl MercuryApp {
         self.ongoing_request = Some((request_id, start_time));
 
         std::thread::spawn(move || {
-            let response = execute_request(&request, 30, true).map_err(|e| e.to_string());
+            let response =
+                execute_request(&request, 30, true, Some(&client)).map_err(|e| e.to_string());
             let _ = tx.send((request_id, response));
             ctx.request_repaint();
         });
