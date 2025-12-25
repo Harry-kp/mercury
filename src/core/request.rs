@@ -27,6 +27,7 @@ pub struct HttpResponse {
     pub status: u16,
     pub status_text: String,
     pub headers: Vec<(String, String)>,
+    pub cookies: Vec<String>, // Set-Cookie header values
     pub body: String,
     pub raw_bytes: Option<Vec<u8>>, // For binary/image content
     pub duration_ms: u128,
@@ -128,24 +129,44 @@ fn get_content_type(headers: &[(String, String)]) -> String {
         .unwrap_or_default()
 }
 
+/// Extract Set-Cookie header values from response headers
+#[cfg(test)]
+pub fn extract_cookies(headers: &[(String, String)]) -> Vec<String> {
+    headers
+        .iter()
+        .filter(|(name, _)| name.eq_ignore_ascii_case("set-cookie"))
+        .map(|(_, value)| value.clone())
+        .collect()
+}
+
 pub fn execute_request(
     request: &HttpRequest,
     timeout_secs: u64,
     follow_redirects: bool,
+    shared_client: Option<&reqwest::blocking::Client>,
 ) -> Result<HttpResponse, MercuryError> {
     let start = Instant::now();
 
-    let redirect_policy = if follow_redirects {
-        reqwest::redirect::Policy::default() // Follow up to 10 redirects
+    // Use shared client if provided, otherwise create an ephemeral one
+    let owned_client;
+    let client = if let Some(c) = shared_client {
+        c
     } else {
-        reqwest::redirect::Policy::none()
-    };
+        let redirect_policy = if follow_redirects {
+            reqwest::redirect::Policy::default() // Follow up to 10 redirects
+        } else {
+            reqwest::redirect::Policy::none()
+        };
 
-    let client = reqwest::blocking::Client::builder()
-        .timeout(std::time::Duration::from_secs(timeout_secs))
-        .redirect(redirect_policy)
-        .build()
-        .map_err(|e| MercuryError::RequestFailed(format!("Failed to create HTTP client: {}", e)))?;
+        owned_client = reqwest::blocking::Client::builder()
+            .timeout(std::time::Duration::from_secs(timeout_secs))
+            .redirect(redirect_policy)
+            .build()
+            .map_err(|e| {
+                MercuryError::RequestFailed(format!("Failed to create HTTP client: {}", e))
+            })?;
+        &owned_client
+    };
 
     let mut req_builder = match request.method {
         HttpMethod::GET => client.get(&request.url),
@@ -174,10 +195,16 @@ pub fn execute_request(
     let status = response.status().as_u16();
     let status_text = response.status().to_string();
 
+    // Extract headers and Set-Cookie values
     let mut headers = Vec::new();
+    let mut cookies = Vec::new();
     for (name, value) in response.headers() {
         if let Ok(value_str) = value.to_str() {
             headers.push((name.to_string(), value_str.to_string()));
+            // Collect Set-Cookie headers for display
+            if name.as_str().eq_ignore_ascii_case("set-cookie") {
+                cookies.push(value_str.to_string());
+            }
         }
     }
 
@@ -191,6 +218,7 @@ pub fn execute_request(
                 status,
                 status_text,
                 headers,
+                cookies,
                 body: String::new(),
                 raw_bytes: None,
                 duration_ms,
@@ -234,6 +262,7 @@ pub fn execute_request(
         status,
         status_text,
         headers,
+        cookies,
         body,
         raw_bytes: stored_bytes,
         duration_ms,
@@ -468,5 +497,53 @@ mod tests {
         let large_body = vec![b'<'; 110_000]; // 110KB
         let result = detect_response_type("image/svg+xml", &large_body, 200);
         assert_eq!(result, ResponseType::LargeText);
+    }
+
+    #[test]
+    fn test_extract_cookies_single() {
+        let headers = vec![
+            ("Content-Type".to_string(), "application/json".to_string()),
+            (
+                "Set-Cookie".to_string(),
+                "session=abc123; Path=/".to_string(),
+            ),
+        ];
+        let cookies = extract_cookies(&headers);
+        assert_eq!(cookies.len(), 1);
+        assert_eq!(cookies[0], "session=abc123; Path=/");
+    }
+
+    #[test]
+    fn test_extract_cookies_multiple() {
+        let headers = vec![
+            ("Set-Cookie".to_string(), "session=abc123".to_string()),
+            ("Set-Cookie".to_string(), "user=john; HttpOnly".to_string()),
+            ("Content-Type".to_string(), "text/html".to_string()),
+        ];
+        let cookies = extract_cookies(&headers);
+        assert_eq!(cookies.len(), 2);
+        assert!(cookies.contains(&"session=abc123".to_string()));
+        assert!(cookies.contains(&"user=john; HttpOnly".to_string()));
+    }
+
+    #[test]
+    fn test_extract_cookies_none() {
+        let headers = vec![
+            ("Content-Type".to_string(), "application/json".to_string()),
+            ("Cache-Control".to_string(), "no-cache".to_string()),
+        ];
+        let cookies = extract_cookies(&headers);
+        assert!(cookies.is_empty());
+    }
+
+    #[test]
+    fn test_extract_cookies_case_insensitive() {
+        let headers = vec![
+            ("set-cookie".to_string(), "lower=case".to_string()),
+            ("SET-COOKIE".to_string(), "upper=case".to_string()),
+            ("Set-Cookie".to_string(), "mixed=case".to_string()),
+        ];
+        let cookies = extract_cookies(&headers);
+        assert_eq!(cookies.len(), 3);
     }
 }

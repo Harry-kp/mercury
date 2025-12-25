@@ -486,6 +486,78 @@ pub fn close_button(ui: &mut Ui, size: f32) -> egui::Response {
 }
 
 // =============================================================================
+// Collapsible Section Component
+// =============================================================================
+
+use super::theme::Layout;
+use egui::ScrollArea;
+
+/// A collapsible section with header, optional copy button, and scrollable content.
+/// Used for Headers, Cookies, and similar response panel sections.
+///
+/// # Arguments
+/// * `ui` - The egui UI context
+/// * `ctx` - The egui Context (for copy button state)
+/// * `title` - Section title (e.g., "Headers", "Cookies")
+/// * `id` - Unique identifier for the section (used for ScrollArea and copy button)
+/// * `items` - Key-value pairs to display (key in PRIMARY, value in TEXT_SECONDARY)
+/// * `show_copy` - Whether to show the copy button
+/// * `copy_text` - Text to copy when copy button is clicked (if show_copy is true)
+pub fn collapsible_section(
+    ui: &mut Ui,
+    ctx: &egui::Context,
+    title: &str,
+    id: &str,
+    items: &[(String, String)],
+    show_copy: bool,
+    copy_text: Option<&str>,
+) {
+    // Header with title and optional copy button
+    ui.horizontal(|ui| {
+        ui.label(RichText::new(title).size(FontSize::SM).strong());
+        if show_copy {
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if copy_icon_button(ui, ctx, id) {
+                    if let Some(text) = copy_text {
+                        ctx.copy_text(text.to_string());
+                    }
+                }
+            });
+        }
+    });
+
+    // Scrollable content
+    ScrollArea::both()
+        .id_salt(id)
+        .max_height(Layout::HEADERS_MAX_HEIGHT)
+        .show(ui, |ui| {
+            let max_width = ui.available_width();
+            ui.set_max_width(max_width);
+            ui.set_min_width(max_width);
+
+            for (key, value) in items {
+                ui.horizontal(|ui| {
+                    ui.label(
+                        RichText::new(format!("{}: ", key))
+                            .size(FontSize::SM)
+                            .color(Colors::PRIMARY)
+                            .monospace(),
+                    );
+                    ui.label(
+                        RichText::new(value)
+                            .size(FontSize::SM)
+                            .color(Colors::TEXT_SECONDARY)
+                            .monospace(),
+                    );
+                });
+            }
+        });
+
+    ui.add_space(Spacing::SM);
+    ui.separator();
+}
+
+// =============================================================================
 // Key-Value Editor Component
 // =============================================================================
 

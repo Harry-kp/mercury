@@ -243,6 +243,7 @@ Variables like `{{token}}` are loaded from `.env` files in your workspace.
 - **Request Cancellation** — Stop runaway requests instantly
 - **Syntax Highlighting** — JSON responses beautifully formatted
 - **Dark Mode** — Easy on the eyes, built for late nights
+- **Automatic Cookies** — Auth flows work seamlessly
 
 ---
 

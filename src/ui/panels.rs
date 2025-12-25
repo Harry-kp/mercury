@@ -526,6 +526,7 @@ impl MercuryApp {
             );
             let has_previous = self.previous_response.is_some();
             let headers_count = response.headers.len();
+            let cookies_count = response.cookies.len();
 
             // Track if save was clicked (can't call method inside borrow)
             let mut save_clicked = false;
@@ -535,6 +536,12 @@ impl MercuryApp {
                 // Headers checkbox for all response types
                 let headers_label = format!("Headers ({})", headers_count);
                 ui.checkbox(&mut self.show_response_headers, headers_label);
+
+                // Cookies checkbox (only show if cookies present)
+                if cookies_count > 0 {
+                    let cookies_label = format!("Cookies ({})", cookies_count);
+                    ui.checkbox(&mut self.show_response_cookies, cookies_label);
+                }
 
                 // Raw and Diff only make sense for text responses
                 if is_text_response {
@@ -598,53 +605,61 @@ impl MercuryApp {
             ui.separator();
             ui.add_space(Spacing::SM);
 
-            // Headers section (collapsible) - constrained width to prevent panel expansion
+            // Headers section (collapsible) - uses shared component
             if self.show_response_headers {
-                ui.horizontal(|ui| {
-                    ui.label(egui::RichText::new("Headers").size(FontSize::SM).strong());
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        let ctx = ui.ctx().clone();
-                        if copy_icon_button(ui, &ctx, "response_headers") {
-                            let headers_text: String = response
-                                .headers
-                                .iter()
-                                .map(|(k, v)| format!("{}: {}", k, v))
-                                .collect::<Vec<_>>()
-                                .join("\n");
-                            ui.ctx().copy_text(headers_text);
-                        }
-                    });
-                });
+                let ctx = ui.ctx().clone();
+                let header_items: Vec<(String, String)> = response
+                    .headers
+                    .iter()
+                    .map(|(k, v)| (k.clone(), v.clone()))
+                    .collect();
+                let headers_copy_text: String = response
+                    .headers
+                    .iter()
+                    .map(|(k, v)| format!("{}: {}", k, v))
+                    .collect::<Vec<_>>()
+                    .join("\n");
 
-                ScrollArea::both()
-                    .id_salt("response_headers")
-                    .max_height(Layout::HEADERS_MAX_HEIGHT)
-                    .show(ui, |ui| {
-                        // Constrain width to prevent panel expansion
-                        let max_width = ui.available_width();
-                        ui.set_max_width(max_width);
-                        ui.set_min_width(max_width);
+                collapsible_section(
+                    ui,
+                    &ctx,
+                    "Headers",
+                    "response_headers",
+                    &header_items,
+                    true,
+                    Some(&headers_copy_text),
+                );
+            }
 
-                        for (name, value) in &response.headers {
-                            ui.horizontal(|ui| {
-                                ui.label(
-                                    egui::RichText::new(format!("{}: ", name))
-                                        .size(FontSize::SM)
-                                        .color(Colors::PRIMARY)
-                                        .monospace(),
-                                );
-                                ui.label(
-                                    egui::RichText::new(value)
-                                        .size(FontSize::SM)
-                                        .color(Colors::TEXT_SECONDARY)
-                                        .monospace(),
-                                );
-                            });
-                        }
-                    });
+            // Cookies section (collapsible) - uses shared component
+            if self.show_response_cookies && !response.cookies.is_empty() {
+                let ctx = ui.ctx().clone();
+                // Parse cookies to show name=value only (exclude attributes like Path, HttpOnly)
+                let cookie_items: Vec<(String, String)> = response
+                    .cookies
+                    .iter()
+                    .filter_map(|c| {
+                        let main_part = c.split(';').next().unwrap_or(c);
+                        main_part
+                            .split_once('=')
+                            .map(|(k, v)| (k.to_string(), v.to_string()))
+                    })
+                    .collect();
+                let cookies_copy_text: String = cookie_items
+                    .iter()
+                    .map(|(k, v)| format!("{}={}", k, v))
+                    .collect::<Vec<_>>()
+                    .join("\n");
 
-                ui.add_space(Spacing::SM);
-                ui.separator();
+                collapsible_section(
+                    ui,
+                    &ctx,
+                    "Cookies",
+                    "response_cookies",
+                    &cookie_items,
+                    true,
+                    Some(&cookies_copy_text),
+                );
             }
 
             ui.add_space(Spacing::SM);
