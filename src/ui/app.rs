@@ -47,11 +47,9 @@ pub struct MercuryApp {
     pub auth_token: String,
 
     pub response: Option<HttpResponse>,
-    pub previous_response: Option<HttpResponse>,
     pub response_view_raw: bool,
     pub show_response_headers: bool,
     pub show_response_cookies: bool,
-    pub show_response_diff: bool,
     // Cached formatted response to avoid cloning every frame
     pub formatted_response_cache: Option<String>,
 
@@ -156,11 +154,9 @@ impl MercuryApp {
             auth_password: String::new(),
             auth_token: String::new(),
             response: None,
-            previous_response: None,
             response_view_raw: false,
             show_response_headers: false,
             show_response_cookies: false,
-            show_response_diff: false,
             formatted_response_cache: None,
 
             env_files: vec!["None".to_string()],
@@ -422,7 +418,6 @@ impl MercuryApp {
         self.body_text = String::new();
         self.auth_text = String::new();
         self.response = None;
-        self.previous_response = None;
         self.has_unsaved_changes = false;
         self.last_saved_content = None;
     }
@@ -1323,8 +1318,7 @@ impl eframe::App for MercuryApp {
                             }
                         }
 
-                        // Track previous response for diff
-                        self.previous_response = self.response.take();
+                        // Update response
                         self.response = Some(response);
                         self.formatted_response_cache = None; // Invalidate cache
                         self.request_error = None;

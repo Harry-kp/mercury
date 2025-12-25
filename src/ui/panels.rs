@@ -525,7 +525,6 @@ impl MercuryApp {
                 response.response_type,
                 ResponseType::Binary | ResponseType::Image | ResponseType::LargeText
             );
-            let has_previous = self.previous_response.is_some();
             let headers_count = response.headers.len();
             let cookies_count = response.cookies.len();
 
@@ -544,15 +543,12 @@ impl MercuryApp {
                     ui.checkbox(&mut self.show_response_cookies, cookies_label);
                 }
 
-                // Raw and Diff only make sense for text responses
+                // Raw only makes sense for text responses
                 if is_text_response {
                     let was_raw = self.response_view_raw;
                     ui.checkbox(&mut self.response_view_raw, "Raw");
                     if self.response_view_raw != was_raw {
                         raw_toggled = true;
-                    }
-                    if has_previous {
-                        ui.checkbox(&mut self.show_response_diff, "Diff");
                     }
                 }
 
