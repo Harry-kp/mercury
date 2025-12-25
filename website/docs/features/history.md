@@ -18,7 +18,7 @@ Every time you send a request, Mercury records:
 
 This lets you:
 - Review past API responses
-- Compare different responses
+- Review previous responses
 - Restore and rerun previous requests
 - Debug API behavior over time
 
@@ -77,9 +77,9 @@ Each history entry shows when it was executed using relative timestamps like "Ju
 
 ## Use Cases
 
-### Compare API Changes
+### Track API Changes
 
-Run the same request multiple times to compare responses as you develop your API.
+Run the same request multiple times to see how the response evolves as you develop your API.
 
 ### Debug Flaky Endpoints
 
