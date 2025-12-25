@@ -69,6 +69,7 @@ pub struct MercuryApp {
     pub timeline: Vec<TimelineEntry>,
     pub timeline_search: String,
     pub show_timeline: bool,
+    pub history_loaded: bool,
 
     pub temp_requests: Vec<TempRequest>,
     pub recent_expanded: bool,
@@ -171,9 +172,10 @@ impl MercuryApp {
             focus_mode: false,
             headers_bulk_edit: false,
             params_bulk_edit: false,
-            timeline: persistence::load_history(),
+            timeline: Vec::new(),
             timeline_search: String::new(),
             show_timeline: false,
+            history_loaded: false,
             temp_requests: persistence::load_temp_requests(),
             recent_expanded: true,
             context_menu_item: None,
@@ -269,6 +271,14 @@ impl MercuryApp {
         }
 
         app
+    }
+
+    /// Ensure history (timeline) is loaded from disk if it hasn't been yet
+    pub fn ensure_history_loaded(&mut self) {
+        if !self.history_loaded {
+            self.timeline = persistence::load_history();
+            self.history_loaded = true;
+        }
     }
 
     fn load_workspace(&mut self, path: PathBuf) {
@@ -938,7 +948,9 @@ impl MercuryApp {
 
     /// Save timeline history to disk
     pub fn save_history(&self) {
-        persistence::save_history(&self.timeline);
+        if self.history_loaded {
+            persistence::save_history(&self.timeline);
+        }
     }
 
     pub fn render_collection_tree(
@@ -1244,6 +1256,7 @@ impl eframe::App for MercuryApp {
 
             if is_match {
                 self.ongoing_request = None;
+                self.ensure_history_loaded();
                 match result {
                     Ok(response) => {
                         let time = std::time::SystemTime::now()
