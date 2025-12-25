@@ -335,6 +335,7 @@ impl MercuryApp {
 
     /// Timeline content with proper scroll
     fn render_timeline_content(&mut self, ui: &mut Ui) {
+        self.ensure_history_loaded();
         // Track if we should clear history (to avoid borrow issues)
         let mut should_clear = false;
 
