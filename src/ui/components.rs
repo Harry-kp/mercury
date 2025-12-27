@@ -130,30 +130,31 @@ pub fn response_time_metric(ui: &mut Ui, duration_ms: u128) {
     .on_hover_text(tooltip);
 }
 
-/// Tab bar component
-pub fn tab_bar(ui: &mut Ui, tabs: &[&str], selected: &mut usize) {
-    ui.horizontal(|ui| {
-        for (i, tab) in tabs.iter().enumerate() {
-            let is_selected = *selected == i;
-            let color = if is_selected {
-                Colors::PRIMARY
-            } else {
-                Colors::TEXT_MUTED
-            };
-
-            let response = ui.add(
-                egui::Button::new(RichText::new(*tab).size(FontSize::MD).color(color)).frame(false),
-            );
-
-            if response.clicked() {
-                *selected = i;
-            }
-
-            if i < tabs.len() - 1 {
-                ui.add_space(Spacing::MD);
-            }
-        }
-    });
+/// Popup menu component
+/// Renders a clickable label that opens a styled popup menu
+/// Returns the Response for the trigger element
+pub fn popup_menu(
+    ui: &mut Ui,
+    trigger_response: &egui::Response,
+    width: f32,
+    add_contents: impl FnOnce(&mut Ui),
+) {
+    egui::Popup::menu(trigger_response)
+        .width(width)
+        .gap(4.0)
+        .frame(
+            egui::Frame::popup(&ui.ctx().style())
+                .fill(Colors::BG_MODAL)
+                .corner_radius(Radius::MD)
+                .stroke(egui::Stroke::new(StrokeWidth::THIN, Colors::BORDER_SUBTLE))
+                .inner_margin(Spacing::SM),
+        )
+        .style(|style: &mut egui::Style| {
+            // Use subtle selection colors for menu items - same as HTTP method dropdown
+            style.visuals.selection.bg_fill = Colors::popup_selection_bg();
+            style.visuals.widgets.hovered.bg_fill = Colors::popup_hover_bg();
+        })
+        .show(add_contents);
 }
 
 /// Method badge with color
@@ -675,13 +676,13 @@ pub fn rows_to_text(rows: &[KeyValueRow], separator: &str) -> String {
 pub fn parse_text_to_rows(text: &str, separator: &str) -> Vec<KeyValueRow> {
     text.lines()
         .filter_map(|line| {
-            let line = line.trim();
+            let line = line.trim_start();
             if line.is_empty() {
                 return None;
             }
 
             let (enabled, line) = if line.starts_with('#') {
-                (false, line.trim_start_matches('#').trim())
+                (false, line.trim_start_matches('#').trim_start())
             } else {
                 (true, line)
             };
@@ -690,7 +691,7 @@ pub fn parse_text_to_rows(text: &str, separator: &str) -> Vec<KeyValueRow> {
                 Some(KeyValueRow::new(
                     enabled,
                     k.trim().to_string(),
-                    v.trim().to_string(),
+                    v.to_string(), // Don't trim value - preserve spaces
                 ))
             } else {
                 Some(KeyValueRow::new(enabled, line.to_string(), String::new()))
@@ -1610,5 +1611,34 @@ mod tests {
             assert!(!called, "Closure should NOT be called when open is false");
             assert!(!result, "Result should remain false");
         });
+    }
+
+    #[test]
+    fn test_parse_text_to_rows_space_preservation() {
+        // Normal case
+        let rows = parse_text_to_rows("Key: Value", ":");
+        assert_eq!(rows[0].key, "Key");
+        assert_eq!(rows[0].value, " Value"); // Space after colon is preserved
+
+        // Trailing spaces case (THE BUG FIX)
+        let rows = parse_text_to_rows("Key: Value   ", ":");
+        assert_eq!(rows[0].key, "Key");
+        assert_eq!(rows[0].value, " Value   "); // ALL trailing spaces preserved
+
+        // Leading/Trailing spaces on KEY should be trimmed
+        let rows = parse_text_to_rows("  Key  : Value", ":");
+        assert_eq!(rows[0].key, "Key"); // Key is identifier, trimmed
+        assert_eq!(rows[0].value, " Value");
+
+        // Comment case with spaces
+        let rows = parse_text_to_rows("# Key: Value   ", ":");
+        assert!(!rows[0].enabled);
+        assert_eq!(rows[0].key, "Key");
+        assert_eq!(rows[0].value, " Value   "); // Preserved even in comments
+
+        // Empty value with spaces
+        let rows = parse_text_to_rows("Key:   ", ":");
+        assert_eq!(rows[0].key, "Key");
+        assert_eq!(rows[0].value, "   ");
     }
 }

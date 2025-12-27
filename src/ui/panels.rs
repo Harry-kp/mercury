@@ -5,7 +5,7 @@
 use super::app::{AuthMode, MercuryApp};
 use super::components::*;
 use super::icons::Icons;
-use super::theme::{Colors, FontSize, Layout, Radius, Spacing, StrokeWidth};
+use super::theme::{Colors, FontSize, Layout, Radius, Spacing};
 use crate::core::{format_json, format_xml, ResponseType};
 use crate::parser::HttpMethod;
 use egui::{self, Context, ScrollArea, Ui};
@@ -994,46 +994,32 @@ impl MercuryApp {
                 )
                 .on_hover_cursor(egui::CursorIcon::PointingHand);
 
-            egui::Popup::menu(&method_response)
-                .width(Layout::METHOD_POPUP_WIDTH)
-                .gap(4.0)
-                .frame(
-                    egui::Frame::popup(&ui.ctx().style())
-                        .fill(Colors::BG_MODAL)
-                        .corner_radius(Radius::MD)
-                        .stroke(egui::Stroke::new(StrokeWidth::THIN, Colors::BORDER_SUBTLE))
-                        .inner_margin(Spacing::SM),
-                )
-                .style(|style: &mut egui::Style| {
-                    // Use subtle selection colors for menu items
-                    style.visuals.selection.bg_fill = Colors::popup_selection_bg();
-                    style.visuals.widgets.hovered.bg_fill = Colors::popup_hover_bg();
-                })
-                .show(|ui| {
-                    for method in [
-                        HttpMethod::GET,
-                        HttpMethod::POST,
-                        HttpMethod::PUT,
-                        HttpMethod::PATCH,
-                        HttpMethod::DELETE,
-                        HttpMethod::HEAD,
-                        HttpMethod::OPTIONS,
-                        HttpMethod::CONNECT,
-                        HttpMethod::TRACE,
-                    ] {
-                        let color = Colors::method_color(method.as_str());
-                        if ui
-                            .selectable_label(
-                                self.method.as_str() == method.as_str(),
-                                egui::RichText::new(method.as_str()).color(color),
-                            )
-                            .clicked()
-                        {
-                            self.method = method;
-                            ui.close();
-                        }
+            // Use the reusable popup_menu component
+            popup_menu(ui, &method_response, Layout::METHOD_POPUP_WIDTH, |ui| {
+                for method in [
+                    HttpMethod::GET,
+                    HttpMethod::POST,
+                    HttpMethod::PUT,
+                    HttpMethod::PATCH,
+                    HttpMethod::DELETE,
+                    HttpMethod::HEAD,
+                    HttpMethod::OPTIONS,
+                    HttpMethod::CONNECT,
+                    HttpMethod::TRACE,
+                ] {
+                    let color = Colors::method_color(method.as_str());
+                    if ui
+                        .selectable_label(
+                            self.method.as_str() == method.as_str(),
+                            egui::RichText::new(method.as_str()).color(color),
+                        )
+                        .clicked()
+                    {
+                        self.method = method;
+                        ui.close();
                     }
-                });
+                }
+            });
 
             // URL input - fills remaining space
             let available = ui.available_width() - super::theme::Indent::SEND_BUTTON_RESERVE;
@@ -1116,13 +1102,138 @@ impl MercuryApp {
         } else {
             "Headers".to_string()
         };
-        let tabs = [
-            "Body",
-            params_label.as_str(),
-            headers_label.as_str(),
-            "Auth",
-        ];
-        tab_bar(ui, &tabs, &mut self.selected_tab);
+
+        // Tab bar using DRY approach
+        ui.horizontal(|ui| {
+            // Regular tabs using consistent styling
+            let regular_tabs = ["Body", params_label.as_str(), headers_label.as_str()];
+            for (i, tab) in regular_tabs.iter().enumerate() {
+                let is_selected = self.selected_tab == i;
+                let color = if is_selected {
+                    Colors::PRIMARY
+                } else {
+                    Colors::TEXT_MUTED
+                };
+                if ui
+                    .add(
+                        egui::Button::new(
+                            egui::RichText::new(*tab).size(FontSize::MD).color(color),
+                        )
+                        .frame(false),
+                    )
+                    .on_hover_cursor(egui::CursorIcon::PointingHand)
+                    .clicked()
+                {
+                    self.selected_tab = i;
+                }
+                ui.add_space(Spacing::MD);
+            }
+
+            // Auth tab - split into label (selects) and chevron (opens dropdown)
+            let auth_selected = self.selected_tab == 3;
+            let auth_color = if auth_selected {
+                Colors::PRIMARY
+            } else {
+                Colors::TEXT_MUTED
+            };
+
+            // Derive auth mode from headers_text (single source of truth)
+            let (current_auth_mode, _, _, _) =
+                crate::utils::get_auth_from_headers(&self.headers_text);
+
+            let auth_label = match current_auth_mode {
+                AuthMode::None => "Auth",
+                AuthMode::Basic => "Basic",
+                AuthMode::Bearer => "Bearer",
+                AuthMode::Custom => "Custom",
+            };
+
+            // Label part - click to select tab
+            if ui
+                .add(
+                    egui::Button::new(
+                        egui::RichText::new(auth_label)
+                            .size(FontSize::MD)
+                            .color(auth_color),
+                    )
+                    .frame(false),
+                )
+                .on_hover_cursor(egui::CursorIcon::PointingHand)
+                .clicked()
+            {
+                self.selected_tab = 3;
+            }
+
+            // Chevron part - click to open dropdown
+            let chevron_response = ui
+                .add(
+                    egui::Button::new(
+                        egui::RichText::new(Icons::CHEVRON_DOWN)
+                            .size(FontSize::SM)
+                            .color(auth_color),
+                    )
+                    .frame(false),
+                )
+                .on_hover_cursor(egui::CursorIcon::PointingHand);
+
+            // Use the reusable popup_menu component
+            popup_menu(ui, &chevron_response, 100.0, |ui| {
+                let options = [
+                    ("None", AuthMode::None),
+                    ("Basic", AuthMode::Basic),
+                    ("Bearer", AuthMode::Bearer),
+                    ("Custom", AuthMode::Custom),
+                ];
+                for (label, mode) in options {
+                    if ui
+                        .selectable_label(current_auth_mode == mode, label)
+                        .clicked()
+                    {
+                        if current_auth_mode != mode {
+                            // Update headers_text based on new mode
+                            match mode {
+                                AuthMode::None => {
+                                    // Remove Authorization header from headers_text
+                                    self.headers_text =
+                                        crate::utils::set_auth_in_headers(&self.headers_text, "");
+                                    self.auth_token.clear();
+                                    self.auth_username.clear();
+                                    self.auth_password.clear();
+                                }
+                                AuthMode::Basic => {
+                                    // Generate Basic auth and add to headers
+                                    let auth_value = crate::utils::generate_basic_auth(
+                                        &self.auth_username,
+                                        &self.auth_password,
+                                    );
+                                    self.headers_text = crate::utils::set_auth_in_headers(
+                                        &self.headers_text,
+                                        &auth_value,
+                                    );
+                                }
+                                AuthMode::Bearer => {
+                                    // Generate Bearer auth and add to headers
+                                    let auth_value =
+                                        crate::utils::generate_bearer_auth(&self.auth_token);
+                                    self.headers_text = crate::utils::set_auth_in_headers(
+                                        &self.headers_text,
+                                        &auth_value,
+                                    );
+                                }
+                                AuthMode::Custom => {
+                                    // Initialize with a space so the header exists and mode sticks
+                                    // (Empty strings are removed by set_auth_in_headers)
+                                    self.headers_text =
+                                        crate::utils::set_auth_in_headers(&self.headers_text, " ");
+                                }
+                            }
+                        }
+                        self.selected_tab = 3;
+                        ui.close();
+                    }
+                }
+            });
+        });
 
         ui.add_space(Spacing::SM);
         ui.separator();
@@ -1195,133 +1306,186 @@ impl MercuryApp {
                         self.render_smart_headers(ui);
                     }
                     3 => {
-                        // Revamped Auth UI
-                        ui.horizontal(|ui| {
-                            ui.label("Auth Type:");
-                            egui::ComboBox::from_id_salt("auth_mode_selector")
-                                .selected_text(match self.auth_mode {
-                                    AuthMode::None => "None",
-                                    AuthMode::Basic => "Basic Auth",
-                                    AuthMode::Bearer => "Bearer Token",
-                                    AuthMode::Custom => "Custom Header",
-                                })
-                                .show_ui(ui, |ui| {
-                                    if ui
-                                        .selectable_value(
-                                            &mut self.auth_mode,
-                                            AuthMode::None,
-                                            "None",
-                                        )
-                                        .clicked()
-                                    {
-                                        self.auth_text.clear();
-                                    }
-                                    let basic = ui.selectable_value(
-                                        &mut self.auth_mode,
-                                        AuthMode::Basic,
-                                        "Basic Auth",
-                                    );
-                                    if basic.clicked() {
-                                        self.auth_text = crate::utils::generate_basic_auth(
-                                            &self.auth_username,
-                                            &self.auth_password,
-                                        );
-                                    }
-                                    let bearer = ui.selectable_value(
-                                        &mut self.auth_mode,
-                                        AuthMode::Bearer,
-                                        "Bearer Token",
-                                    );
-                                    if bearer.clicked() {
-                                        self.auth_text =
-                                            crate::utils::generate_bearer_auth(&self.auth_token);
-                                    }
-                                    ui.selectable_value(
-                                        &mut self.auth_mode,
-                                        AuthMode::Custom,
-                                        "Custom Header",
-                                    );
-                                });
-                        });
+                        // Auth tab - headers_text is single source of truth
+                        // Derive auth mode and values from headers_text
+                        let (auth_mode, username, password, token) =
+                            crate::utils::get_auth_from_headers(&self.headers_text);
 
-                        ui.add_space(Spacing::MD);
+                        // Sync UI inputs with headers (only if they're empty and headers have values)
+                        if self.auth_username.is_empty() && !username.is_empty() {
+                            self.auth_username = username;
+                        }
+                        if self.auth_password.is_empty() && !password.is_empty() {
+                            self.auth_password = password;
+                        }
+                        if self.auth_token.is_empty() && !token.is_empty() {
+                            self.auth_token = token;
+                        }
 
-                        match self.auth_mode {
+                        // Content based on auth mode derived from headers
+                        match auth_mode {
                             AuthMode::None => {
+                                // Empty state - simple one-line hint
                                 ui.label(
-                                    egui::RichText::new("No Authorization header will be sent.")
-                                        .color(Colors::TEXT_MUTED),
+                                    egui::RichText::new(
+                                        "No authentication. Select a type from the dropdown above.",
+                                    )
+                                    .color(Colors::TEXT_MUTED)
+                                    .font(egui::FontId::monospace(FontSize::SM)),
                                 );
                             }
                             AuthMode::Basic => {
-                                egui::Grid::new("basic_auth_inputs")
-                                    .num_columns(2)
-                                    .spacing([Spacing::MD, Spacing::SM])
-                                    .show(ui, |ui| {
-                                        ui.label("Username:");
-                                        if ui
-                                            .text_edit_singleline(&mut self.auth_username)
-                                            .changed()
-                                        {
-                                            self.auth_text = crate::utils::generate_basic_auth(
-                                                &self.auth_username,
-                                                &self.auth_password,
-                                            );
-                                        }
-                                        ui.end_row();
+                                // Font matching Headers/Params
+                                let font_id = egui::FontId::monospace(FontSize::SM);
 
-                                        ui.label("Password:");
-                                        if ui
-                                            .add(
-                                                egui::TextEdit::singleline(&mut self.auth_password)
-                                                    .password(true),
+                                // Username field
+                                if ui
+                                    .add(
+                                        egui::TextEdit::singleline(&mut self.auth_username)
+                                            .hint_text(
+                                                egui::RichText::new("Username")
+                                                    .color(Colors::PLACEHOLDER),
                                             )
-                                            .changed()
-                                        {
-                                            self.auth_text = crate::utils::generate_basic_auth(
-                                                &self.auth_username,
-                                                &self.auth_password,
-                                            );
-                                        }
-                                        ui.end_row();
-                                    });
+                                            .desired_width(ui.available_width())
+                                            .frame(false)
+                                            .font(font_id.clone()),
+                                    )
+                                    .changed()
+                                {
+                                    // Update headers_text with new Basic auth
+                                    let auth_value = crate::utils::generate_basic_auth(
+                                        &self.auth_username,
+                                        &self.auth_password,
+                                    );
+                                    self.headers_text = crate::utils::set_auth_in_headers(
+                                        &self.headers_text,
+                                        &auth_value,
+                                    );
+                                }
+
                                 ui.add_space(Spacing::SM);
-                                ui.label(
-                                    egui::RichText::new(format!(
-                                        "Header Preview: Authorization: {}",
-                                        self.auth_text
-                                    ))
-                                    .size(FontSize::XS)
-                                    .color(Colors::TEXT_MUTED),
-                                );
+
+                                // Password field (visible - API client needs to see credentials)
+                                if ui
+                                    .add(
+                                        egui::TextEdit::singleline(&mut self.auth_password)
+                                            .hint_text(
+                                                egui::RichText::new("Password")
+                                                    .color(Colors::PLACEHOLDER),
+                                            )
+                                            .desired_width(ui.available_width())
+                                            .frame(false)
+                                            .font(font_id),
+                                    )
+                                    .changed()
+                                {
+                                    // Update headers_text with new Basic auth
+                                    let auth_value = crate::utils::generate_basic_auth(
+                                        &self.auth_username,
+                                        &self.auth_password,
+                                    );
+                                    self.headers_text = crate::utils::set_auth_in_headers(
+                                        &self.headers_text,
+                                        &auth_value,
+                                    );
+                                }
+
+                                // Preview - show the generated Authorization header value
+                                if !self.auth_username.is_empty() || !self.auth_password.is_empty()
+                                {
+                                    ui.add_space(Spacing::MD);
+                                    let auth_value = crate::utils::generate_basic_auth(
+                                        &self.auth_username,
+                                        &self.auth_password,
+                                    );
+                                    let ctx = ui.ctx().clone();
+                                    render_auth_preview(ui, &ctx, &auth_value);
+                                }
                             }
                             AuthMode::Bearer => {
-                                ui.horizontal(|ui| {
-                                    ui.label("Token:");
-                                    if ui.text_edit_singleline(&mut self.auth_token).changed() {
-                                        self.auth_text =
-                                            crate::utils::generate_bearer_auth(&self.auth_token);
-                                    }
-                                });
-                                ui.add_space(Spacing::SM);
-                                ui.label(
-                                    egui::RichText::new(format!(
-                                        "Header Preview: Authorization: {}",
-                                        self.auth_text
-                                    ))
-                                    .size(FontSize::XS)
-                                    .color(Colors::TEXT_MUTED),
-                                );
+                                // Font matching Headers/Params
+                                let font_id = egui::FontId::monospace(FontSize::SM);
+
+                                // Token input
+                                if ui
+                                    .add(
+                                        egui::TextEdit::multiline(&mut self.auth_token)
+                                            .hint_text(
+                                                egui::RichText::new("Paste token or {{TOKEN}}")
+                                                    .color(Colors::PLACEHOLDER),
+                                            )
+                                            .desired_width(ui.available_width())
+                                            .desired_rows(4)
+                                            .frame(false)
+                                            .font(font_id),
+                                    )
+                                    .changed()
+                                {
+                                    // Update headers_text with new Bearer auth
+                                    let auth_value =
+                                        crate::utils::generate_bearer_auth(&self.auth_token);
+                                    self.headers_text = crate::utils::set_auth_in_headers(
+                                        &self.headers_text,
+                                        &auth_value,
+                                    );
+                                }
+
+                                // Preview
+                                if !self.auth_token.is_empty() {
+                                    ui.add_space(Spacing::MD);
+                                    let auth_value =
+                                        crate::utils::generate_bearer_auth(&self.auth_token);
+                                    let ctx = ui.ctx().clone();
+                                    render_auth_preview(ui, &ctx, &auth_value);
+                                }
                             }
                             AuthMode::Custom => {
-                                ui.label("Authorization Value:");
-                                ui.add(
-                                    egui::TextEdit::multiline(&mut self.auth_text)
-                                        .hint_text("Bearer <token>")
-                                        .desired_width(ui.available_width())
-                                        .desired_rows(4)
-                                        .font(egui::TextStyle::Monospace),
-                                );
+                                // Font matching Headers/Params
+                                // Font matching Headers/Params
+                                let font_id = egui::FontId::monospace(FontSize::SM);
+
+                                // For Custom mode, we need a temporary variable
+                                // Extract current auth value from headers for editing
+                                let mut custom_value = String::new();
+                                for line in self.headers_text.lines() {
+                                    let line_trimmed = line.trim();
+                                    if line_trimmed.to_lowercase().starts_with("authorization:") {
+                                        if let Some(value) =
+                                            line_trimmed.split_once(':').map(|(_, v)| v.trim())
+                                        {
+                                            custom_value = value.to_string();
+                                            break;
+                                        }
+                                    }
+                                }
+
+                                // Custom auth value - direct entry
+                                let mut editing_value = custom_value.clone();
+                                if ui
+                                    .add(
+                                        egui::TextEdit::multiline(&mut editing_value)
+                                            .hint_text(
+                                                egui::RichText::new("API-Key abc123 or Digest ...")
+                                                    .color(Colors::PLACEHOLDER),
+                                            )
+                                            .desired_width(ui.available_width())
+                                            .desired_rows(4)
+                                            .frame(false)
+                                            .font(font_id),
+                                    )
+                                    .changed()
+                                {
+                                    // Update headers_text with the custom value (keep header if empty)
+                                    let content = if editing_value.is_empty() {
+                                        " "
+                                    } else {
+                                        &editing_value
+                                    };
+                                    self.headers_text = crate::utils::set_auth_in_headers(
+                                        &self.headers_text,
+                                        content,
+                                    );
+                                }
                             }
                         }
                     }
@@ -1445,6 +1609,36 @@ impl MercuryApp {
             });
         }
     }
+}
+
+/// Render the auth header preview with monospace styling
+/// Used by Basic and Bearer auth modes to show the generated header
+fn render_auth_preview(ui: &mut Ui, ctx: &egui::Context, auth_text: &str) {
+    egui::Frame::NONE
+        .fill(Colors::BG_CODE)
+        .corner_radius(Radius::SM)
+        .inner_margin(Spacing::SM)
+        .show(ui, |ui| {
+            ui.horizontal(|ui| {
+                ui.label(
+                    egui::RichText::new("Authorization: ")
+                        .size(FontSize::XS)
+                        .color(Colors::PRIMARY)
+                        .monospace(),
+                );
+                ui.label(
+                    egui::RichText::new(auth_text)
+                        .size(FontSize::XS)
+                        .color(Colors::TEXT_SECONDARY)
+                        .monospace(),
+                );
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if copy_icon_button(ui, ctx, "auth_preview_copy") {
+                        ctx.copy_text(format!("Authorization: {}", auth_text));
+                    }
+                });
+            });
+        });
 }
 
 #[cfg(test)]
