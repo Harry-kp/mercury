@@ -13,15 +13,18 @@ pub enum AuthMode {
 
 /// Infer Auth state from existing header text
 pub fn infer_auth_config(auth_text: &str) -> (AuthMode, String, String, String) {
-    let mut mode = AuthMode::None;
+    let mut mode = AuthMode::Custom; // Default to Custom if header exists but isn't Basic/Bearer
     let mut username = String::new();
     let mut password = String::new();
     let mut token = String::new();
 
     let text = auth_text.trim();
-    if text.starts_with("Basic ") {
+    if text.starts_with("Basic ") || text == "Basic" {
         mode = AuthMode::Basic;
-        if let Some(encoded) = text.strip_prefix("Basic ") {
+        if let Some(encoded) = text
+            .strip_prefix("Basic ")
+            .or_else(|| text.strip_prefix("Basic"))
+        {
             if let Ok(decoded_bytes) = BASE64_STANDARD.decode(encoded.trim()) {
                 if let Ok(decoded) = String::from_utf8(decoded_bytes) {
                     if let Some((u, p)) = decoded.split_once(':') {
@@ -31,9 +34,14 @@ pub fn infer_auth_config(auth_text: &str) -> (AuthMode, String, String, String) 
                 }
             }
         }
-    } else if text.starts_with("Bearer ") {
+    } else if text.starts_with("Bearer ") || text == "Bearer" {
         mode = AuthMode::Bearer;
-        token = text.strip_prefix("Bearer ").unwrap_or(text).to_string();
+        token = text
+            .strip_prefix("Bearer ")
+            .or_else(|| text.strip_prefix("Bearer"))
+            .unwrap_or(text)
+            .trim()
+            .to_string();
     } else if !text.is_empty() {
         mode = AuthMode::Custom;
     }
@@ -59,6 +67,59 @@ pub fn generate_basic_auth(username: &str, password: &str) -> String {
 /// Generate Bearer Auth header value (Bearer <token>)
 pub fn generate_bearer_auth(token: &str) -> String {
     format!("Bearer {}", token)
+}
+
+/// Extract auth info from headers_text. Returns (AuthMode, username, password, token).
+/// Finds the `Authorization:` line and infers auth type/values from it.
+pub fn get_auth_from_headers(headers_text: &str) -> (AuthMode, String, String, String) {
+    for line in headers_text.lines() {
+        let line_trimmed = line.trim();
+        // Skip disabled lines (starting with #)
+        if line_trimmed.starts_with('#') {
+            continue;
+        }
+        if line_trimmed.to_lowercase().starts_with("authorization:") {
+            if let Some(value) = line_trimmed.split_once(':').map(|(_, v)| v.trim()) {
+                return infer_auth_config(value);
+            }
+        }
+    }
+    (AuthMode::None, String::new(), String::new(), String::new())
+}
+
+/// Set or update the Authorization header in headers_text.
+/// If auth_value is empty, removes any existing Authorization header.
+/// Returns the updated headers_text.
+pub fn set_auth_in_headers(headers_text: &str, auth_value: &str) -> String {
+    let lines: Vec<&str> = headers_text.lines().collect();
+    let mut result: Vec<String> = Vec::new();
+    let mut found_auth = false;
+
+    for line in &lines {
+        let line_trimmed = line.trim();
+        // Skip disabled lines (starting with #) - keep them
+        if line_trimmed.starts_with('#') {
+            result.push(line.to_string());
+            continue;
+        }
+        if line_trimmed.to_lowercase().starts_with("authorization:") {
+            found_auth = true;
+            // Replace or skip based on auth_value
+            if !auth_value.is_empty() {
+                result.push(format!("Authorization: {}", auth_value));
+            }
+            // If empty, we skip (remove the line)
+        } else {
+            result.push(line.to_string());
+        }
+    }
+
+    // If no auth line was found and we have a value, add it
+    if !found_auth && !auth_value.is_empty() {
+        result.push(format!("Authorization: {}", auth_value));
+    }
+
+    result.join("\n")
 }
 
 // ============================================================================
@@ -268,6 +329,17 @@ mod tests {
         assert_eq!(mode, AuthMode::Bearer);
         assert_eq!(t, "Bearer Token");
 
+        // Empty Bearer (trailing space trimmed)
+        let (mode, _u, _p, t) = infer_auth_config("Bearer ");
+        assert_eq!(mode, AuthMode::Bearer);
+        assert_eq!(t, "");
+
+        // Empty Basic
+        let (mode, u, p, _) = infer_auth_config("Basic ");
+        assert_eq!(mode, AuthMode::Basic);
+        assert_eq!(u, "");
+        assert_eq!(p, "");
+
         // Custom
         let (mode, u, p, t) = infer_auth_config("X-Custom: Value");
         assert_eq!(mode, AuthMode::Custom);
@@ -275,9 +347,9 @@ mod tests {
         assert_eq!(p, "");
         assert_eq!(t, "");
 
-        // None
+        // None / Empty -> Custom (because header presence implies auth)
         let (mode, _u, _p, _t) = infer_auth_config("");
-        assert_eq!(mode, AuthMode::None);
+        assert_eq!(mode, AuthMode::Custom);
     }
 
     #[test]
@@ -286,6 +358,59 @@ mod tests {
         assert_eq!(count_active_headers("H: V\nH2: V2"), 2);
         assert_eq!(count_active_headers("# Comment\n\n"), 0);
         assert_eq!(count_active_headers("H: V\n# Disabled\nH3: V3"), 2);
+    }
+
+    #[test]
+    fn test_get_auth_from_headers() {
+        // Basic match
+        let h = "Content-Type: application/json\nAuthorization: Basic dXNlcjpwYXNz\nAccept: */*";
+        let (mode, u, p, t) = get_auth_from_headers(h);
+        assert_eq!(mode, AuthMode::Basic);
+        assert_eq!(u, "user");
+        assert_eq!(p, "pass");
+        assert_eq!(t, ""); // Verify token is empty for Basic auth
+
+        // Case insensitive
+        let h = "authorization: Bearer token123";
+        let (mode, _, _, t) = get_auth_from_headers(h);
+        assert_eq!(mode, AuthMode::Bearer);
+        assert_eq!(t, "token123");
+
+        // Ignore commented out
+        let h = "# Authorization: Bearer old_token\nAuthorization: Bearer new_token";
+        let (_, _, _, t) = get_auth_from_headers(h);
+        assert_eq!(t, "new_token");
+
+        // None
+        let h = "Content-Type: application/json";
+        let (mode, _, _, _) = get_auth_from_headers(h);
+        assert_eq!(mode, AuthMode::None);
+    }
+
+    #[test]
+    fn test_set_auth_in_headers() {
+        // Add new
+        let h = "Content-Type: application/json";
+        let new = set_auth_in_headers(h, "Basic dXNlcjpwYXNz");
+        assert!(new.contains("Authorization: Basic dXNlcjpwYXNz"));
+        assert!(new.contains("Content-Type: application/json"));
+
+        // Replace existing
+        let h = "Content-Type: application/json\nAuthorization: Old";
+        let new = set_auth_in_headers(h, "Bearer New");
+        assert!(new.contains("Authorization: Bearer New"));
+        assert!(!new.contains("Authorization: Old"));
+
+        // Remove (set empty)
+        let h = "Authorization: ToRemove\nOther: Value";
+        let new = set_auth_in_headers(h, "");
+        assert!(!new.contains("Authorization:"));
+        assert!(new.contains("Other: Value"));
+
+        // Case preservation (of other headers) and insensitivity
+        let h = "authorization: Old";
+        let new = set_auth_in_headers(h, "New");
+        assert!(new.contains("Authorization: New")); // We allow standard casing on replace
     }
 
     // ========================================================================

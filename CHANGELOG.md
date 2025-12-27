@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Authentication**: Fixed critical bug where trailing spaces were stripped from header values.
+- **Auth Architecture**: Refactored authentication to be fully synchronized with headers, fixing persistence issues in history/recent requests.
+- **UI Polish**: Standardized typography for empty auth states.
+
 ## [0.2.0] - 2025-12-20
 
 ### Added

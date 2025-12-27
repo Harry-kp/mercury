@@ -12,6 +12,10 @@ sidebar_position: 4
 
 Mercury provides a dedicated **Auth tab** for managing authentication. This is more convenient than manually adding `Authorization` headers.
 
+:::info Two-Way Sync
+The **Auth tab** and **Headers tab** are fully synchronized. If you add an `Authorization` header manually, Mercury automatically detects the scheme and updates the Auth tab to match.
+:::
+
 Supported methods:
 - **None** — No authentication
 - **Basic Auth** — Username and password
@@ -92,7 +96,10 @@ This keeps secrets out of your request files.
 
 ## Custom Authentication
 
-For non-standard auth schemes, use Custom mode or add headers directly.
+Select **Custom** to manually enter the value for the `Authorization` header.
+
+Values entered here are synced to the Headers tab.
+If you need to add other headers (like `X-API-Key`), use the **Headers** tab directly.
 
 ### API Key in Header
 

@@ -14,7 +14,7 @@ use crate::core::{execute_request, HttpResponse, MercuryError};
 use crate::parser::{
     parse_env_file, parse_http_file, substitute_variables, HttpMethod, HttpRequest,
 };
-use crate::ui::components::{menu_button, modal_input_field, show_modal};
+use crate::ui::components::{menu_button, modal_input_field, popup_menu, show_modal};
 use crate::ui::icons::Icons;
 use std::sync::Arc;
 
@@ -36,12 +36,10 @@ pub struct MercuryApp {
     pub method: HttpMethod,
     pub url: String,
     pub query_params: Vec<crate::utils::QueryParam>,
-    pub params_text: String, // Text representation for bulk edit
-    pub headers_text: String,
+    pub params_text: String,  // Text representation for bulk edit
+    pub headers_text: String, // Single source of truth - includes Authorization header
     pub body_text: String,
-    pub auth_text: String,
-    pub auth_mode: AuthMode,
-    // Auth helpers (ephemeral)
+    // Auth UI helpers (ephemeral - populated from headers_text)
     pub auth_username: String,
     pub auth_password: String,
     pub auth_token: String,
@@ -148,8 +146,6 @@ impl MercuryApp {
             params_text: String::new(),
             headers_text: String::new(),
             body_text: String::new(),
-            auth_text: String::new(),
-            auth_mode: AuthMode::None,
             auth_username: String::new(),
             auth_password: String::new(),
             auth_token: String::new(),
@@ -236,19 +232,31 @@ impl MercuryApp {
                 _ => HttpMethod::GET,
             };
             app.url = state.url;
-            app.headers_text = state.headers_text;
-            app.body_text = state.body_text;
-            app.auth_text = state.auth_text;
+            app.headers_text = state.headers_text.clone(); // Single source of truth
 
-            // Infer auth mode from text
-            let (mode, username, password, token) = crate::utils::infer_auth_config(&app.auth_text);
-            app.auth_mode = mode;
-            if mode == AuthMode::Basic {
-                app.auth_username = username;
-                app.auth_password = password;
-            } else if mode == AuthMode::Bearer {
-                app.auth_token = token;
+            // For backwards compatibility: if old state has auth_text, add to headers
+            if !state.auth_text.is_empty() {
+                let has_auth = app
+                    .headers_text
+                    .lines()
+                    .any(|l| l.trim().to_lowercase().starts_with("authorization:"));
+                if !has_auth {
+                    if !app.headers_text.is_empty() && !app.headers_text.ends_with('\n') {
+                        app.headers_text.push('\n');
+                    }
+                    app.headers_text
+                        .push_str(&format!("Authorization: {}", state.auth_text));
+                }
             }
+
+            app.body_text = state.body_text;
+
+            // Populate auth UI helpers from headers
+            let (_, username, password, token) =
+                crate::utils::get_auth_from_headers(&app.headers_text);
+            app.auth_username = username;
+            app.auth_password = password;
+            app.auth_token = token;
 
             app.selected_tab = state.selected_tab;
 
@@ -374,9 +382,12 @@ impl MercuryApp {
     fn get_current_content(&self) -> String {
         let mut content = format!("{} {}", self.method.as_str(), self.url);
 
-        if !self.headers_text.is_empty() {
+        // headers_text is the single source of truth and already contains Authorization if set
+        let headers = self.headers_text.clone();
+
+        if !headers.is_empty() {
             content.push('\n');
-            content.push_str(&self.headers_text);
+            content.push_str(&headers);
         }
 
         if !self.body_text.is_empty() {
@@ -414,9 +425,12 @@ impl MercuryApp {
         self.method = HttpMethod::GET;
         self.url = String::new();
         self.query_params.clear();
-        self.headers_text = String::new();
+        self.headers_text = String::new(); // This also clears auth (single source of truth)
         self.body_text = String::new();
-        self.auth_text = String::new();
+        // Clear auth UI input helpers
+        self.auth_username = String::new();
+        self.auth_password = String::new();
+        self.auth_token = String::new();
         self.response = None;
         self.has_unsaved_changes = false;
         self.last_saved_content = None;
@@ -433,10 +447,16 @@ impl MercuryApp {
         self.current_file = None;
         self.method = method;
         self.url = url;
-        self.headers_text = headers;
+        self.headers_text = headers.clone(); // Single source of truth - includes Authorization if present
         self.body_text = body;
         self.query_params = crate::utils::parse_query_params(&self.url);
         self.response = None;
+
+        // Populate auth UI helpers from headers (for display in Auth tab)
+        let (_, username, password, token) = crate::utils::get_auth_from_headers(&headers);
+        self.auth_username = username;
+        self.auth_password = password;
+        self.auth_token = token;
     }
 
     fn load_env(&mut self) {
@@ -927,9 +947,9 @@ impl MercuryApp {
                 .map(|p| p.to_string_lossy().to_string()),
             method: self.method.as_str().to_string(),
             url: self.url.clone(),
-            headers_text: self.headers_text.clone(),
+            headers_text: self.headers_text.clone(), // Auth is now in headers_text
             body_text: self.body_text.clone(),
-            auth_text: self.auth_text.clone(),
+            auth_text: String::new(), // Deprecated - auth now in headers_text
             selected_tab: self.selected_tab,
             selected_env: self.selected_env,
         };
@@ -1661,26 +1681,11 @@ impl eframe::App for MercuryApp {
                         let current_selection = self.selected_env;
                         let mut new_selection = None;
 
-                        egui::Popup::menu(&env_response)
-                            .width(crate::theme::Layout::POPUP_MIN_WIDTH)
-                            .gap(4.0)
-                            .frame(
-                                egui::Frame::popup(&ui.ctx().style())
-                                    .fill(crate::theme::Colors::BG_MODAL)
-                                    .corner_radius(crate::theme::Radius::MD)
-                                    .stroke(egui::Stroke::new(
-                                        crate::theme::StrokeWidth::THIN,
-                                        crate::theme::Colors::BORDER_SUBTLE,
-                                    ))
-                                    .inner_margin(crate::theme::Spacing::SM),
-                            )
-                            .style(|style: &mut egui::Style| {
-                                style.visuals.selection.bg_fill =
-                                    crate::theme::Colors::popup_selection_bg();
-                                style.visuals.widgets.hovered.bg_fill =
-                                    crate::theme::Colors::popup_hover_bg();
-                            })
-                            .show(|ui| {
+                        popup_menu(
+                            ui,
+                            &env_response,
+                            crate::theme::Layout::POPUP_MIN_WIDTH,
+                            |ui| {
                                 ui.set_min_height(100.0);
                                 for (i, env) in env_files_clone.iter().enumerate() {
                                     let color = if env.contains("prod") {
@@ -1701,7 +1706,8 @@ impl eframe::App for MercuryApp {
                                         ui.close();
                                     }
                                 }
-                            });
+                            },
+                        );
 
                         // Apply selection change after popup closes
                         if let Some(i) = new_selection {
@@ -1723,26 +1729,11 @@ impl eframe::App for MercuryApp {
                             )
                             .on_hover_cursor(egui::CursorIcon::PointingHand);
 
-                        egui::Popup::menu(&open_response)
-                            .width(crate::theme::Layout::POPUP_WIDE_WIDTH)
-                            .gap(4.0)
-                            .frame(
-                                egui::Frame::popup(&ui.ctx().style())
-                                    .fill(crate::theme::Colors::BG_MODAL)
-                                    .corner_radius(crate::theme::Radius::MD)
-                                    .stroke(egui::Stroke::new(
-                                        crate::theme::StrokeWidth::THIN,
-                                        crate::theme::Colors::BORDER_SUBTLE,
-                                    ))
-                                    .inner_margin(crate::theme::Spacing::SM),
-                            )
-                            .style(|style: &mut egui::Style| {
-                                style.visuals.selection.bg_fill =
-                                    crate::theme::Colors::popup_selection_bg();
-                                style.visuals.widgets.hovered.bg_fill =
-                                    crate::theme::Colors::popup_hover_bg();
-                            })
-                            .show(|ui| {
+                        popup_menu(
+                            ui,
+                            &open_response,
+                            crate::theme::Layout::POPUP_WIDE_WIDTH,
+                            |ui| {
                                 if ui.selectable_label(false, "Open Folder...").clicked() {
                                     let tx = self.folder_tx.clone();
                                     std::thread::spawn(move || {
@@ -1760,7 +1751,8 @@ impl eframe::App for MercuryApp {
                                     self.should_open_postman_import = true;
                                     ui.close();
                                 }
-                            });
+                            },
+                        );
 
                         ui.add_space(crate::theme::Spacing::XL);
 
@@ -1776,26 +1768,11 @@ impl eframe::App for MercuryApp {
                             )
                             .on_hover_cursor(egui::CursorIcon::PointingHand);
 
-                        egui::Popup::menu(&help_response)
-                            .width(crate::theme::Layout::POPUP_MIN_WIDTH)
-                            .gap(4.0)
-                            .frame(
-                                egui::Frame::popup(&ui.ctx().style())
-                                    .fill(crate::theme::Colors::BG_MODAL)
-                                    .corner_radius(crate::theme::Radius::MD)
-                                    .stroke(egui::Stroke::new(
-                                        crate::theme::StrokeWidth::THIN,
-                                        crate::theme::Colors::BORDER_SUBTLE,
-                                    ))
-                                    .inner_margin(crate::theme::Spacing::SM),
-                            )
-                            .style(|style: &mut egui::Style| {
-                                style.visuals.selection.bg_fill =
-                                    crate::theme::Colors::popup_selection_bg();
-                                style.visuals.widgets.hovered.bg_fill =
-                                    crate::theme::Colors::popup_hover_bg();
-                            })
-                            .show(|ui| {
+                        popup_menu(
+                            ui,
+                            &help_response,
+                            crate::theme::Layout::POPUP_MIN_WIDTH,
+                            |ui| {
                                 if ui.selectable_label(false, "Keyboard Shortcuts").clicked() {
                                     self.show_shortcuts = true;
                                     ui.close();
@@ -1817,7 +1794,8 @@ impl eframe::App for MercuryApp {
                                     let _ = open::that(crate::core::constants::get_issues_url());
                                     ui.close();
                                 }
-                            });
+                            },
+                        );
                     });
                 });
             });
