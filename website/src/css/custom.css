@@ -33,6 +33,10 @@
 
   /* Borders */
   --ifm-border-radius: 8px;
+
+  /* Announcement Bar Variables (Default/Dark) */
+  --announcement-bg: #1a1a1a;
+  --announcement-text: #ffffff;
 }
 
 /* Dark Mode (Default) */
@@ -105,6 +109,10 @@
   --ifm-menu-color-active: #059669;
   --ifm-menu-color-background-active: rgba(5, 150, 105, 0.1);
   --ifm-menu-color-background-hover: rgba(0, 0, 0, 0.04);
+
+  /* Announcement Bar Variables */
+  --announcement-bg: #111827;
+  --announcement-text: #ffffff;
 
   /* Primary color - darker for light mode contrast */
   --ifm-color-primary: #059669;
@@ -194,8 +202,60 @@
 }
 
 /* ============================================
-   SIDEBAR
+   SEARCH BAR (Centered React-like Design)
    ============================================ */
+
+/* Container centering - Target the specific search item */
+.navbar__items--right {
+  display: flex;
+  align-items: center;
+}
+
+/* Force the search container to be absolute centered */
+.navbar__items--right>.navbar__item:last-child {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  margin: 0 !important;
+  width: 100%;
+  max-width: 500px;
+  display: flex !important;
+  justify-content: center;
+}
+
+/* Search Wrapper from Plugin */
+.searchBox_ZlJk {
+  width: 100%;
+  padding: 0 !important;
+}
+
+/* Search Input Styling */
+.navbar__search-input,
+.searchBox_ZlJk input {
+  background-color: var(--ifm-background-surface-color) !important;
+  border: 1px solid var(--ifm-toc-border-color) !important;
+  border-radius: 99px !important;
+  padding: 0.5rem 1rem 0.5rem 2.5rem !important;
+  width: 100% !important;
+  height: 40px !important;
+  transition: all 0.2s ease;
+  background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="%23888888" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>') !important;
+  background-position: 12px center !important;
+  background-repeat: no-repeat !important;
+  outline: none !important;
+}
+
+.navbar__search-input:focus {
+  border-color: var(--ifm-color-primary) !important;
+  box-shadow: 0 0 0 2px rgba(var(--ifm-color-primary), 0.2) !important;
+}
+
+/* Hide on mobile/tablet to avoid overlap */
+@media (max-width: 996px) {
+  .navbar__search {
+    display: none;
+  }
+}
 
 .menu {
   font-size: 14px;

@@ -11,6 +11,22 @@ const config: Config = {
     v4: true,
   },
 
+  // Themes and Plugins
+  themes: [
+    [
+      require.resolve('@easyops-cn/docusaurus-search-local'),
+      {
+        hashed: true,
+        language: ['en'],
+        highlightSearchTermsOnTargetPage: true,
+      },
+    ],
+  ],
+
+  plugins: [
+    'docusaurus-plugin-image-zoom',
+  ],
+
   // GitHub Pages deployment
   url: 'https://harry-kp.github.io',
   baseUrl: '/mercury/',
@@ -44,6 +60,28 @@ const config: Config = {
 
   themeConfig: {
     image: 'img/mercury-social-card.png',
+
+    // Announcement Bar
+    announcementBar: {
+      id: 'release_0_2_0',
+      content:
+        '🚀 Mercury v0.2.0 is out! <a target="_blank" rel="noopener noreferrer" href="https://github.com/Harry-kp/mercury/releases/tag/v0.2.0">Download Now</a>',
+      backgroundColor: 'var(--announcement-bg)',
+      textColor: 'var(--announcement-text)',
+      isCloseable: true,
+    },
+
+    // Image Zoom Configuration
+    zoom: {
+      selector: '.markdown :not(em) > img',
+      config: {
+        background: {
+          light: 'rgb(255, 255, 255)',
+          dark: 'rgb(10, 10, 10)'
+        }
+      }
+    },
+
     colorMode: {
       defaultMode: 'dark',
       disableSwitch: false,
@@ -75,6 +113,10 @@ const config: Config = {
         {
           href: 'https://github.com/Harry-kp/mercury',
           label: 'GitHub',
+          position: 'right',
+        },
+        {
+          type: 'search',
           position: 'right',
         },
       ],
