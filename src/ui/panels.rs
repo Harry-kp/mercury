@@ -664,7 +664,7 @@ impl MercuryApp {
             // Body rendering based on ResponseType
             match &response.response_type {
                 ResponseType::Empty => {
-                    empty_response_placeholder(ui, response.status);
+                    empty_response_placeholder(ui, response.status, &response.status_text);
                 }
                 ResponseType::TooLarge => {
                     too_large_placeholder(ui, response.size_bytes);

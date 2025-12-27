@@ -1468,21 +1468,24 @@ pub fn large_text_placeholder(ui: &mut Ui, content_type: &str, size_bytes: usize
     });
 }
 
-/// Empty response (204) placeholder  
-pub fn empty_response_placeholder(ui: &mut Ui, status: u16) {
+/// Empty response placeholder (204 or Error with empty body)
+pub fn empty_response_placeholder(ui: &mut Ui, status: u16, status_text: &str) {
     ui.vertical_centered(|ui| {
+        // Determine icon and color based on status
+        let (icon, color) = if (200..300).contains(&status) {
+            (Icons::CHECK, Colors::SUCCESS)
+        } else {
+            (Icons::WARNING, Colors::WARNING)
+        };
+
         ui.add_space(Spacing::XL);
-        ui.label(
-            RichText::new(Icons::CHECK)
-                .size(FontSize::HERO)
-                .color(Colors::SUCCESS),
-        );
+        ui.label(RichText::new(icon).size(FontSize::HERO).color(color));
         ui.add_space(Spacing::SM);
         ui.label(
-            RichText::new(format!("{} No Content", status))
+            RichText::new(status_text)
                 .size(FontSize::LG)
                 .strong()
-                .color(Colors::SUCCESS),
+                .color(color),
         );
         ui.add_space(Spacing::XS);
         ui.label(
