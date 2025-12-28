@@ -85,7 +85,6 @@ mercury/
 │   ├── importer/            # Postman/Insomnia importers
 │   ├── main.rs              # Entry point
 │   └── utils.rs             # Utility functions
-├── example-project/         # Example API project
 ├── website/                 # Documentation website (Docusaurus)
 ├── PRD.md                   # Product requirements
 └── README.md                # Main documentation
