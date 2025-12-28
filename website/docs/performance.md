@@ -104,6 +104,7 @@ Mercury intelligently adapts to response size:
 
 - **Small responses (\<100KB)** — Full syntax highlighting with color-coded JSON/XML/HTML
 - **Large responses (\>100KB)** — Plain text display to maintain 60fps
+- **Lazy History Loading** — Only metadata is loaded at startup (~25KB RAM). Full response bodies are loaded from disk only when you click a history item, ensuring instant startup regardless of history size.
 
 Syntax highlighting is character-intensive. By skipping it for large responses, Mercury stays responsive even when your API returns megabytes of data.
 
