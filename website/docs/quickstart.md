@@ -19,7 +19,7 @@ When you first launch Mercury, you'll see an empty state. Start by opening a fol
 ![Opening a workspace - Replace with: Screenshot showing the folder picker dialog](/img/screenshots/placeholder.png)
 
 :::tip Pro Tip
-Any folder works! If you have an existing project, open that folder. Mercury detects all `.http` files automatically.
+Any folder works! If you have an existing project, open that folder. Mercury detects all `.json` files automatically.
 :::
 
 ## Step 2: Create Your First Request
@@ -30,11 +30,15 @@ Create a new request file:
 2. Or press `⌘+N` (Mac) / `Ctrl+N` (Windows/Linux)
 3. Give it a name like `get-users`
 
-Mercury creates a `.http` file that looks like this:
+Mercury creates a `.json` file that looks like this:
 
-```http
-GET https://api.example.com
-
+```json
+{
+  "method": "GET",
+  "url": "https://api.example.com",
+  "headers": {},
+  "body": ""
+}
 ```
 
 ## Step 3: Configure the Request
@@ -96,9 +100,15 @@ API_KEY=your-secret-key
 ```
 
 2. Use variables in your requests with `{{variable}}` syntax:
-```http
-GET {{BASE_URL}}/users
-Authorization: Bearer {{API_KEY}}
+```json
+{
+  "method": "GET",
+  "url": "{{BASE_URL}}/users",
+  "headers": {
+    "Authorization": "Bearer {{API_KEY}}"
+  },
+  "body": ""
+}
 ```
 
 Mercury shows variable indicators — green for defined, red for undefined.
@@ -118,10 +128,10 @@ Your folder structure mirrors the file system:
 my-api-project/
 ├── .env
 ├── users/
-│   ├── get-users.http
-│   └── create-user.http
+│   ├── get-users.json
+│   └── create-user.json
 └── products/
-    └── list-products.http
+    └── list-products.json
 ```
 
 ## What's Next?
@@ -136,5 +146,5 @@ You now know the essentials! Explore more features:
 | [Keyboard Shortcuts](/docs/reference/keyboard-shortcuts) | Master the keyboard-first workflow |
 
 :::tip Live File Sync
-Edit `.http` files in VS Code or any editor — Mercury updates instantly. No import/export needed!
+Edit `.json` files in VS Code or any editor — Mercury updates instantly. No import/export needed!
 :::

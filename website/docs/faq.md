@@ -30,7 +30,7 @@ Yes, completely free and open source. No accounts, no subscriptions, no limits.
 
 ### Where is my data stored?
 
-Your data is stored in plain `.http` files in the folder you choose as your workspace. Mercury doesn't upload anything to the cloud.
+Your data is stored in plain `.json` files in the folder you choose as your workspace. Mercury doesn't upload anything to the cloud.
 
 ---
 
@@ -42,18 +42,18 @@ Your data is stored in plain `.http` files in the folder you choose as your work
 2. Choose **Collection v2.1** format
 3. In Mercury, go to **Open → Import Postman...**
 4. Select your exported JSON file
-5. Mercury creates `.http` files for each request
+5. Mercury creates `.json` files for each request
 
 ### How do I import from Insomnia?
 
 1. In Insomnia, go to **File → Export Data**
 2. Export as JSON or YAML
 3. In Mercury, click **Import** and select your file
-4. Mercury creates `.http` files for each request
+4. Mercury creates `.json` files for each request
 
 ### Can I export my Mercury requests?
 
-Yes! Since requests are plain `.http` files, you can:
+Yes! Since requests are plain `.json` files, you can:
 - Copy them anywhere
 - Commit to Git
 - Share via email/Slack
@@ -109,7 +109,7 @@ my-workspace/          ← This folder
 ├── .env               ← Here
 ├── .env.development
 └── requests/
-    └── api.http
+    └── api.json
 ```
 
 ### Can I have multiple environments?

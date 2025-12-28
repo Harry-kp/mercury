@@ -19,7 +19,7 @@ Mercury can import Insomnia collections in JSON or YAML format.
 3. In Mercury, click **Import** in the sidebar (or use the menu)
 4. Select your exported file
 5. Mercury creates:
-   - `.http` files for each request
+   - `.json` files for each request
    - Folders matching your Insomnia groups
    - `.env` files for environments
 
@@ -29,11 +29,11 @@ Mercury can import Insomnia collections in JSON or YAML format.
 
 | Insomnia Item | Mercury Equivalent |
 |---------------|-------------------|
-| Requests | `.http` files |
+| Requests | `.json` files |
 | Request Groups | Folders |
 | Environments | `.env.{name}` files |
-| Headers | Headers in `.http` file |
-| Body | Body in `.http` file |
+| Headers | Headers in `.json` file |
+| Body | Body in `.json` file |
 | Auth | Auth headers |
 
 ### File Structure After Import
@@ -48,10 +48,10 @@ Mercury creates:
 your-workspace/
 ├── .env.development
 ├── users/
-│   ├── get-user.http
-│   └── list-users.http
+│   ├── get-user.json
+│   └── list-users.json
 └── products/
-    └── create-product.http
+    └── create-product.json
 ```
 
 ## Import from Postman
@@ -66,7 +66,7 @@ Mercury can import Postman Collection v2.1 files (JSON format).
 4. In Mercury, click **Import Postman...** in the Open menu
 5. Select your exported file
 6. Mercury creates:
-   - `.http` files for each request
+   - `.json` files for each request
    - Folders matching your Postman folder structure
    - `.env.{collection-name}` file for collection variables
 
@@ -74,11 +74,11 @@ Mercury can import Postman Collection v2.1 files (JSON format).
 
 | Postman Item | Mercury Equivalent |
 |--------------|-------------------|
-| Requests | `.http` files |
+| Requests | `.json` files |
 | Folders | Directories |
 | Collection Variables | `.env.{name}` file |
-| Headers | Headers in `.http` file |
-| Body (raw/JSON) | Body in `.http` file |
+| Headers | Headers in `.json` file |
+| Body (raw/JSON) | Body in `.json` file |
 | Query Parameters | URL with query string |
 
 ### File Structure After Import
@@ -94,15 +94,15 @@ Mercury creates:
 your-workspace/
 ├── .env.my-api            # Collection variables
 ├── auth/
-│   └── login.http
+│   └── login.json
 ├── users/
 │   └── admin/
-│       └── list-admins.http
-└── health-check.http
+│       └── list-admins.json
+└── health-check.json
 ```
 
 :::tip Variable Preservation
-Postman variables like `{{base_url}}` are preserved in the `.http` files. Define them in your `.env` file to use them.
+Postman variables like `{{base_url}}` are preserved in the `.json` files. Define them in your `.env` file to use them.
 :::
 
 ## Import from cURL
@@ -188,11 +188,11 @@ When exporting, Mercury substitutes environment variables with their current val
 
 ## File-Based Portability
 
-Since Mercury uses plain `.http` files, you can also:
+Since Mercury uses plain `.json` files, you can also:
 
 ### Share via Email/Slack
 
-Just send the `.http` file — anyone with Mercury can open it.
+Just send the `.json` file — anyone with Mercury can open it.
 
 ### Commit to Git
 
@@ -205,11 +205,11 @@ git push
 ### Copy Between Projects
 
 ```bash
-cp project-a/users/*.http project-b/users/
+cp project-a/users/*.json project-b/users/
 ```
 
 ## Related Features
 
 - [Collections](/docs/features/collections) — Organizing imported requests
 - [Environments](/docs/features/environments) — Setting up imported environments
-- [File Format](/docs/reference/file-format) — The `.http` file specification
+- [File Format](/docs/reference/file-format) — The `.json` file specification

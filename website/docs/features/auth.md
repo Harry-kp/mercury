@@ -125,7 +125,7 @@ Authorization: Digest username="admin", realm="example", ...
 
 ## Auth Inheritance
 
-The Auth tab settings apply only to the current request. Each `.http` file manages its own authentication.
+The Auth tab settings apply only to the current request. Each `.json` file manages its own authentication.
 
 :::tip Shared Auth
 For requests that share the same auth, add the header in each file or use a variable:
@@ -139,7 +139,7 @@ Authorization: Bearer {{SHARED_TOKEN}}
 
 ### 1. Use Environment Variables
 
-Never hardcode secrets in `.http` files:
+Never hardcode secrets in `.json` files:
 
 ```http
 # ❌ Bad
