@@ -1,32 +1,38 @@
 ---
-title: .http File Format
+title: JSON File Format
 sidebar_label: File Format
 sidebar_position: 1
 ---
 
-# .http File Format Reference
+# JSON File Format Reference
 
-> Mercury uses the `.http` file format — a simple, human-readable text format for HTTP requests. This page documents the complete specification.
+> Mercury stores requests as JSON files — a structured, machine-readable format with excellent tooling support. This page documents the complete specification.
 
 ## Overview
 
-A `.http` file represents a single HTTP request. The format is:
+A `.json` request file contains a single HTTP request as a JSON object:
 
-```http
-METHOD URL
-Header-Name: Header-Value
-Header-Name: Header-Value
-
-Optional body content
+```json
+{
+  "method": "GET",
+  "url": "https://api.example.com/users",
+  "headers": {},
+  "body": ""
+}
 ```
 
-## Request Line
+## Schema
 
-The first line contains the HTTP method and URL.
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `method` | string | Yes | HTTP method (GET, POST, PUT, etc.) |
+| `url` | string | Yes | Full URL including protocol |
+| `headers` | object | Yes | Key-value pairs of HTTP headers |
+| `body` | string | Yes | Request body (empty string if none) |
 
-```http
-GET https://api.example.com/users
-```
+## Method
+
+The `method` field specifies the HTTP verb.
 
 ### Supported Methods
 
@@ -40,38 +46,39 @@ GET https://api.example.com/users
 | `HEAD` | Get headers only |
 | `OPTIONS` | Get allowed methods |
 
-Methods are case-insensitive, but UPPERCASE is conventional.
+Methods should be UPPERCASE.
 
-### URL Format
+## URL
 
 URLs must include the protocol:
 
-```http
-# ✅ Correct
-GET https://api.example.com/users
-
-# ❌ Invalid (no protocol)
-GET api.example.com/users
+```json
+{
+  "method": "GET",
+  "url": "https://api.example.com/users"
+}
 ```
 
+:::warning
+URLs without protocol (e.g., `api.example.com/users`) are invalid.
+:::
 
 ## Headers
 
-Headers go on lines after the request line. Each header is `Name: Value`.
+Headers are stored as a JSON object with key-value pairs:
 
-```http
-GET https://api.example.com/users
-Accept: application/json
-Authorization: Bearer token123
-X-Custom-Header: my-value
+```json
+{
+  "method": "GET",
+  "url": "https://api.example.com/users",
+  "headers": {
+    "Accept": "application/json",
+    "Authorization": "Bearer token123",
+    "X-Custom-Header": "my-value"
+  },
+  "body": ""
+}
 ```
-
-### Header Rules
-
-- One header per line
-- Headers end at the first blank line
-- Names are case-insensitive (`Content-Type` = `content-type`)
-- Whitespace around `:` is trimmed
 
 ### Common Headers
 
@@ -85,68 +92,64 @@ X-Custom-Header: my-value
 
 ## Body
 
-The body starts after a blank line following the headers.
-
-```http
-POST https://api.example.com/users
-Content-Type: application/json
-
-{
-  "name": "John Doe",
-  "email": "john@example.com"
-}
-```
+The `body` field contains the request payload as a string.
 
 ### JSON Body
 
-```http
-POST https://api.example.com/data
-Content-Type: application/json
+For JSON payloads, escape the JSON within the string:
 
+```json
 {
-  "key": "value",
-  "array": [1, 2, 3],
-  "nested": {
-    "field": true
-  }
+  "method": "POST",
+  "url": "https://api.example.com/users",
+  "headers": {
+    "Content-Type": "application/json"
+  },
+  "body": "{\"name\": \"John Doe\", \"email\": \"john@example.com\"}"
 }
 ```
 
 ### Form Data
 
-```http
-POST https://api.example.com/login
-Content-Type: application/x-www-form-urlencoded
-
-username=john&password=secret
-```
-
-### Plain Text
-
-```http
-POST https://api.example.com/webhook
-Content-Type: text/plain
-
-This is a plain text message.
-It can span multiple lines.
+```json
+{
+  "method": "POST",
+  "url": "https://api.example.com/login",
+  "headers": {
+    "Content-Type": "application/x-www-form-urlencoded"
+  },
+  "body": "username=john&password=secret"
+}
 ```
 
 ### No Body
 
-GET, HEAD, and OPTIONS typically have no body. Just omit the blank line and body:
+For GET, HEAD, and OPTIONS, use an empty string:
 
-```http
-GET https://api.example.com/users
-Accept: application/json
+```json
+{
+  "method": "GET",
+  "url": "https://api.example.com/users",
+  "headers": {
+    "Accept": "application/json"
+  },
+  "body": ""
+}
 ```
 
 ## Variables
 
-Use `{{variable}}` syntax for dynamic values.
+Use `{{variable}}` syntax for dynamic values. Variables work in URL, headers, and body:
 
-```http
-GET {{BASE_URL}}/users/{{USER_ID}}
-Authorization: Bearer {{API_TOKEN}}
+```json
+{
+  "method": "GET",
+  "url": "{{BASE_URL}}/users/{{USER_ID}}",
+  "headers": {
+    "Authorization": "Bearer {{API_TOKEN}}"
+  },
+  "body": ""
+}
 ```
 
 ### Variable Substitution
@@ -160,88 +163,84 @@ USER_ID=12345
 API_TOKEN=secret123
 ```
 
-### Variable Locations
-
-Variables work in:
-
-| Location | Example |
-|----------|---------|
-| URL | `{{BASE_URL}}/endpoint` |
-| Headers | `Authorization: Bearer {{TOKEN}}` |
-| Body | `{"user": "{{USERNAME}}"}` |
-
 ### Variable Rules
 
 - Variable names are case-sensitive
 - Undefined variables are sent as literal text (`{{UNDEFINED}}`)
 - No spaces inside braces: `{{VALID}}`, not `{{ INVALID }}`
 
-## Comments
-
-Lines starting with `#` are comments (in `.env` files):
-
-```bash
-# .env file
-# This is a comment
-BASE_URL=https://api.example.com  # This is NOT a comment (included in value)
-```
-
-:::warning
-Comments are not supported in `.http` files. Every line is parsed as part of the request.
-:::
-
 ## Complete Examples
 
 ### GET with Authentication
 
-```http
-GET https://api.example.com/users
-Authorization: Bearer {{API_TOKEN}}
-Accept: application/json
+```json
+{
+  "method": "GET",
+  "url": "https://api.example.com/users",
+  "headers": {
+    "Authorization": "Bearer {{API_TOKEN}}",
+    "Accept": "application/json"
+  },
+  "body": ""
+}
 ```
 
 ### POST with JSON
 
-```http
-POST https://api.example.com/users
-Content-Type: application/json
-Authorization: Bearer {{API_TOKEN}}
-
+```json
 {
-  "name": "Jane Doe",
-  "email": "jane@example.com",
-  "role": "admin"
+  "method": "POST",
+  "url": "https://api.example.com/users",
+  "headers": {
+    "Content-Type": "application/json",
+    "Authorization": "Bearer {{API_TOKEN}}"
+  },
+  "body": "{\"name\": \"Jane Doe\", \"email\": \"jane@example.com\", \"role\": \"admin\"}"
 }
 ```
 
 ### PUT Update
 
-```http
-PUT https://api.example.com/users/{{USER_ID}}
-Content-Type: application/json
-
+```json
 {
-  "name": "Updated Name"
+  "method": "PUT",
+  "url": "https://api.example.com/users/{{USER_ID}}",
+  "headers": {
+    "Content-Type": "application/json"
+  },
+  "body": "{\"name\": \"Updated Name\"}"
 }
 ```
 
 ### DELETE
 
-```http
-DELETE https://api.example.com/users/{{USER_ID}}
-Authorization: Bearer {{API_TOKEN}}
+```json
+{
+  "method": "DELETE",
+  "url": "https://api.example.com/users/{{USER_ID}}",
+  "headers": {
+    "Authorization": "Bearer {{API_TOKEN}}"
+  },
+  "body": ""
+}
 ```
 
 ### Multiple Headers
 
-```http
-GET https://api.example.com/data
-Authorization: Bearer {{TOKEN}}
-Accept: application/json
-Accept-Language: en-US
-X-Request-ID: {{REQUEST_ID}}
-X-API-Version: 2
-Cache-Control: no-cache
+```json
+{
+  "method": "GET",
+  "url": "https://api.example.com/data",
+  "headers": {
+    "Authorization": "Bearer {{TOKEN}}",
+    "Accept": "application/json",
+    "Accept-Language": "en-US",
+    "X-Request-ID": "{{REQUEST_ID}}",
+    "X-API-Version": "2",
+    "Cache-Control": "no-cache"
+  },
+  "body": ""
+}
 ```
 
 ## File Organization
@@ -254,12 +253,12 @@ my-api-project/
 ├── .env.development        # Dev overrides
 ├── .env.production         # Prod overrides
 ├── users/
-│   ├── get-user.http       # GET /users/:id
-│   ├── list-users.http     # GET /users
-│   └── create-user.http    # POST /users
+│   ├── get-user.json       # GET /users/:id
+│   ├── list-users.json     # GET /users
+│   └── create-user.json    # POST /users
 └── products/
-    ├── list.http
-    └── create.http
+    ├── list.json
+    └── create.json
 ```
 
 ## Related

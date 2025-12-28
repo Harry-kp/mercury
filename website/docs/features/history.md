@@ -50,8 +50,9 @@ Click an entry to restore it to the request panel.
 To reuse a previous request:
 
 1. Click on any history entry
-2. The request panel immediately updates with that request's details (URL, method, headers, body)
-3. Modify if needed, then click **Send**
+2. The request panel updates with that request's details (URL, method, headers, body)
+3. **The response panel immediately shows the stored response body and headers**
+4. Modify if needed, then click **Send** to rerun
 
 ## History Persistence
 

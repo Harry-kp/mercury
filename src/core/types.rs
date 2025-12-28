@@ -3,14 +3,88 @@
 //! Shared data structures used across the application.
 //!
 //! Core types:
+//! - `HttpMethod`: HTTP request method (GET, POST, etc.)
 //! - `Request`: Represents an HTTP request (method, url, headers, body)
 //! - `Response`: Represents an HTTP response (status, body, timing)
+//! - `JsonRequest`: JSON file format for collection request storage
 //! - `RecentRequest`: A saved recent request with timestamp
 //! - `TimelineEntry`: A history entry combining request + response
 
-use crate::parser::HttpMethod;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::path::PathBuf;
+
+/// HTTP request method
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+#[allow(clippy::upper_case_acronyms)]
+pub enum HttpMethod {
+    #[default]
+    GET,
+    POST,
+    PUT,
+    PATCH,
+    DELETE,
+    HEAD,
+    OPTIONS,
+    CONNECT,
+    TRACE,
+}
+
+impl HttpMethod {
+    pub fn from_str(s: &str) -> Option<Self> {
+        match s.to_uppercase().as_str() {
+            "GET" => Some(HttpMethod::GET),
+            "POST" => Some(HttpMethod::POST),
+            "PUT" => Some(HttpMethod::PUT),
+            "PATCH" => Some(HttpMethod::PATCH),
+            "DELETE" => Some(HttpMethod::DELETE),
+            "HEAD" => Some(HttpMethod::HEAD),
+            "OPTIONS" => Some(HttpMethod::OPTIONS),
+            "CONNECT" => Some(HttpMethod::CONNECT),
+            "TRACE" => Some(HttpMethod::TRACE),
+            _ => None,
+        }
+    }
+
+    pub fn as_str(&self) -> &str {
+        match self {
+            HttpMethod::GET => "GET",
+            HttpMethod::POST => "POST",
+            HttpMethod::PUT => "PUT",
+            HttpMethod::PATCH => "PATCH",
+            HttpMethod::DELETE => "DELETE",
+            HttpMethod::HEAD => "HEAD",
+            HttpMethod::OPTIONS => "OPTIONS",
+            HttpMethod::CONNECT => "CONNECT",
+            HttpMethod::TRACE => "TRACE",
+        }
+    }
+}
+
+/// JSON request file format for collection storage
+///
+/// This struct represents the JSON format used to store API requests
+/// in collection files (.json files in workspace).
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct JsonRequest {
+    pub method: HttpMethod,
+    pub url: String,
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub headers: HashMap<String, String>,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub body: String,
+}
+
+impl Default for JsonRequest {
+    fn default() -> Self {
+        Self {
+            method: HttpMethod::GET,
+            url: String::new(),
+            headers: HashMap::new(),
+            body: String::new(),
+        }
+    }
+}
 
 /// Core HTTP request data
 ///
@@ -32,6 +106,7 @@ pub struct Request {
 pub struct Response {
     pub status: u16,
     pub status_text: String,
+    pub headers: Vec<(String, String)>,
     pub body: String,
     pub content_type: String,
     pub response_type: String,

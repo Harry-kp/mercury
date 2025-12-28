@@ -4,7 +4,7 @@
 
 use super::constants::MAX_RESPONSE_SIZE;
 use super::error::MercuryError;
-use crate::parser::{HttpMethod, HttpRequest};
+use crate::core::types::{HttpMethod, JsonRequest};
 use serde_json::Value;
 use std::time::Instant;
 
@@ -140,7 +140,7 @@ pub fn extract_cookies(headers: &[(String, String)]) -> Vec<String> {
 }
 
 pub fn execute_request(
-    request: &HttpRequest,
+    request: &JsonRequest,
     timeout_secs: u64,
     follow_redirects: bool,
     shared_client: Option<&reqwest::blocking::Client>,
@@ -184,8 +184,8 @@ pub fn execute_request(
         req_builder = req_builder.header(key, value);
     }
 
-    if let Some(body) = &request.body {
-        req_builder = req_builder.body(body.clone());
+    if !request.body.is_empty() {
+        req_builder = req_builder.body(request.body.clone());
     }
 
     let response = req_builder

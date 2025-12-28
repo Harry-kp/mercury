@@ -13,7 +13,7 @@ sidebar_position: 1
 Mercury is a **native desktop API client** built with Rust and GPU-accelerated rendering. Unlike Electron-based tools that feel like slow websites, Mercury responds the instant you click.
 
 Key philosophy:
-- **Files, not databases** — Your requests are plain `.http` files you can version control
+- **Files, not databases** — Your requests are plain `.json` files you can version control
 - **No accounts required** — Your data stays on your machine
 - **Keyboard-first** — Send requests with `⌘+Enter` (Mac) or `Ctrl+Enter` (Windows/Linux)
 - **Live sync** — Edit in VS Code, see changes instantly in Mercury
@@ -152,6 +152,6 @@ Mercury uses a **3-column layout**:
 ## Next Steps
 
 - [Quick Start](/docs/quickstart) — 5-minute guided tour
-- [Working with Requests](/docs/features/requests) — Deep dive into the `.http` format
+- [Working with Requests](/docs/features/requests) — Deep dive into the `.json` format
 - [Environment Variables](/docs/features/environments) — Use `{{variables}}` in your requests
 - [Keyboard Shortcuts](/docs/reference/keyboard-shortcuts) — Master the keyboard-first workflow

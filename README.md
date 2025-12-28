@@ -205,25 +205,27 @@ cargo build --release
 
 ## File Format
 
-Your requests are plain text. Version control friendly. No lock-in.
+Your requests are stored as JSON files. Version control friendly. No lock-in.
 
-```http
-# Simple GET request
-GET https://api.example.com/users
-
-# POST with headers and body
-POST https://api.example.com/users
-Content-Type: application/json
-Authorization: Bearer {{token}}
-
+```json
 {
-  "name": "John Doe",
-  "email": "john@example.com"
+  "method": "GET",
+  "url": "https://api.example.com/users",
+  "headers": {},
+  "body": ""
 }
+```
 
-# Using environment variables
-GET {{base_url}}/users/{{user_id}}
-Authorization: Bearer {{api_key}}
+```json
+{
+  "method": "POST",
+  "url": "https://api.example.com/users",
+  "headers": {
+    "Content-Type": "application/json",
+    "Authorization": "Bearer {{token}}"
+  },
+  "body": "{\"name\": \"John Doe\", \"email\": \"john@example.com\"}"
+}
 ```
 
 Variables like `{{token}}` are loaded from `.env` files in your workspace.

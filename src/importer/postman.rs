@@ -1,6 +1,6 @@
 //! Postman Importer Module
 //!
-//! Converts Postman collection exports to Mercury `.http` format.
+//! Converts Postman collection exports to Mercury JSON format.
 
 use crate::core::error::MercuryError;
 use serde::Deserialize;
@@ -243,40 +243,43 @@ fn reconstruct_url(url: &PostmanUrl) -> String {
 /// The number of requests processed (0 for empty folders, 1 for requests, sum of children for folders)
 ///
 /// # Behavior
-/// - If item contains a request: creates a .http file
+/// - If item contains a request: creates a .json file
 /// - If item contains sub-items: creates a folder and recursively processes children
 /// - If item is empty: returns 0
 fn process_item(item: &PostmanItem, parent_dir: &Path) -> Result<usize, MercuryError> {
     if let Some(request) = &item.request {
-        // This is a request - create .http file
-        let file_name = format!("{}.http", sanitize_filename(&item.name));
+        // This is a request - create JSON file
+        let file_name = format!("{}.json", sanitize_filename(&item.name));
         let file_path = parent_dir.join(&file_name);
 
-        let mut http_content = String::new();
-
-        // Method and URL
-        let url_str = reconstruct_url(&request.url);
-        http_content.push_str(&format!("{} {}\n", request.method, url_str));
-
-        // Headers
+        // Build headers HashMap
+        let mut headers = std::collections::HashMap::new();
         for header in &request.header {
             if !header.disabled {
-                http_content.push_str(&format!("{}: {}\n", header.key, header.value));
+                headers.insert(header.key.clone(), header.value.clone());
             }
         }
 
-        // Body
-        if let Some(body) = &request.body {
-            if let Some(raw) = &body.raw {
-                if !raw.is_empty() {
-                    http_content.push('\n');
-                    http_content.push_str(raw);
-                    http_content.push('\n');
-                }
-            }
-        }
+        // Build body string
+        let body = if let Some(body_obj) = &request.body {
+            body_obj.raw.clone().unwrap_or_default()
+        } else {
+            String::new()
+        };
 
-        fs::write(&file_path, http_content).map_err(|e| MercuryError::FileWrite {
+        // Create JsonRequest
+        let json_request = crate::core::types::JsonRequest {
+            method: crate::core::types::HttpMethod::from_str(&request.method).unwrap_or_default(),
+            url: reconstruct_url(&request.url),
+            headers,
+            body,
+        };
+
+        // Serialize and write
+        let json_content = serde_json::to_string_pretty(&json_request)
+            .map_err(|e| MercuryError::PostmanImportError(e.to_string()))?;
+
+        fs::write(&file_path, json_content).map_err(|e| MercuryError::FileWrite {
             path: file_path.display().to_string(),
             reason: e.to_string(),
         })?;
@@ -301,7 +304,7 @@ fn process_item(item: &PostmanItem, parent_dir: &Path) -> Result<usize, MercuryE
     }
 }
 
-/// Imports a Postman Collection v2.1 file into Mercury's .http file format.
+/// Imports a Postman Collection v2.1 file into Mercury's .json file format.
 ///
 /// # Arguments
 /// * `json_path` - Path to the Postman collection JSON file
@@ -312,7 +315,7 @@ fn process_item(item: &PostmanItem, parent_dir: &Path) -> Result<usize, MercuryE
 ///
 /// # Behavior
 /// - Parses the Postman collection JSON file
-/// - Creates .http files for each request, preserving folder structure
+/// - Creates .json files for each request, preserving folder structure
 /// - Extracts collection variables to a .env file (if any exist)
 /// - Handles nested folders with unlimited depth
 /// - Reconstructs URLs from Postman's object format
@@ -418,12 +421,12 @@ mod tests {
         let (req_count, env_count) = result.unwrap();
         assert_eq!(req_count, 1);
         assert_eq!(env_count, 0);
-
         // Check that file was created
-        let http_file = output_dir.join("test-request.http");
+        let http_file = output_dir.join("test-request.json");
         assert!(http_file.exists());
         let content = fs::read_to_string(http_file).unwrap();
-        assert!(content.contains("GET https://example.com/api"));
+        assert!(content.contains("\"method\": \"GET\""));
+        assert!(content.contains("\"url\": \"https://example.com/api\""));
     }
 
     #[test]
@@ -463,7 +466,7 @@ mod tests {
         // Check that folder and file were created
         let folder = output_dir.join("users");
         assert!(folder.exists());
-        let http_file = folder.join("get-user.http");
+        let http_file = folder.join("get-user.json");
         assert!(http_file.exists());
     }
 
@@ -550,7 +553,7 @@ mod tests {
         assert_eq!(req_count, 1);
 
         // Check nested folder structure
-        let http_file = output_dir.join("api/v1/users/list-users.http");
+        let http_file = output_dir.join("api/v1/users/list-users.json");
         assert!(http_file.exists());
     }
 
@@ -594,13 +597,14 @@ mod tests {
         let result = import_postman_collection(&file_path, &output_dir);
         assert!(result.is_ok());
 
-        let http_file = output_dir.join("create-user.http");
+        let http_file = output_dir.join("create-user.json");
         assert!(http_file.exists());
         let content = fs::read_to_string(http_file).unwrap();
-        assert!(content.contains("POST https://api.example.com/users"));
-        assert!(content.contains("Content-Type: application/json"));
-        assert!(content.contains("Authorization: Bearer {{token}}"));
-        assert!(content.contains("{\"name\": \"John Doe\"}"));
+        assert!(content.contains("\"method\": \"POST\""));
+        assert!(content.contains("\"url\": \"https://api.example.com/users\""));
+        assert!(content.contains("\"Content-Type\": \"application/json\""));
+        assert!(content.contains("\"Authorization\": \"Bearer {{token}}\""));
+        assert!(content.contains("{\\\"name\\\": \\\"John Doe\\\"}"));
     }
 
     #[test]
@@ -682,13 +686,13 @@ mod tests {
         assert_eq!(env_count, 1);
 
         // Verify folder structure
-        assert!(output_dir.join("auth/login.http").exists());
-        assert!(output_dir.join("users/v1/list.http").exists());
-        assert!(output_dir.join("health.http").exists());
+        assert!(output_dir.join("auth/login.json").exists());
+        assert!(output_dir.join("users/v1/list.json").exists());
+        assert!(output_dir.join("health.json").exists());
         assert!(output_dir.join(".env.comprehensive-api").exists());
 
         // Verify URL with query params
-        let list_content = fs::read_to_string(output_dir.join("users/v1/list.http")).unwrap();
+        let list_content = fs::read_to_string(output_dir.join("users/v1/list.json")).unwrap();
         assert!(list_content.contains("?page=1"));
     }
 
@@ -870,9 +874,10 @@ mod tests {
         let result = import_postman_collection(&file_path, &output_dir);
         assert!(result.is_ok());
 
-        let http_file = output_dir.join("request.http");
+        let http_file = output_dir.join("request.json");
         let content = fs::read_to_string(http_file).unwrap();
-        assert!(content.contains("Active: yes"));
-        assert!(!content.contains("Inactive: no"));
+        // JSON format: headers are in a "headers" object
+        assert!(content.contains("\"Active\": \"yes\""));
+        assert!(!content.contains("\"Inactive\""));
     }
 }

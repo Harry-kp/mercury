@@ -6,11 +6,11 @@ sidebar_position: 1
 
 # Working with Requests
 
-> Requests are the core of Mercury. Learn how to create, edit, and manage your HTTP requests using the simple `.http` file format.
+> Requests are the core of Mercury. Learn how to create, edit, and manage your HTTP requests using the simple JSON file format.
 
 ## What is a Request?
 
-In Mercury, every request is a plain text `.http` file. This means:
+In Mercury, every request is a plain text `.json` file. This means:
 - Version control friendly (Git works perfectly)
 - Editable in any text editor
 - Portable across any system
@@ -24,11 +24,11 @@ In Mercury, every request is a plain text `.http` file. This means:
 2. Or press `⌘+N` (Mac) / `Ctrl+N` (Windows/Linux)
 3. Enter a name (e.g., `get-users`)
 
-Mercury creates a `.http` file in your workspace.
+Mercury creates a `.json` file in your workspace.
 
 ### From Your Editor
 
-Create any file with `.http` extension:
+Create any file with `.json` extension:
 
 ```http
 GET https://api.example.com/users
@@ -36,9 +36,9 @@ GET https://api.example.com/users
 
 Mercury detects it automatically thanks to live file watching.
 
-## The .http File Format
+## The .json File Format
 
-Every `.http` file follows this structure:
+Every `.json` file follows this structure:
 
 ```http
 METHOD URL
@@ -241,4 +241,4 @@ Right-click on a request in the sidebar for actions:
 - [Collections](/docs/features/collections) — Organize requests in folders
 - [Environments](/docs/features/environments) — Use variables for different environments
 - [Authentication](/docs/features/auth) — Add Basic Auth or Bearer tokens
-- [File Format Reference](/docs/reference/file-format) — Complete `.http` specification
+- [File Format Reference](/docs/reference/file-format) — Complete `.json` specification

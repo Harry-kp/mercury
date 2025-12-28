@@ -48,7 +48,7 @@ Follow the **Insomnia/Postman/Yaak** approach:
 
 5. **Reference** (`docs/reference/`)
    - Keyboard shortcuts table
-   - File format (.http files)
+   - File format (JSON files)
    - Configuration options
    - Environment variable syntax
 
@@ -74,10 +74,16 @@ Follow the **Insomnia/Postman/Yaak** approach:
 - **Callouts**: Use :::tip, :::warning, :::info
 
 ### Code Examples
-```http
-# Show .http file format (Mercury's native format)
-GET https://api.example.com/users
-Authorization: Bearer {{token}}
+```json
+# Show JSON file format (Mercury's native format)
+{
+  "method": "GET",
+  "url": "https://api.example.com/users",
+  "headers": {
+    "Authorization": "Bearer {{token}}"
+  },
+  "body": ""
+}
 ```
 
 ```toml
@@ -151,13 +157,13 @@ Advanced usage hint
 4. Create PR with before/after note
 
 ### Scenario: Breaking Change
-**Example**: .http file format changes
+**Example**: File format changes (e.g. JSON schema update)
 
 **Your Actions**:
 1. Update `docs/reference/file-format.md`
 2. Create migration guide in `docs/guides/migration-v1-v2.md`
 3. Add warning callout to relevant pages
-4. Update all example .http files
+4. Update all example .json files
 5. FAQ entry: "How do I migrate old files?"
 
 ## First-Time Docusaurus Setup

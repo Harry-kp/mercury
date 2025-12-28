@@ -198,7 +198,7 @@ export default function Home(): ReactNode {
           <p>No proprietary databases. Just plain text you can version control.</p>
           <pre className={styles.codeBlock}>
             <code>
-              <span className={styles.comment}># ~/api-tests/users/get-user.http</span>{'\n\n'}
+              <span className={styles.comment}># ~/api-tests/users/get-user.json</span>{'\n\n'}
               <span className={styles.keyword}>GET</span> <span className={styles.string}>https://api.example.com/users/{'{{user_id}}'}</span>{'\n'}
               <span className={styles.key}>Authorization</span>: <span className={styles.value}>Bearer {'{{token}}'}</span>{'\n'}
               <span className={styles.key}>Accept</span>: <span className={styles.value}>application/json</span>{'\n\n'}

@@ -201,5 +201,5 @@ Mercury watches `.env` files automatically. If changes don't appear:
 
 ## Related Features
 
-- [Requests](/docs/features/requests) — Using variables in `.http` files
+- [Requests](/docs/features/requests) — Using variables in `.json` files
 - [File Format](/docs/reference/file-format) — Complete variable syntax reference
