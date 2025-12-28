@@ -36,8 +36,8 @@ impl MercuryApp {
                     .show(ui, |ui| {
                         ui.set_min_width(ui.available_width());
 
-                        // Recent section (always show if there are temp requests)
-                        if !self.temp_requests.is_empty() {
+                        // Recent section (always show if there are recent requests)
+                        if !self.recent_requests.is_empty() {
                             ui.add_space(Spacing::SM);
                             let header_response = ui.horizontal(|ui| {
                                 ui.add_space(Spacing::XS);
@@ -62,7 +62,7 @@ impl MercuryApp {
                                     },
                                 );
                                 job.append(
-                                    &format!(" ({})", self.temp_requests.len()),
+                                    &format!(" ({})", self.recent_requests.len()),
                                     0.0, // No extra pixels, use the space in the string
                                     egui::TextFormat {
                                         font_id: egui::FontId::proportional(FontSize::XS),
@@ -92,27 +92,28 @@ impl MercuryApp {
                                     String,
                                 )> = None;
 
-                                for (idx, temp) in self.temp_requests.iter().enumerate().rev() {
+                                for (idx, recent) in self.recent_requests.iter().enumerate().rev() {
                                     let row_response = ui.horizontal(|ui| {
                                         ui.add_space(Spacing::MD);
-                                        let method_color = Colors::method_color(&temp.method);
+                                        let method_color =
+                                            Colors::method_color(recent.request.method.as_str());
                                         ui.label(
-                                            egui::RichText::new(&temp.method)
+                                            egui::RichText::new(recent.request.method.as_str())
                                                 .size(FontSize::XS)
                                                 .color(method_color)
                                                 .strong(),
                                         );
 
-                                        let url_display = if temp.url.len()
+                                        let url_display = if recent.request.url.len()
                                             > crate::core::constants::URL_TRUNCATE_LENGTH
                                         {
                                             format!(
                                                 "{}...",
-                                                &temp.url
+                                                &recent.request.url
                                                     [..crate::core::constants::URL_TRUNCATE_LENGTH]
                                             )
                                         } else {
-                                            temp.url.clone()
+                                            recent.request.url.clone()
                                         };
 
                                         ui.label(
@@ -143,38 +144,29 @@ impl MercuryApp {
                                         .on_hover_cursor(egui::CursorIcon::PointingHand);
 
                                     // Show full URL in tooltip if truncated
-                                    let row_response = if temp.url.len()
+                                    let row_response = if recent.request.url.len()
                                         > crate::core::constants::URL_TRUNCATE_LENGTH
                                     {
-                                        row_response.on_hover_text(&temp.url)
+                                        row_response.on_hover_text(&recent.request.url)
                                     } else {
                                         row_response
                                     };
 
                                     if row_response.clicked() {
                                         // Collect data for deferred loading
-                                        let method = match temp.method.as_str() {
-                                            "POST" => crate::parser::HttpMethod::POST,
-                                            "PUT" => crate::parser::HttpMethod::PUT,
-                                            "DELETE" => crate::parser::HttpMethod::DELETE,
-                                            "PATCH" => crate::parser::HttpMethod::PATCH,
-                                            "HEAD" => crate::parser::HttpMethod::HEAD,
-                                            "OPTIONS" => crate::parser::HttpMethod::OPTIONS,
-                                            _ => crate::parser::HttpMethod::GET,
-                                        };
                                         request_to_load = Some((
-                                            method,
-                                            temp.url.clone(),
-                                            temp.headers.clone(),
-                                            temp.body.clone(),
+                                            recent.request.method.clone(),
+                                            recent.request.url.clone(),
+                                            recent.request.headers.clone(),
+                                            recent.request.body.clone(),
                                         ));
                                     }
                                 }
 
                                 // Apply deferred operations after iteration
                                 if let Some(idx) = to_remove {
-                                    self.temp_requests.remove(idx);
-                                    self.save_temp_requests();
+                                    self.recent_requests.remove(idx);
+                                    self.save_recent_requests();
                                 }
                                 if let Some((method, url, headers, body)) = request_to_load {
                                     self.load_request_data(method, url, headers, body);
@@ -370,8 +362,7 @@ impl MercuryApp {
 
         // Clear history outside the borrow
         if should_clear {
-            self.timeline.clear();
-            self.save_history();
+            self.clear_history();
         }
 
         ui.add_space(Spacing::SM);
@@ -388,9 +379,8 @@ impl MercuryApp {
         if self.timeline.is_empty() {
             empty_state(ui, "No requests yet", "Send a request to see it here");
         } else {
-            // Collect data for deferred loading (avoids borrow issues)
-            let mut request_to_load: Option<(crate::parser::HttpMethod, String, String, String)> =
-                None;
+            // Collect timestamp for deferred loading (avoids borrow issues)
+            let mut entry_to_load: Option<f64> = None;
             let mut should_close_timeline = false;
 
             ScrollArea::vertical()
@@ -400,14 +390,14 @@ impl MercuryApp {
                 .show(ui, |ui| {
                     let search = self.timeline_search.to_lowercase();
 
-                    for entry in self.timeline.iter().rev() {
-                        if !search.is_empty() && !entry.url.to_lowercase().contains(&search) {
+                    for summary in self.timeline.iter().rev() {
+                        if !search.is_empty() && !summary.url.to_lowercase().contains(&search) {
                             continue;
                         }
 
-                        let status_color = if entry.status < 300 {
+                        let status_color = if summary.status < 300 {
                             Colors::SUCCESS
-                        } else if entry.status < 400 {
+                        } else if summary.status < 400 {
                             Colors::WARNING
                         } else {
                             Colors::ERROR
@@ -419,18 +409,18 @@ impl MercuryApp {
                             .show(ui, |ui| {
                                 ui.set_min_width(ui.available_width());
                                 ui.horizontal(|ui| {
-                                    method_badge(ui, entry.method.as_str());
+                                    method_badge(ui, summary.method.as_str());
                                     ui.add_space(Spacing::XS);
 
                                     let limit = crate::core::constants::HISTORY_URL_TRUNCATE_LENGTH;
-                                    let url = if entry.url.len() > limit {
+                                    let url = if summary.url.len() > limit {
                                         if limit >= 3 {
-                                            format!("{}...", &entry.url[..limit - 3])
+                                            format!("{}...", &summary.url[..limit - 3])
                                         } else {
-                                            entry.url.chars().take(limit).collect::<String>()
+                                            summary.url.chars().take(limit).collect::<String>()
                                         }
                                     } else {
-                                        entry.url.clone()
+                                        summary.url.clone()
                                     };
                                     ui.label(egui::RichText::new(url).size(FontSize::SM));
 
@@ -440,20 +430,20 @@ impl MercuryApp {
                                             ui.label(
                                                 egui::RichText::new(format!(
                                                     "{}ms",
-                                                    entry.duration_ms
+                                                    summary.duration_ms
                                                 ))
                                                 .size(FontSize::XS)
                                                 .color(Colors::TEXT_MUTED),
                                             );
                                             ui.label(
-                                                egui::RichText::new(entry.status.to_string())
+                                                egui::RichText::new(summary.status.to_string())
                                                     .size(FontSize::XS)
                                                     .color(status_color),
                                             );
                                             ui.add_space(Spacing::SM);
                                             ui.label(
                                                 egui::RichText::new(Self::format_timestamp(
-                                                    entry.timestamp,
+                                                    summary.timestamp,
                                                 ))
                                                 .size(FontSize::XS)
                                                 .color(Colors::TEXT_MUTED),
@@ -467,13 +457,8 @@ impl MercuryApp {
                             .on_hover_cursor(egui::CursorIcon::PointingHand);
 
                         if row_response.clicked() {
-                            // Collect data for deferred loading
-                            request_to_load = Some((
-                                entry.method.clone(),
-                                entry.url.clone(),
-                                entry.request_headers.clone(),
-                                entry.request_body.clone(),
-                            ));
+                            // Capture timestamp for on-demand loading
+                            entry_to_load = Some(summary.timestamp);
                             should_close_timeline = true;
                         }
 
@@ -481,9 +466,46 @@ impl MercuryApp {
                     }
                 });
 
-            // Apply deferred operations after iteration
-            if let Some((method, url, headers, body)) = request_to_load {
-                self.load_request_data(method, url, headers, body);
+            // Load full entry from disk and populate request + response
+            if let Some(timestamp) = entry_to_load {
+                if let Some(entry) = crate::core::persistence::load_history_entry(timestamp) {
+                    // Load request data
+                    self.load_request_data(
+                        entry.request.method,
+                        entry.request.url,
+                        entry.request.headers,
+                        entry.request.body,
+                    );
+
+                    // Create HttpResponse from stored Response for display
+                    use crate::core::request::ResponseType;
+                    let response_type = match entry.response.response_type.as_str() {
+                        "Json" => ResponseType::Json,
+                        "Xml" => ResponseType::Xml,
+                        "Html" => ResponseType::Html,
+                        "PlainText" => ResponseType::PlainText,
+                        "Image" => ResponseType::Image,
+                        "Binary" => ResponseType::Binary,
+                        "TooLarge" => ResponseType::TooLarge,
+                        "LargeText" => ResponseType::LargeText,
+                        "Empty" => ResponseType::Empty,
+                        _ => ResponseType::PlainText,
+                    };
+
+                    self.response = Some(crate::core::HttpResponse {
+                        status: entry.response.status,
+                        status_text: entry.response.status_text,
+                        headers: Vec::new(), // Headers not stored in history
+                        cookies: Vec::new(), // Cookies not stored in history
+                        body: entry.response.body,
+                        raw_bytes: None,
+                        duration_ms: entry.response.duration_ms,
+                        size_bytes: entry.response.size_bytes,
+                        content_type: entry.response.content_type,
+                        response_type,
+                    });
+                    self.formatted_response_cache = None; // Invalidate cache
+                }
             }
             if should_close_timeline {
                 self.show_timeline = false;

@@ -9,7 +9,9 @@
 //! - Session persistence (state, history, recent requests)
 
 use crate::core::persistence;
-use crate::core::types::{AppState, CollectionItem, TempRequest, TimelineEntry};
+use crate::core::types::{
+    AppState, CollectionItem, RecentRequest, Request, Response, TimelineEntry, TimelineSummary,
+};
 use crate::core::{execute_request, HttpResponse, MercuryError};
 use crate::parser::{
     parse_env_file, parse_http_file, substitute_variables, HttpMethod, HttpRequest,
@@ -62,12 +64,12 @@ pub struct MercuryApp {
     pub headers_bulk_edit: bool, // Toggle between key-value and bulk edit
     pub params_bulk_edit: bool,  // Toggle between key-value and bulk edit for params
 
-    pub timeline: Vec<TimelineEntry>,
+    pub timeline: Vec<TimelineSummary>,
     pub timeline_search: String,
     pub show_timeline: bool,
     pub history_loaded: bool,
 
-    pub temp_requests: Vec<TempRequest>,
+    pub recent_requests: Vec<RecentRequest>,
     pub recent_expanded: bool,
 
     pub context_menu_item: Option<PathBuf>,
@@ -168,7 +170,7 @@ impl MercuryApp {
             timeline_search: String::new(),
             show_timeline: false,
             history_loaded: false,
-            temp_requests: persistence::load_temp_requests(),
+            recent_requests: persistence::load_recent_requests(),
             recent_expanded: true,
             context_menu_item: None,
             selected_folder: None,
@@ -277,10 +279,10 @@ impl MercuryApp {
         app
     }
 
-    /// Ensure history (timeline) is loaded from disk if it hasn't been yet
+    /// Ensure history (timeline summaries) is loaded from disk if it hasn't been yet
     pub fn ensure_history_loaded(&mut self) {
         if !self.history_loaded {
-            self.timeline = persistence::load_history();
+            self.timeline = persistence::load_history_summaries();
             self.history_loaded = true;
         }
     }
@@ -722,10 +724,14 @@ impl MercuryApp {
             reason: e.to_string(),
         })?;
 
-        // Remove from temp requests if it exists
-        if let Some(pos) = self.temp_requests.iter().position(|t| t.url == self.url) {
-            self.temp_requests.remove(pos);
-            self.save_temp_requests();
+        // Remove from recent requests if it exists
+        if let Some(pos) = self
+            .recent_requests
+            .iter()
+            .position(|r| r.request.url == self.url)
+        {
+            self.recent_requests.remove(pos);
+            self.save_recent_requests();
         }
 
         self.build_collection_tree();
@@ -956,16 +962,15 @@ impl MercuryApp {
         persistence::save_state(&state);
     }
 
-    /// Save recent/temp requests to disk
-    pub fn save_temp_requests(&self) {
-        persistence::save_temp_requests(&self.temp_requests);
+    /// Save recent requests to disk
+    pub fn save_recent_requests(&self) {
+        persistence::save_recent_requests(&self.recent_requests);
     }
 
-    /// Save timeline history to disk
-    pub fn save_history(&self) {
-        if self.history_loaded {
-            persistence::save_history(&self.timeline);
-        }
+    /// Clear timeline history from both memory and disk
+    pub fn clear_history(&mut self) {
+        self.timeline.clear();
+        persistence::clear_history();
     }
 
     pub fn render_collection_tree(
@@ -1282,59 +1287,57 @@ impl eframe::App for MercuryApp {
                         // Format response type as string for history
                         let response_type_str = format!("{:?}", response.response_type);
 
-                        // Store only a small preview of response body to save memory
-                        // Full response is always viewable by re-running the request
-                        let stored_body = if response.body.len() > 500 {
-                            let preview: String = response.body.chars().take(500).collect();
-                            format!("{}...", preview)
-                        } else {
-                            response.body.clone()
-                        };
-
                         let entry = TimelineEntry {
                             timestamp: time,
-                            method: self.method.clone(),
-                            url: self.url.clone(),
-                            status: response.status,
-                            status_text: response.status_text.clone(),
-                            duration_ms: response.duration_ms,
-                            request_body: self.body_text.clone(),
-                            request_headers: self.headers_text.clone(),
-                            response_body: stored_body,
-                            response_type: response_type_str,
-                            response_size: response.size_bytes,
-                            content_type: response.content_type.clone(),
+                            request: Request {
+                                method: self.method.clone(),
+                                url: self.url.clone(),
+                                headers: self.headers_text.clone(),
+                                body: self.body_text.clone(),
+                            },
+                            response: Response {
+                                status: response.status,
+                                status_text: response.status_text.clone(),
+                                body: response.body.clone(), // Store full response
+                                content_type: response.content_type.clone(),
+                                response_type: response_type_str,
+                                size_bytes: response.size_bytes,
+                                duration_ms: response.duration_ms,
+                            },
                         };
-                        self.timeline.push(entry);
+
+                        // Add summary to timeline for display
+                        self.timeline.push(TimelineSummary::from(&entry));
 
                         if self.timeline.len() > crate::core::constants::MAX_TIMELINE_ENTRIES {
                             self.timeline.remove(0);
                         }
 
-                        // Save history to disk after each request
-                        self.save_history();
+                        // Save full entry to disk
+                        persistence::append_history_entry(&entry);
 
                         // Save to Recent (only if not a saved file AND it's a new unique request)
                         if self.current_file.is_none() && !self.url.is_empty() {
-                            let method_str = format!("{:?}", self.method);
                             // Check if this exact request already exists
-                            let exists = self.temp_requests.iter().any(|t| {
-                                t.url == self.url
-                                    && t.method == method_str
-                                    && t.headers == self.headers_text
-                                    && t.body == self.body_text
+                            let exists = self.recent_requests.iter().any(|r| {
+                                r.request.url == self.url
+                                    && r.request.method == self.method
+                                    && r.request.headers == self.headers_text
+                                    && r.request.body == self.body_text
                             });
 
                             if !exists {
-                                let temp_req = TempRequest {
-                                    method: method_str,
-                                    url: self.url.clone(),
-                                    headers: self.headers_text.clone(),
-                                    body: self.body_text.clone(),
+                                let recent_req = RecentRequest {
+                                    request: Request {
+                                        method: self.method.clone(),
+                                        url: self.url.clone(),
+                                        headers: self.headers_text.clone(),
+                                        body: self.body_text.clone(),
+                                    },
                                     timestamp: time,
                                 };
-                                self.temp_requests.push(temp_req);
-                                self.save_temp_requests();
+                                self.recent_requests.push(recent_req);
+                                self.save_recent_requests();
                             }
                         }
 
@@ -2281,17 +2284,21 @@ mod history_tests {
     fn test_timeline_entry_serialization() {
         let entry = TimelineEntry {
             timestamp: 1702400000.0,
-            method: HttpMethod::GET,
-            url: "https://api.example.com/users".to_string(),
-            status: 200,
-            status_text: "OK".to_string(),
-            duration_ms: 150,
-            request_body: "".to_string(),
-            request_headers: "Content-Type: application/json".to_string(),
-            response_body: r#"{"id": 1}"#.to_string(),
-            response_type: "Json".to_string(),
-            response_size: 10,
-            content_type: "application/json".to_string(),
+            request: Request {
+                method: HttpMethod::GET,
+                url: "https://api.example.com/users".to_string(),
+                headers: "Content-Type: application/json".to_string(),
+                body: "".to_string(),
+            },
+            response: Response {
+                status: 200,
+                status_text: "OK".to_string(),
+                body: r#"{"id": 1}"#.to_string(),
+                content_type: "application/json".to_string(),
+                response_type: "Json".to_string(),
+                size_bytes: 10,
+                duration_ms: 150,
+            },
         };
 
         // Serialize
@@ -2303,10 +2310,10 @@ mod history_tests {
         // Deserialize
         let deserialized: TimelineEntry =
             serde_json::from_str(&json).expect("Failed to deserialize");
-        assert_eq!(deserialized.url, entry.url);
-        assert_eq!(deserialized.status, 200);
-        assert_eq!(deserialized.duration_ms, 150);
-        assert_eq!(deserialized.response_type, "Json");
+        assert_eq!(deserialized.request.url, entry.request.url);
+        assert_eq!(deserialized.response.status, 200);
+        assert_eq!(deserialized.response.duration_ms, 150);
+        assert_eq!(deserialized.response.response_type, "Json");
     }
 
     #[test]
@@ -2314,31 +2321,39 @@ mod history_tests {
         let entries = vec![
             TimelineEntry {
                 timestamp: 1702400000.0,
-                method: HttpMethod::POST,
-                url: "https://api.example.com/login".to_string(),
-                status: 201,
-                status_text: "Created".to_string(),
-                duration_ms: 250,
-                request_body: r#"{"email": "test@test.com"}"#.to_string(),
-                request_headers: "".to_string(),
-                response_body: r#"{"token": "abc123"}"#.to_string(),
-                response_type: "Json".to_string(),
-                response_size: 20,
-                content_type: "application/json".to_string(),
+                request: Request {
+                    method: HttpMethod::POST,
+                    url: "https://api.example.com/login".to_string(),
+                    headers: "".to_string(),
+                    body: r#"{"email": "test@test.com"}"#.to_string(),
+                },
+                response: Response {
+                    status: 201,
+                    status_text: "Created".to_string(),
+                    body: r#"{"token": "abc123"}"#.to_string(),
+                    content_type: "application/json".to_string(),
+                    response_type: "Json".to_string(),
+                    size_bytes: 20,
+                    duration_ms: 250,
+                },
             },
             TimelineEntry {
                 timestamp: 1702400100.0,
-                method: HttpMethod::DELETE,
-                url: "https://api.example.com/users/5".to_string(),
-                status: 204,
-                status_text: "No Content".to_string(),
-                duration_ms: 50,
-                request_body: "".to_string(),
-                request_headers: "Authorization: Bearer token".to_string(),
-                response_body: "".to_string(),
-                response_type: "Empty".to_string(),
-                response_size: 0,
-                content_type: "".to_string(),
+                request: Request {
+                    method: HttpMethod::DELETE,
+                    url: "https://api.example.com/users/5".to_string(),
+                    headers: "Authorization: Bearer token".to_string(),
+                    body: "".to_string(),
+                },
+                response: Response {
+                    status: 204,
+                    status_text: "No Content".to_string(),
+                    body: "".to_string(),
+                    content_type: "".to_string(),
+                    response_type: "Empty".to_string(),
+                    size_bytes: 0,
+                    duration_ms: 50,
+                },
             },
         ];
 
@@ -2347,8 +2362,8 @@ mod history_tests {
             serde_json::from_str(&json).expect("Failed to deserialize");
 
         assert_eq!(deserialized.len(), 2);
-        assert_eq!(deserialized[0].method.as_str(), "POST");
-        assert_eq!(deserialized[1].method.as_str(), "DELETE");
+        assert_eq!(deserialized[0].request.method.as_str(), "POST");
+        assert_eq!(deserialized[1].request.method.as_str(), "DELETE");
     }
 
     #[test]

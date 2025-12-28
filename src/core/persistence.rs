@@ -4,7 +4,7 @@
 //! All data is stored in ~/.mercury/ directory.
 
 use super::constants::{HISTORY_EXPIRY_SECONDS, MAX_TIMELINE_ENTRIES};
-use super::types::{AppState, TempRequest, TimelineEntry};
+use super::types::{AppState, RecentRequest, TimelineEntry};
 use std::fs;
 use std::path::PathBuf;
 
@@ -28,11 +28,11 @@ pub fn get_recent_file_path() -> PathBuf {
     get_config_dir().join("recent.json")
 }
 
-pub fn load_temp_requests() -> Vec<TempRequest> {
+pub fn load_recent_requests() -> Vec<RecentRequest> {
     let path = get_recent_file_path();
     if path.exists() {
         if let Ok(content) = fs::read_to_string(&path) {
-            if let Ok(requests) = serde_json::from_str::<Vec<TempRequest>>(&content) {
+            if let Ok(requests) = serde_json::from_str::<Vec<RecentRequest>>(&content) {
                 return requests;
             }
         }
@@ -40,7 +40,7 @@ pub fn load_temp_requests() -> Vec<TempRequest> {
     Vec::new()
 }
 
-pub fn save_temp_requests(requests: &[TempRequest]) {
+pub fn save_recent_requests(requests: &[RecentRequest]) {
     ensure_config_dir();
     let path = get_recent_file_path();
 
@@ -49,7 +49,7 @@ pub fn save_temp_requests(requests: &[TempRequest]) {
 
     if let Ok(json) = serde_json::to_string_pretty(&to_save) {
         if let Err(e) = fs::write(&path, json) {
-            eprintln!("Failed to save temp history: {}", e);
+            eprintln!("Failed to save recent requests: {}", e);
         }
     }
 }
@@ -87,7 +87,9 @@ pub fn get_history_file_path() -> PathBuf {
     get_config_dir().join("history.json")
 }
 
-pub fn load_history() -> Vec<TimelineEntry> {
+/// Load only lightweight summaries for history list display.
+/// Full entries are loaded on-demand via `load_history_entry()`.
+pub fn load_history_summaries() -> Vec<super::types::TimelineSummary> {
     let path = get_history_file_path();
     if !path.exists() {
         return Vec::new();
@@ -100,18 +102,49 @@ pub fn load_history() -> Vec<TimelineEntry> {
                 .as_secs_f64();
             let cutoff = now - HISTORY_EXPIRY_SECONDS;
             return entries
-                .into_iter()
+                .iter()
                 .filter(|e| e.timestamp > cutoff)
+                .map(super::types::TimelineSummary::from)
                 .collect();
         }
     }
     Vec::new()
 }
 
-pub fn save_history(timeline: &[TimelineEntry]) {
+/// Load a full history entry by timestamp (on-demand when user clicks).
+/// Returns None if entry not found or file read fails.
+pub fn load_history_entry(timestamp: f64) -> Option<TimelineEntry> {
+    let path = get_history_file_path();
+    if !path.exists() {
+        return None;
+    }
+    if let Ok(content) = fs::read_to_string(&path) {
+        if let Ok(entries) = serde_json::from_str::<Vec<TimelineEntry>>(&content) {
+            return entries.into_iter().find(|e| e.timestamp == timestamp);
+        }
+    }
+    None
+}
+/// Append a new history entry to disk.
+/// Loads existing history, adds new entry, enforces limits, and saves.
+pub fn append_history_entry(entry: &TimelineEntry) {
     ensure_config_dir();
     let path = get_history_file_path();
 
+    // Load existing entries
+    let mut entries: Vec<TimelineEntry> = if path.exists() {
+        fs::read_to_string(&path)
+            .ok()
+            .and_then(|content| serde_json::from_str(&content).ok())
+            .unwrap_or_default()
+    } else {
+        Vec::new()
+    };
+
+    // Add new entry
+    entries.push(entry.clone());
+
+    // Apply expiry and limits
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap()
@@ -119,18 +152,27 @@ pub fn save_history(timeline: &[TimelineEntry]) {
     let cutoff = now - HISTORY_EXPIRY_SECONDS;
 
     // Filter by expiry, take most recent entries, preserve chronological order
-    let mut to_save: Vec<_> = timeline
-        .iter()
+    let mut to_save: Vec<_> = entries
+        .into_iter()
         .filter(|e| e.timestamp > cutoff)
-        .rev()
-        .take(MAX_TIMELINE_ENTRIES)
-        .cloned()
         .collect();
-    to_save.reverse();
+
+    // Keep only the most recent MAX_TIMELINE_ENTRIES
+    if to_save.len() > MAX_TIMELINE_ENTRIES {
+        to_save = to_save.split_off(to_save.len() - MAX_TIMELINE_ENTRIES);
+    }
 
     if let Ok(json) = serde_json::to_string_pretty(&to_save) {
         if let Err(e) = fs::write(&path, json) {
             eprintln!("Failed to save history: {}", e);
         }
+    }
+}
+
+/// Clear all history entries from disk.
+pub fn clear_history() {
+    let path = get_history_file_path();
+    if path.exists() {
+        let _ = fs::remove_file(&path);
     }
 }
