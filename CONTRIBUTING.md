@@ -79,15 +79,16 @@ Before contributing, ask yourself:
 ```
 mercury/
 ├── src/
+│   ├── core/                # Core types and logic
+│   ├── parser/              # File parsers (.json, .env, curl)
+│   ├── ui/                  # UI components and logic (egui)
+│   ├── importer/            # Postman/Insomnia importers
 │   ├── main.rs              # Entry point
-│   ├── app.rs               # Main application UI
-│   ├── request_file.rs      # Parse .json files
-│   ├── request_executor.rs  # Execute HTTP requests
-│   └── env_parser.rs        # Parse .env files
+│   └── utils.rs             # Utility functions
 ├── example-project/         # Example API project
+├── website/                 # Documentation website (Docusaurus)
 ├── PRD.md                   # Product requirements
-├── README.md                # Main documentation
-└── QUICKSTART.md            # Getting started guide
+└── README.md                # Main documentation
 ```
 
 ## Code Style
