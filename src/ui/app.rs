@@ -10,11 +10,12 @@
 
 use crate::core::persistence;
 use crate::core::types::{
-    AppState, CollectionItem, RecentRequest, Request, Response, TimelineEntry, TimelineSummary,
+    AppState, CollectionItem, JsonRequest, RecentRequest, Request, Response, TimelineEntry,
+    TimelineSummary,
 };
 use crate::core::{execute_request, HttpResponse, MercuryError};
 use crate::parser::{
-    parse_env_file, parse_http_file, substitute_variables, HttpMethod, HttpRequest,
+    parse_env_file, parse_request_file, serialize_request_file, substitute_variables, HttpMethod,
 };
 use crate::ui::components::{menu_button, modal_input_field, popup_menu, show_modal};
 use crate::ui::icons::Icons;
@@ -328,23 +329,6 @@ impl MercuryApp {
 
         // Start file system watcher for external changes
         self.start_file_watcher();
-
-        // Scan for .http files (backward compatibility)
-        for entry in WalkDir::new(&path).into_iter().filter_map(|e| e.ok()) {
-            let path = entry.path();
-            if path.is_file() && path.extension().and_then(|s| s.to_str()) == Some("http") {
-                // Try to parse the file to get the method
-                let _method = if let Ok(content) = fs::read_to_string(path) {
-                    if let Ok(request) = parse_http_file(&content) {
-                        Some(request.method)
-                    } else {
-                        None
-                    }
-                } else {
-                    None
-                };
-            }
-        }
     }
 
     fn load_file(&mut self, path: &Path) {
@@ -354,7 +338,7 @@ impl MercuryApp {
         }
 
         if let Ok(content) = fs::read_to_string(path) {
-            if let Ok(request) = parse_http_file(&content) {
+            if let Ok(request) = parse_request_file(&content) {
                 self.current_file = Some(path.to_path_buf());
                 self.method = request.method;
                 self.url = request.url;
@@ -367,7 +351,7 @@ impl MercuryApp {
                     .collect::<Vec<_>>()
                     .join("\n");
 
-                self.body_text = request.body.unwrap_or_default();
+                self.body_text = request.body;
                 self.response = None;
 
                 // Sync query params from URL
@@ -380,24 +364,28 @@ impl MercuryApp {
         }
     }
 
-    /// Get the current request content as an .http file string
+    /// Get the current request content as a JSON file string
     fn get_current_content(&self) -> String {
-        let mut content = format!("{} {}", self.method.as_str(), self.url);
-
-        // headers_text is the single source of truth and already contains Authorization if set
-        let headers = self.headers_text.clone();
-
-        if !headers.is_empty() {
-            content.push('\n');
-            content.push_str(&headers);
+        // Parse headers text into HashMap
+        let mut headers = std::collections::HashMap::new();
+        for line in self.headers_text.lines() {
+            let line = line.trim();
+            if line.is_empty() || line.starts_with('#') {
+                continue;
+            }
+            if let Some((key, value)) = line.split_once(':') {
+                headers.insert(key.trim().to_string(), value.trim().to_string());
+            }
         }
 
-        if !self.body_text.is_empty() {
-            content.push_str("\n\n");
-            content.push_str(&self.body_text);
-        }
+        let request = JsonRequest {
+            method: self.method.clone(),
+            url: self.url.clone(),
+            headers,
+            body: self.body_text.clone(),
+        };
 
-        content
+        serialize_request_file(&request).unwrap_or_default()
     }
 
     /// Save current file to disk
@@ -665,9 +653,9 @@ impl MercuryApp {
                         expanded: is_expanded || self.expanded_folders.is_empty(),
                         children,
                     });
-                } else if path.extension().and_then(|s| s.to_str()) == Some("http") {
+                } else if path.extension().and_then(|s| s.to_str()) == Some("json") {
                     let method = if let Ok(content) = fs::read_to_string(&path) {
-                        parse_http_file(&content).ok().map(|r| r.method)
+                        parse_request_file(&content).ok().map(|r| r.method)
                     } else {
                         None
                     };
@@ -687,10 +675,10 @@ impl MercuryApp {
     }
 
     fn create_new_request(&mut self, parent_path: &Path, name: &str) -> Result<(), MercuryError> {
-        let file_name = if name.ends_with(".http") {
+        let file_name = if name.ends_with(".json") {
             name.to_string()
         } else {
-            format!("{}.http", name)
+            format!("{}.json", name)
         };
 
         let file_path = parent_path.join(&file_name);
@@ -702,22 +690,8 @@ impl MercuryApp {
             });
         }
 
-        // Use current form content instead of template
-        let content = format!(
-            "{:?} {}\n{}\n{}",
-            self.method,
-            self.url,
-            if !self.headers_text.is_empty() {
-                format!("\n{}", self.headers_text)
-            } else {
-                String::new()
-            },
-            if !self.body_text.is_empty() {
-                format!("\n{}", self.body_text)
-            } else {
-                String::new()
-            }
-        );
+        // Use current form content as JSON
+        let content = self.get_current_content();
 
         fs::write(&file_path, content).map_err(|e| MercuryError::FileWrite {
             path: file_path.display().to_string(),
@@ -882,11 +856,11 @@ impl MercuryApp {
             }
         }
 
-        let request = HttpRequest {
+        let request = JsonRequest {
             method: self.method.clone(),
             url,
             headers,
-            body: if body.is_empty() { None } else { Some(body) },
+            body,
         };
 
         // Execute async request in background thread
@@ -1088,8 +1062,10 @@ impl MercuryApp {
                         ui.add_space(crate::theme::Spacing::XS);
 
                         let is_current = self.current_file.as_ref() == Some(path);
+                        // Strip .json extension for cleaner display
+                        let display_name = name.strip_suffix(".json").unwrap_or(name);
                         let mut name_text =
-                            egui::RichText::new(name.as_str()).size(crate::theme::FontSize::SM);
+                            egui::RichText::new(display_name).size(crate::theme::FontSize::SM);
                         if is_current {
                             name_text = name_text
                                 .strong()
@@ -1298,6 +1274,7 @@ impl eframe::App for MercuryApp {
                             response: Response {
                                 status: response.status,
                                 status_text: response.status_text.clone(),
+                                headers: response.headers.clone(),
                                 body: response.body.clone(), // Store full response
                                 content_type: response.content_type.clone(),
                                 response_type: response_type_str,
@@ -2293,6 +2270,7 @@ mod history_tests {
             response: Response {
                 status: 200,
                 status_text: "OK".to_string(),
+                headers: vec![("Content-Type".to_string(), "application/json".to_string())],
                 body: r#"{"id": 1}"#.to_string(),
                 content_type: "application/json".to_string(),
                 response_type: "Json".to_string(),
@@ -2330,6 +2308,7 @@ mod history_tests {
                 response: Response {
                     status: 201,
                     status_text: "Created".to_string(),
+                    headers: vec![],
                     body: r#"{"token": "abc123"}"#.to_string(),
                     content_type: "application/json".to_string(),
                     response_type: "Json".to_string(),
@@ -2348,6 +2327,7 @@ mod history_tests {
                 response: Response {
                     status: 204,
                     status_text: "No Content".to_string(),
+                    headers: vec![],
                     body: "".to_string(),
                     content_type: "".to_string(),
                     response_type: "Empty".to_string(),

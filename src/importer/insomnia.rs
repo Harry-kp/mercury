@@ -1,6 +1,6 @@
 //! Insomnia Importer Module
 //!
-//! Converts Insomnia export files (JSON/YAML) to Mercury `.http` format.
+//! Converts Insomnia export files (JSON/YAML) to Mercury JSON format.
 
 use crate::core::error::MercuryError;
 use serde::Deserialize;
@@ -130,7 +130,7 @@ pub fn import_insomnia_collection(
         }
     }
 
-    // Convert requests to .http files
+    // Convert requests to JSON files
     let mut request_count = 0;
     for resource in &export.resources {
         if let InsomniaResource::Request(request) = resource {
@@ -147,33 +147,38 @@ pub fn import_insomnia_collection(
                 reason: e.to_string(),
             })?;
 
-            let file_name = format!("{}.http", request.name.to_lowercase().replace(' ', "-"));
+            let file_name = format!("{}.json", request.name.to_lowercase().replace(' ', "-"));
             let file_path = folder_path.join(&file_name);
 
-            let mut http_content = String::new();
-
-            // Method and URL
-            http_content.push_str(&format!("{} {}\n", request.method, request.url));
-
-            // Headers
+            // Build headers HashMap
+            let mut headers = HashMap::new();
             for header in &request.headers {
                 if !header.disabled {
-                    http_content.push_str(&format!("{}: {}\n", header.name, header.value));
+                    headers.insert(header.name.clone(), header.value.clone());
                 }
             }
 
-            // Body
-            if let Some(body) = &request.body {
-                if let Some(text) = &body.text {
-                    if !text.is_empty() {
-                        http_content.push('\n');
-                        http_content.push_str(text);
-                        http_content.push('\n');
-                    }
-                }
-            }
+            // Build body string
+            let body = if let Some(body_obj) = &request.body {
+                body_obj.text.clone().unwrap_or_default()
+            } else {
+                String::new()
+            };
 
-            fs::write(&file_path, http_content).map_err(|e| MercuryError::FileWrite {
+            // Create JsonRequest
+            let json_request = crate::core::types::JsonRequest {
+                method: crate::core::types::HttpMethod::from_str(&request.method)
+                    .unwrap_or_default(),
+                url: request.url.clone(),
+                headers,
+                body,
+            };
+
+            // Serialize and write
+            let json_content = serde_json::to_string_pretty(&json_request)
+                .map_err(|e| MercuryError::InsomniaImportError(e.to_string()))?;
+
+            fs::write(&file_path, json_content).map_err(|e| MercuryError::FileWrite {
                 path: file_path.display().to_string(),
                 reason: e.to_string(),
             })?;

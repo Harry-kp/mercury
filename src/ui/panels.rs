@@ -495,7 +495,7 @@ impl MercuryApp {
                     self.response = Some(crate::core::HttpResponse {
                         status: entry.response.status,
                         status_text: entry.response.status_text,
-                        headers: Vec::new(), // Headers not stored in history
+                        headers: entry.response.headers,
                         cookies: Vec::new(), // Cookies not stored in history
                         body: entry.response.body,
                         raw_bytes: None,
