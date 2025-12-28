@@ -145,7 +145,7 @@ const config: Config = {
           title: 'Reference',
           items: [
             {
-              label: 'File Format (.http)',
+              label: 'File Format (JSON)',
               to: '/docs/reference/file-format',
             },
             {
@@ -177,7 +177,7 @@ const config: Config = {
     prism: {
       theme: prismThemes.github,
       darkTheme: prismThemes.dracula,
-      additionalLanguages: ['bash', 'http', 'json', 'toml'],
+      additionalLanguages: ['bash', 'json', 'toml'],
     },
   } satisfies Preset.ThemeConfig,
 };
