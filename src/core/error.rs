@@ -62,7 +62,7 @@ pub enum MercuryError {
     // =========================================================================
     // Parse Errors
     // =========================================================================
-    /// Invalid .http file format
+    /// Invalid JSON request file format
     #[error("Invalid HTTP file: {0}")]
     HttpParseError(String),
 
@@ -264,15 +264,14 @@ mod tests {
         assert_eq!(err.to_string(), "Connection failed: refused");
     }
 
-    #[test]
     fn test_file_error_display() {
         let err = MercuryError::FileRead {
-            path: "/tmp/test.http".to_string(),
+            path: "/tmp/test.json".to_string(),
             reason: "not found".to_string(),
         };
         assert_eq!(
             err.to_string(),
-            "Failed to read file '/tmp/test.http': not found"
+            "Failed to read file '/tmp/test.json': not found"
         );
     }
 
@@ -280,9 +279,9 @@ mod tests {
     fn test_already_exists_display() {
         let err = MercuryError::AlreadyExists {
             kind: "File".to_string(),
-            name: "test.http".to_string(),
+            name: "test.json".to_string(),
         };
-        assert_eq!(err.to_string(), "File already exists: test.http");
+        assert_eq!(err.to_string(), "File already exists: test.json");
     }
 
     #[test]

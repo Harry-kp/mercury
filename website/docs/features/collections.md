@@ -10,21 +10,21 @@ sidebar_position: 2
 
 ## What is a Collection?
 
-In Mercury, a **collection** is simply a folder containing `.http` files. There's no special format or database — just your file system.
+In Mercury, a **collection** is simply a folder containing `.json` files. There's no special format or database — just your file system.
 
 ```
 my-api-project/         ← Workspace root (collection)
 ├── .env                ← Environment variables
 ├── auth/               ← Folder for auth-related requests
-│   ├── login.http
-│   └── register.http
+│   ├── login.json
+│   └── register.json
 ├── users/              ← Folder for user endpoints
-│   ├── get-user.http
-│   ├── list-users.http
-│   └── update-user.http
+│   ├── get-user.json
+│   ├── list-users.json
+│   └── update-user.json
 └── products/
-    ├── list.http
-    └── create.http
+    ├── list.json
+    └── create.json
 ```
 
 ## Opening a Workspace
@@ -33,9 +33,9 @@ my-api-project/         ← Workspace root (collection)
 2. Click **Open Folder** or press `⌘+O`
 3. Select any folder — this becomes your workspace
 
-Mercury scans recursively for all `.http` files and displays them in the sidebar.
+Mercury scans recursively for all `.json` files and displays them in the sidebar.
 
-![Workspace sidebar - Replace with: Screenshot showing sidebar with folder tree and .http files](/img/screenshots/placeholder.png)
+![Workspace sidebar - Replace with: Screenshot showing sidebar with folder tree and .json files](/img/screenshots/placeholder.png)
 
 ## Creating Folders
 
@@ -51,7 +51,7 @@ Just create a folder in your workspace directory. Mercury detects it immediately
 
 ```bash
 mkdir users
-touch users/get-user.http
+touch users/get-user.json
 ```
 
 ## Creating Requests in Folders
@@ -60,7 +60,7 @@ touch users/get-user.http
 2. Select **New Request**
 3. Enter the request name
 
-The `.http` file is created inside that folder.
+The `.json` file is created inside that folder.
 
 ## Folder Structure Best Practices
 
@@ -112,7 +112,7 @@ Drag a request to a different folder to move it.
 
 Rename the file in your file system:
 ```bash
-mv users/old-request.http products/new-request.http
+mv users/old-request.json products/new-request.json
 ```
 
 Mercury updates automatically.
@@ -175,6 +175,6 @@ Press `⌘+K` (Mac) or `Ctrl+K` (Windows/Linux) to open quick search:
 
 ## Related Features
 
-- [Requests](/docs/features/requests) — Working with `.http` files
+- [Requests](/docs/features/requests) — Working with `.json` files
 - [Environments](/docs/features/environments) — Manage environment variables
 - [Import/Export](/docs/features/import-export) — Import from Postman or Insomnia

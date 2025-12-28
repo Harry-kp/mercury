@@ -81,7 +81,7 @@ mercury/
 ├── src/
 │   ├── main.rs              # Entry point
 │   ├── app.rs               # Main application UI
-│   ├── http_parser.rs       # Parse .http files
+│   ├── http_parser.rs       # Parse .json files
 │   ├── request_executor.rs  # Execute HTTP requests
 │   └── env_parser.rs        # Parse .env files
 ├── example-project/         # Example API project
