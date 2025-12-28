@@ -264,6 +264,7 @@ mod tests {
         assert_eq!(err.to_string(), "Connection failed: refused");
     }
 
+    #[test]
     fn test_file_error_display() {
         let err = MercuryError::FileRead {
             path: "/tmp/test.json".to_string(),
