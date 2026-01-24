@@ -1,6 +1,6 @@
 [package]
 name = "mercury"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 description = "A fast, minimal API client for developers"
 authors = ["Harshit Chaudhary <harrykumar.kp@gmail.com>"]
@@ -47,10 +47,12 @@ lto = "thin"
 [package.metadata.bundle]
 name = "Mercury"
 identifier = "com.mercury.app"
-icon = ["assets/icon.icns"]
+icon = ["assets/icons/icon.icns"]
 category = "Developer Tool"
 short_description = "A fast, minimal API client"
 long_description = """
 Mercury is a fast, minimal API client for developers who value simplicity.
 Built with Rust for native performance. No bloat, no subscriptions, no nonsense.
 """
+copyright = "Copyright (c) 2024 Harshit Chaudhary. MIT License."
+osx_minimum_system_version = "12.0"

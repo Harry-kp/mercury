@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/icon.png" alt="Mercury" width="80" height="80">
+  <img src="assets/icons/icon.png" alt="Mercury" width="80" height="80">
 </p>
 
 <h1 align="center">Mercury</h1>
@@ -19,6 +19,7 @@
 
 <p align="center">
   <a href="https://github.com/Harry-kp/mercury/releases"><img src="https://img.shields.io/github/v/release/Harry-kp/mercury?style=flat-square&color=00ff88" alt="Release"></a>
+  <img src="https://img.shields.io/badge/homebrew-cask-orange?style=flat-square&logo=homebrew" alt="Homebrew Cask">
   <a href="https://github.com/Harry-kp/mercury/actions"><img src="https://img.shields.io/github/actions/workflow/status/Harry-kp/mercury/ci.yml?branch=master&style=flat-square&label=build" alt="Build Status"></a>
   <a href="https://github.com/Harry-kp/mercury/blob/master/LICENSE"><img src="https://img.shields.io/github/license/Harry-kp/mercury?style=flat-square" alt="License"></a>
   <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-blue?style=flat-square" alt="Platform">
@@ -66,7 +67,17 @@ Mercury is built on principles, not features:
 
 ## Installation
 
-### ⚡ Fastest Way (30 seconds)
+### 🍺 macOS (Homebrew) - Recommended
+
+```bash
+brew install --cask harry-kp/tap/mercury
+```
+
+Then launch from **Applications** or run `mercury` in terminal.
+
+---
+
+### ⚡ Alternative: Shell Installer
 
 **macOS / Linux:**
 ```bash

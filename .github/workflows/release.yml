@@ -278,10 +278,59 @@ jobs:
 
           gh release create "${{ needs.plan.outputs.tag }}" --target "$RELEASE_COMMIT" $PRERELEASE_FLAG --title "$ANNOUNCEMENT_TITLE" --notes-file "$RUNNER_TEMP/notes.txt" artifacts/*
 
+  # Build macOS .app bundle for Homebrew Cask
+  build-macos-app-bundle:
+    needs:
+      - plan
+      - host
+    if: ${{ needs.host.result == 'success' && needs.plan.outputs.publishing == 'true' }}
+    runs-on: "macos-14" # Apple Silicon runner
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: recursive
+      
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+      
+      - name: Install cargo-bundle
+        run: cargo install cargo-bundle
+      
+      - name: Build .app bundle
+        run: |
+          cargo bundle --release
+          cd target/release/bundle/osx
+          tar -czf Mercury-${{ needs.plan.outputs.tag }}-universal-apple-darwin.tar.gz Mercury.app
+      
+      - name: Calculate SHA256
+        id: sha
+        run: |
+          cd target/release/bundle/osx
+          SHA=$(shasum -a 256 Mercury-${{ needs.plan.outputs.tag }}-universal-apple-darwin.tar.gz | cut -d' ' -f1)
+          echo "sha256=$SHA" >> "$GITHUB_OUTPUT"
+          echo "SHA256: $SHA"
+          echo "$SHA" > Mercury-${{ needs.plan.outputs.tag }}-universal-apple-darwin.tar.gz.sha256
+      
+      - name: Upload to GitHub Release
+        run: |
+          cd target/release/bundle/osx
+          gh release upload "${{ needs.plan.outputs.tag }}" \
+            Mercury-${{ needs.plan.outputs.tag }}-universal-apple-darwin.tar.gz \
+            Mercury-${{ needs.plan.outputs.tag }}-universal-apple-darwin.tar.gz.sha256 \
+            --clobber
+      
+      - name: Output SHA256 for Homebrew
+        run: |
+          echo "::notice title=Homebrew SHA256::Update homebrew-tap/Casks/mercury.rb with sha256: ${{ steps.sha.outputs.sha256 }}"
+
   announce:
     needs:
       - plan
       - host
+      - build-macos-app-bundle
     # use "always() && ..." to allow us to wait for all publish jobs while
     # still allowing individual publish jobs to skip themselves (for prereleases).
     # "host" however must run to completion, no skipping allowed!

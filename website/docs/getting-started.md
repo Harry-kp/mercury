@@ -35,7 +35,21 @@ Key philosophy:
 
 ## Installation
 
-### ⚡ Fastest Way (30 seconds)
+### 🍺 macOS (Homebrew) - Recommended
+
+```bash
+brew install --cask harry-kp/tap/mercury
+```
+
+Then launch from **Applications** or run `mercury` in terminal.
+
+:::tip First time using Mercury?
+After installation, search "Mercury" in Spotlight (⌘ Space) to launch the app.
+:::
+
+---
+
+### ⚡ Alternative: Shell Installer
 
 **macOS / Linux:**
 ```bash
