@@ -93,6 +93,7 @@ pub struct MercuryApp {
     pub should_open_postman_import: bool,
     pub should_focus_search: bool,
     pub should_focus_url_bar: bool,
+    pub url_bar_had_focus: bool,
     pub should_copy_curl: bool,
 
     pub last_action_message: Option<(String, f64, bool)>,
@@ -192,6 +193,7 @@ impl MercuryApp {
             should_open_postman_import: false,
             should_focus_search: false,
             should_focus_url_bar: false,
+            url_bar_had_focus: false,
             should_copy_curl: false,
             last_action_message: None,
             copied_feedback_until: 0.0,
@@ -1247,6 +1249,7 @@ impl eframe::App for MercuryApp {
         // Escape cancels running request
         if self.ongoing_request.is_some() && ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
             self.cancel_request();
+            self.url_bar_had_focus = false;
             ctx.request_repaint();
         }
 
@@ -1349,6 +1352,11 @@ impl eframe::App for MercuryApp {
                         ctx.request_repaint();
                     }
                 }
+
+                if self.url_bar_had_focus {
+                    self.should_focus_url_bar = true;
+                    self.url_bar_had_focus = false;
+                }
             } // matched
         } // received
 
@@ -1405,6 +1413,7 @@ impl eframe::App for MercuryApp {
 
         if self.should_execute_request {
             self.should_execute_request = false;
+            self.url_bar_had_focus = ctx.memory(|m| m.has_focus(egui::Id::new("url_bar")));
             self.execute_request(ctx);
         }
 
