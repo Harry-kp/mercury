@@ -514,6 +514,7 @@ impl MercuryApp {
                 path,
                 expanded,
                 children,
+                loaded: _,
                 ..
             } = item
             {
@@ -622,7 +623,9 @@ impl MercuryApp {
     }
 
     #[allow(clippy::only_used_in_recursion)]
-    fn scan_directory(&self, dir: &Path, workspace_root: &Path) -> Vec<CollectionItem> {
+    /// Scan a single directory level without recursing into subdirectories.
+    /// Subdirectories are scanned lazily when the user expands them.
+    fn scan_directory(&self, dir: &Path, _workspace_root: &Path) -> Vec<CollectionItem> {
         let mut folders = Vec::new();
         let mut requests = Vec::new();
 
@@ -644,14 +647,23 @@ impl MercuryApp {
                 }
 
                 if path.is_dir() {
-                    let children = self.scan_directory(&path, workspace_root);
-                    // Check saved state; expand all folders on first load (when expanded_folders is empty)
                     let is_expanded = self.expanded_folders.contains(&path);
+                    let first_load = self.expanded_folders.is_empty();
+                    let should_expand = is_expanded || first_load;
+
+                    // Only scan children if the folder should be expanded
+                    let (children, loaded) = if should_expand {
+                        (self.scan_directory(&path, _workspace_root), true)
+                    } else {
+                        (Vec::new(), false)
+                    };
+
                     folders.push(CollectionItem::Folder {
                         name,
                         path: path.clone(),
-                        expanded: is_expanded || self.expanded_folders.is_empty(),
+                        expanded: should_expand,
                         children,
+                        loaded,
                     });
                 } else if path.extension().and_then(|s| s.to_str()) == Some("json") {
                     let method = if let Ok(content) = fs::read_to_string(&path) {
@@ -672,6 +684,11 @@ impl MercuryApp {
         // Combine folders first, then requests
         folders.extend(requests);
         folders
+    }
+
+    /// Load children of a folder on demand when user expands it
+    fn load_folder_children(&self, folder_path: &Path) -> Vec<CollectionItem> {
+        self.scan_directory(folder_path, folder_path)
     }
 
     fn create_new_request(&mut self, parent_path: &Path, name: &str) -> Result<(), MercuryError> {
@@ -962,6 +979,7 @@ impl MercuryApp {
                     path,
                     expanded,
                     children,
+                    loaded,
                 } => {
                     // If searching, check if any child matches
                     let folder_matches = if search.is_empty() {
@@ -1024,6 +1042,12 @@ impl MercuryApp {
                     if folder_response.clicked() {
                         *expanded = !*expanded;
                         self.selected_folder = Some(path.clone());
+
+                        // Lazy load: scan children on first expand
+                        if *expanded && !*loaded {
+                            *children = self.load_folder_children(path);
+                            *loaded = true;
+                        }
                     }
 
                     folder_response.context_menu(|ui| {
