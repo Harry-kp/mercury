@@ -622,7 +622,6 @@ impl MercuryApp {
         }
     }
 
-    #[allow(clippy::only_used_in_recursion)]
     fn scan_directory(&self, dir: &Path, _workspace_root: &Path) -> Vec<CollectionItem> {
         let mut folders = Vec::new();
         let mut requests = Vec::new();
@@ -646,11 +645,8 @@ impl MercuryApp {
 
                 if path.is_dir() {
                     let is_expanded = self.expanded_folders.contains(&path);
-                    let first_load = self.expanded_folders.is_empty();
-                    let should_expand = is_expanded || first_load;
 
-                    // Only scan children if the folder should be expanded
-                    let (children, loaded) = if should_expand {
+                    let (children, loaded) = if is_expanded {
                         (self.scan_directory(&path, _workspace_root), true)
                     } else {
                         (Vec::new(), false)
@@ -659,7 +655,7 @@ impl MercuryApp {
                     folders.push(CollectionItem::Folder {
                         name,
                         path: path.clone(),
-                        expanded: should_expand,
+                        expanded: is_expanded,
                         children,
                         loaded,
                     });
