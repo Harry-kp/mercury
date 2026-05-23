@@ -144,6 +144,7 @@ pub enum CollectionItem {
         path: PathBuf,
         expanded: bool,
         children: Vec<CollectionItem>,
+        loaded: bool,
     },
     Request {
         name: String,

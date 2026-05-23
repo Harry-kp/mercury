@@ -2,6 +2,8 @@
 //!
 //! Entry point and application initialization.
 
+#![allow(clippy::collapsible_match)]
+
 mod core;
 mod importer;
 mod parser;
