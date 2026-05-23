@@ -497,7 +497,7 @@ impl MercuryApp {
             self.save_expanded_state(&old_tree);
 
             // Rebuild tree
-            self.collection_tree = self.scan_directory(&workspace, &workspace);
+            self.collection_tree = self.scan_directory(&workspace);
 
             self.workspace_name = workspace
                 .file_name()
@@ -622,7 +622,7 @@ impl MercuryApp {
         }
     }
 
-    fn scan_directory(&self, dir: &Path, _workspace_root: &Path) -> Vec<CollectionItem> {
+    fn scan_directory(&self, dir: &Path) -> Vec<CollectionItem> {
         let mut folders = Vec::new();
         let mut requests = Vec::new();
 
@@ -647,7 +647,7 @@ impl MercuryApp {
                     let is_expanded = self.expanded_folders.contains(&path);
 
                     let (children, loaded) = if is_expanded {
-                        (self.scan_directory(&path, _workspace_root), true)
+                        (self.scan_directory(&path), true)
                     } else {
                         (Vec::new(), false)
                     };
@@ -681,7 +681,7 @@ impl MercuryApp {
     }
 
     fn load_folder_children(&self, folder_path: &Path) -> Vec<CollectionItem> {
-        self.scan_directory(folder_path, folder_path)
+        self.scan_directory(folder_path)
     }
 
     fn create_new_request(&mut self, parent_path: &Path, name: &str) -> Result<(), MercuryError> {
