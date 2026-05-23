@@ -798,7 +798,6 @@ fn render_mode_toggle(ui: &mut Ui, top_right: egui::Pos2, bulk_edit_mode: &mut b
 }
 
 /// Render JSON with syntax highlighting
-#[allow(clippy::collapsible_match)]
 pub fn json_syntax_highlight(ui: &mut Ui, json: &str) {
     use egui::text::{LayoutJob, TextFormat};
 
