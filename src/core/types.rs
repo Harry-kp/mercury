@@ -144,8 +144,6 @@ pub enum CollectionItem {
         path: PathBuf,
         expanded: bool,
         children: Vec<CollectionItem>,
-        /// Whether children have been scanned from disk.
-        /// Enables lazy loading — subdirectories are only scanned when expanded.
         loaded: bool,
     },
     Request {

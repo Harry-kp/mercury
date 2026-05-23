@@ -623,8 +623,6 @@ impl MercuryApp {
     }
 
     #[allow(clippy::only_used_in_recursion)]
-    /// Scan a single directory level without recursing into subdirectories.
-    /// Subdirectories are scanned lazily when the user expands them.
     fn scan_directory(&self, dir: &Path, _workspace_root: &Path) -> Vec<CollectionItem> {
         let mut folders = Vec::new();
         let mut requests = Vec::new();
@@ -686,7 +684,6 @@ impl MercuryApp {
         folders
     }
 
-    /// Load children of a folder on demand when user expands it
     fn load_folder_children(&self, folder_path: &Path) -> Vec<CollectionItem> {
         self.scan_directory(folder_path, folder_path)
     }
@@ -1043,7 +1040,6 @@ impl MercuryApp {
                         *expanded = !*expanded;
                         self.selected_folder = Some(path.clone());
 
-                        // Lazy load: scan children on first expand
                         if *expanded && !*loaded {
                             *children = self.load_folder_children(path);
                             *loaded = true;
