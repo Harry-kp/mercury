@@ -15,6 +15,7 @@ pub struct CurlRequest {
 }
 
 /// Parse a cURL command into a structured request
+#[allow(clippy::collapsible_match)]
 pub fn parse_curl(curl_cmd: &str) -> Result<CurlRequest, MercuryError> {
     let curl_cmd = curl_cmd.trim();
 
