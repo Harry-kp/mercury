@@ -24,7 +24,7 @@ image = { version = "0.25", default-features = false, features = ["png"] }
 open = "5"
 notify = "8"
 notify-debouncer-mini = "0.7"
-base64 = "0.22.1"
+base64 = "0.23.0"
 thiserror = "2.0"
 mimalloc = { version = "0.1", default-features = false }
 
