@@ -41,13 +41,10 @@ struct InsomniaRequest {
 }
 
 #[derive(Debug, Deserialize)]
-#[allow(dead_code)]
 struct InsomniaRequestGroup {
     #[serde(rename = "_id")]
     id: String,
     name: String,
-    #[serde(rename = "parentId")]
-    parent_id: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -65,10 +62,7 @@ struct InsomniaHeader {
 }
 
 #[derive(Debug, Deserialize)]
-#[allow(dead_code)]
 struct InsomniaBody {
-    #[serde(rename = "mimeType")]
-    mime_type: Option<String>,
     text: Option<String>,
 }
 

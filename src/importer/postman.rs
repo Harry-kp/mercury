@@ -97,11 +97,8 @@ struct PostmanCollection {
 }
 
 #[derive(Debug, Deserialize)]
-#[allow(dead_code)]
 struct PostmanInfo {
     name: String,
-    #[serde(default)]
-    schema: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -158,10 +155,7 @@ struct PostmanHeader {
 }
 
 #[derive(Debug, Deserialize)]
-#[allow(dead_code)]
 struct PostmanBody {
-    #[serde(default)]
-    mode: Option<String>,
     #[serde(default)]
     raw: Option<String>,
 }

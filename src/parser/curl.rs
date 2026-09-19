@@ -5,6 +5,7 @@
 
 use crate::core::error::MercuryError;
 use crate::core::types::HttpMethod;
+use crate::utils::generate_basic_auth;
 
 #[derive(Debug)]
 pub struct CurlRequest {
@@ -103,9 +104,12 @@ pub fn parse_curl(curl_cmd: &str) -> Result<CurlRequest, MercuryError> {
                 // Basic auth: -u user:password
                 if i + 1 < tokens.len() {
                     let credentials = &tokens[i + 1];
-                    use base64::Engine;
-                    let encoded = base64::engine::general_purpose::STANDARD.encode(credentials);
-                    headers.push(("Authorization".to_string(), format!("Basic {}", encoded)));
+                    let (username, password) =
+                        credentials.split_once(':').unwrap_or((credentials, ""));
+                    headers.push((
+                        "Authorization".to_string(),
+                        generate_basic_auth(username, password),
+                    ));
                     i += 1;
                 }
             }

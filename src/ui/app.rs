@@ -10,12 +10,12 @@
 
 use crate::core::persistence;
 use crate::core::types::{
-    AppState, CollectionItem, JsonRequest, RecentRequest, Request, Response, TimelineEntry,
-    TimelineSummary,
+    AppState, CollectionItem, HttpMethod, JsonRequest, RecentRequest, Request, Response,
+    TimelineEntry, TimelineSummary,
 };
 use crate::core::{execute_request, HttpResponse, MercuryError};
 use crate::parser::{
-    parse_env_file, parse_request_file, serialize_request_file, substitute_variables, HttpMethod,
+    parse_env_file, parse_request_file, serialize_request_file, substitute_variables,
 };
 use crate::ui::components::{menu_button, modal_input_field, popup_menu, show_modal};
 use crate::ui::icons::Icons;
@@ -116,7 +116,6 @@ pub struct MercuryApp {
 
     // File system watcher
     watcher_rx: Receiver<Result<(), String>>,
-    #[allow(dead_code)]
     watcher_tx: Sender<Result<(), String>>,
     watcher_shutdown: Option<Sender<()>>,
     watched_path: Option<PathBuf>,
@@ -126,8 +125,6 @@ pub struct MercuryApp {
     // Shared HTTP client with cookie store for automatic cookie handling
     http_client: Arc<reqwest::blocking::Client>,
 }
-
-pub use crate::utils::AuthMode;
 
 impl MercuryApp {
     pub fn new(_cc: &eframe::CreationContext<'_>) -> Self {
@@ -585,7 +582,6 @@ impl MercuryApp {
 
                 // Listen for events and signal main thread
                 // Keep debouncer alive throughout the thread
-                #[allow(unused_variables)]
                 let _debouncer = debouncer;
                 loop {
                     // Check for shutdown signal
@@ -1779,15 +1775,15 @@ impl eframe::App for MercuryApp {
                                 }
                                 ui.separator();
                                 if ui.selectable_label(false, "Check for Updates").clicked() {
-                                    let _ = open::that(crate::core::constants::get_releases_url());
+                                    let _ = open::that(crate::core::constants::RELEASES_URL);
                                     ui.close();
                                 }
                                 if ui.selectable_label(false, "Documentation").clicked() {
-                                    let _ = open::that(crate::core::constants::get_docs_url());
+                                    let _ = open::that(crate::core::constants::DOCS_URL);
                                     ui.close();
                                 }
                                 if ui.selectable_label(false, "Report Issue").clicked() {
-                                    let _ = open::that(crate::core::constants::get_issues_url());
+                                    let _ = open::that(crate::core::constants::ISSUES_URL);
                                     ui.close();
                                 }
                             },

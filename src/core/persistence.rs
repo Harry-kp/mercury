@@ -24,7 +24,7 @@ fn ensure_config_dir() {
 
 // ============ Recent Requests ============
 
-pub fn get_recent_file_path() -> PathBuf {
+fn get_recent_file_path() -> PathBuf {
     get_config_dir().join("recent.json")
 }
 
@@ -56,7 +56,7 @@ pub fn save_recent_requests(requests: &[RecentRequest]) {
 
 // ============ App State ============
 
-pub fn get_state_file_path() -> PathBuf {
+fn get_state_file_path() -> PathBuf {
     get_config_dir().join("state.json")
 }
 
@@ -83,7 +83,7 @@ pub fn save_state(state: &AppState) {
 
 // ============ History ============
 
-pub fn get_history_file_path() -> PathBuf {
+fn get_history_file_path() -> PathBuf {
     get_config_dir().join("history.json")
 }
 

@@ -5,7 +5,7 @@
 
 // Calm, warm, purposeful colors for long coding sessions
 
-use egui::Color32;
+use eframe::egui::Color32;
 
 /// Color palette - Warm dark theme inspired by HEY.com
 pub struct Colors;

@@ -532,18 +532,6 @@ th {
   margin: 1.5rem 0;
 }
 
-/* Screenshot placeholder styling */
-.screenshot-placeholder {
-  background: linear-gradient(135deg, #111111 0%, #1a1a1a 100%);
-  border: 1px dashed #333333;
-  border-radius: 8px;
-  padding: 3rem 2rem;
-  text-align: center;
-  color: #555555;
-  font-size: 14px;
-  margin: 1.5rem 0;
-}
-
 /* ============================================
    RESPONSIVE
    ============================================ */

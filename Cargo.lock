@@ -1756,15 +1756,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "libmimalloc-sys"
-version = "0.1.47"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2d1eacfa31c33ec25e873c136ba5669f00f9866d0688bea7be4d3f7e43067df6"
-dependencies = [
- "cc",
-]
-
-[[package]]
 name = "libredox"
 version = "0.1.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1851,9 +1842,7 @@ dependencies = [
  "base64",
  "dirs",
  "eframe",
- "egui",
  "image",
- "mimalloc",
  "notify",
  "notify-debouncer-mini",
  "open",
@@ -1865,15 +1854,6 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.18",
  "walkdir",
-]
-
-[[package]]
-name = "mimalloc"
-version = "0.1.50"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b3627c4272df786b9260cabaa46aec1d59c93ede723d4c3ef646c503816b0640"
-dependencies = [
- "libmimalloc-sys",
 ]
 
 [[package]]

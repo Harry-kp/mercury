@@ -2,13 +2,14 @@
 //!
 //! Main UI panel layouts - sidebar, request editor, response viewer.
 
-use super::app::{AuthMode, MercuryApp};
+use super::app::MercuryApp;
 use super::components::*;
 use super::icons::Icons;
 use super::theme::{Colors, FontSize, Layout, Radius, Spacing};
+use crate::core::types::HttpMethod;
 use crate::core::{format_json, format_xml, ResponseType};
-use crate::parser::HttpMethod;
-use egui::{self, Context, ScrollArea, Ui};
+use crate::utils::AuthMode;
+use eframe::egui::{self, Context, ScrollArea, Ui};
 
 impl MercuryApp {
     /// Render left sidebar with collection tree
@@ -86,7 +87,7 @@ impl MercuryApp {
                                 let mut to_remove = None;
                                 // Collect data for deferred loading (avoids borrow issues)
                                 let mut request_to_load: Option<(
-                                    crate::parser::HttpMethod,
+                                    HttpMethod,
                                     String,
                                     String,
                                     String,
