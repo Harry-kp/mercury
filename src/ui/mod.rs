@@ -7,5 +7,3 @@ pub mod components;
 pub mod icons;
 pub mod panels;
 pub mod theme;
-
-// Re-export main app

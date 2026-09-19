@@ -5,7 +5,7 @@
 
 use super::icons::Icons;
 use super::theme::{Animation, Colors, FontSize, Radius, Spacing, StrokeWidth};
-use egui::{self, Color32, RichText, Ui};
+use eframe::egui::{self, Color32, RichText, Ui};
 
 // =============================================================================
 // Modal/Dialog Helpers
@@ -491,7 +491,7 @@ pub fn close_button(ui: &mut Ui, size: f32) -> egui::Response {
 // =============================================================================
 
 use super::theme::Layout;
-use egui::ScrollArea;
+use eframe::egui::ScrollArea;
 
 /// A collapsible section with header, optional copy button, and scrollable content.
 /// Used for Headers, Cookies, and similar response panel sections.

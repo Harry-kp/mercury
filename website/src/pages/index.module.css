@@ -550,15 +550,6 @@
   margin-top: 24px;
 }
 
-.installCmd {
-  background: #0d0d0d;
-  padding: 8px 16px;
-  border-radius: 6px;
-  color: #00ff88;
-  display: inline-block;
-  margin-top: 8px;
-}
-
 /* Responsive */
 @media (max-width: 768px) {
   .metrics {
@@ -800,9 +791,4 @@
 
 :global([data-theme='light']) .downloadAlt {
   color: #6b7280;
-}
-
-:global([data-theme='light']) .installCmd {
-  background: #1e293b;
-  color: #10b981;
 }

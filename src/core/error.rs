@@ -240,18 +240,6 @@ impl MercuryError {
             }
         }
     }
-
-    /// Returns true if this error is recoverable (user can retry)
-    /// Future use: show "Retry" button on recoverable errors
-    #[allow(dead_code)]
-    pub fn is_recoverable(&self) -> bool {
-        matches!(
-            self,
-            MercuryError::ConnectionFailed(_)
-                | MercuryError::Timeout(_)
-                | MercuryError::RequestFailed(_)
-        )
-    }
 }
 
 #[cfg(test)]
@@ -289,13 +277,6 @@ mod tests {
     fn test_user_message() {
         let err = MercuryError::Timeout(30000);
         assert!(err.user_message().contains("took too long"));
-    }
-
-    #[test]
-    fn test_is_recoverable() {
-        assert!(MercuryError::Timeout(1000).is_recoverable());
-        assert!(MercuryError::ConnectionFailed("test".to_string()).is_recoverable());
-        assert!(!MercuryError::FileNotFound("test".to_string()).is_recoverable());
     }
 
     #[test]
