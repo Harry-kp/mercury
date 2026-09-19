@@ -511,7 +511,6 @@ impl MercuryApp {
                 path,
                 expanded,
                 children,
-                loaded: _,
                 ..
             } = item
             {
