@@ -6,7 +6,7 @@ updates:
       interval: "weekly"
     open-pull-requests-limit: 5
     ignore:
-      # Hold egui/eframe updates until migration to 0.33 API is complete (see issue #23)
+      # egui crates move together; bump them in one manual PR
       - dependency-name: "eframe"
         update-types: ["version-update:semver-minor", "version-update:semver-major"]
       - dependency-name: "egui"
@@ -14,6 +14,9 @@ updates:
       - dependency-name: "egui-winit"
         update-types: ["version-update:semver-minor", "version-update:semver-major"]
       - dependency-name: "egui_glow"
+        update-types: ["version-update:semver-minor", "version-update:semver-major"]
+      # dev-dependency; must move in lockstep with eframe
+      - dependency-name: "egui_kittest"
         update-types: ["version-update:semver-minor", "version-update:semver-major"]
     groups:
       dependencies:
