@@ -1,174 +1,51 @@
 # Contributing to Mercury
 
-Thanks for your interest in contributing to Mercury! 
+Thanks for helping. Mercury stays small on purpose, so read this first.
 
-## Philosophy First
+## Philosophy
 
-Mercury follows the minimalist approach to software:
+1. **Say no by default.** Every feature is a liability. Ask whether it can be solved outside the app (git, an editor, the shell).
+2. **Build half a product, not a half-assed product.** Do less, and do it well.
+3. **Files over databases, conventions over settings.** There is no settings screen and there won't be one.
 
-1. **Say no by default** - Every feature is a liability
-2. **Build half a product, not a half-assed product** - Do less, but do it well
-3. **It's a problem when it's a problem** - Don't solve imaginary issues
+**Welcome:** bug fixes, performance work, clearer errors, accessibility, docs, and deleting code.
+**Discuss first:** UI changes, new shortcuts, file-format changes, new importers.
+**Out of scope:** cloud sync, accounts, collaboration, plugins, GraphQL/gRPC/WebSocket, mock servers, test runners, telemetry, and anything that needs a backend.
 
-Before contributing, ask yourself:
-- Is this feature truly essential?
-- Can this be solved outside the app (Git, text editor, shell)?
-- Does this add complexity that 80% of users won't need?
+## Setup
 
-## Finding Issues to Work On
-
-📋 **[Project Roadmap](https://github.com/users/Harry-kp/projects/5)** — See what's planned and in progress
-
-🏷️ **[Good First Issues](https://github.com/Harry-kp/mercury/issues?q=is%3Aopen+label%3A%22good+first+issue%22)** — Perfect for new contributors
-
-🆘 **[Help Wanted](https://github.com/Harry-kp/mercury/issues?q=is%3Aopen+label%3A%22help+wanted%22)** — Issues where we need community help
-
-## What We're Looking For
-
-✅ **Welcome**
-- Bug fixes
-- Performance improvements
-- Better error messages
-- Documentation improvements
-- Code cleanup and refactoring
-- Accessibility improvements
-
-🤔 **Maybe** (discuss first)
-- UI/UX refinements
-- Keyboard shortcut additions
-- File format improvements
-- Import/export features (that maintain simplicity)
-
-❌ **Not Welcome**
-- Cloud sync features
-- User accounts/authentication
-- Team collaboration features
-- GraphQL/WebSocket/gRPC support
-- Mock servers
-- Code generation
-- Test automation frameworks
-- Analytics/tracking
-- Any feature that requires a backend
-
-## Development Setup
-
-1. **Install Rust**
-   ```bash
-   curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-   ```
-
-2. **Clone and Build**
-   ```bash
-   git clone <your-fork>
-   cd mercury
-   cargo build
-   ```
-
-3. **Run Tests**
-   ```bash
-   cargo test
-   ```
-
-4. **Run the App**
-   ```bash
-   cargo run
-   ```
-
-## Project Structure
-
-```
-mercury/
-├── src/
-│   ├── core/                # Core types and logic
-│   ├── parser/              # File parsers (.json, .env, curl)
-│   ├── ui/                  # UI components and logic (egui)
-│   ├── importer/            # Postman/Insomnia importers
-│   ├── main.rs              # Entry point
-│   └── utils.rs             # Utility functions
-├── website/                 # Documentation website (Docusaurus)
-├── PRD.md                   # Product requirements
-└── README.md                # Main documentation
+```bash
+git clone https://github.com/Harry-kp/mercury && cd mercury
+MERCURY_HOME=$(mktemp -d) cargo run   # isolated app data
 ```
 
-## Code Style
+On Linux, install the GTK/xcb dev packages listed in `.github/workflows/ci.yml` first.
 
-- Follow standard Rust conventions (`cargo fmt`)
-- Run `cargo clippy` before submitting
-- Write tests for new functionality
-- Keep functions small and focused
-- Comment the "why", not the "what"
+## Before you open a PR
 
-## Submitting Changes
+CI runs exactly these three, on macOS, Linux and Windows:
 
-1. **Fork the repository**
-
-2. **Create a feature branch**
-   ```bash
-   git checkout -b fix-something
-   ```
-
-3. **Make your changes**
-   - Write clear, concise commit messages
-   - One logical change per commit
-   - Add tests if applicable
-
-4. **Test thoroughly**
-   ```bash
-   cargo test
-   cargo build --release
-   # Test the actual app
-   ```
-
-5. **Submit a Pull Request**
-   - Describe what changed and why
-   - Reference any related issues
-   - Keep PRs focused on one thing
-
-## Pull Request Template
-
-```markdown
-## What Changed
-Brief description of the change
-
-## Why
-Explanation of why this change is needed
-
-## Testing
-How you tested this change
-
-## Checklist
-- [ ] Ran `cargo fmt`
-- [ ] Ran `cargo clippy`
-- [ ] Ran `cargo test`
-- [ ] Tested the app manually
-- [ ] Updated documentation if needed
+```bash
+cargo fmt --check
+cargo clippy --all-targets -- -D warnings
+cargo test
 ```
 
-## Design Decisions
+- Put tests next to the code (`#[cfg(test)] mod tests`). For UI behavior, extend `src/ui/smoke_test.rs`. It drives the real app headlessly with clicks and keys.
+- A bug fix comes with a test that failed before the fix.
+- Update the docs listed in the "Keep docs in sync" table in [CLAUDE.md](CLAUDE.md), and add a line to `CHANGELOG.md` under `[Unreleased]`.
+- One logical change per PR. Put `Fixes #<issue>` in the description.
 
-When in doubt, prefer:
-- **Simplicity** over features
-- **Speed** over flexibility  
-- **Files** over databases
-- **Convention** over configuration
-- **Explicitness** over magic
-- **Manual** over automatic
+[CLAUDE.md](CLAUDE.md) has the code map, the single-source-of-truth rules and the known gotchas. It's written for AI agents, and it's the fastest way for humans to get oriented too.
 
-## Getting Help
+## Using Claude Code
 
-- Open an issue for bugs or feature discussions
-- Check existing issues first
-- Be clear and specific
-- Include reproduction steps for bugs
+```
+/fix-issue 123
+```
+
+This reproduces the bug with a failing test, fixes the root cause, runs the checks, syncs the docs, opens the PR and merges it once CI is green. The steps are in `.claude/skills/fix-issue/SKILL.md`.
 
 ## Code of Conduct
 
-Please note that this project is released with a [Contributor Code of Conduct](CODE_OF_CONDUCT.md). By participating in this project you agree to abide by its terms.
-
-## License
-
-By contributing, you agree that your contributions will be licensed under the MIT License.
-
----
-
-**Remember**: The best code is no code. The best feature is no feature. Can we solve this without adding it?
+This project follows the [Contributor Code of Conduct](CODE_OF_CONDUCT.md). By contributing, you agree your work is licensed under the MIT License.
