@@ -69,7 +69,7 @@ Authorization: Bearer {{API_TOKEN}}
 
 ## Editing environment files
 
-Edit `.env` files in any editor. When you add or remove an env file, the picker updates right away. After changing values in an existing file, select the environment again in the picker to reload them.
+Edit `.env` files in any editor. Mercury picks up changes right away: new or removed env files update the picker (your selection is kept), and edited values apply to the next request.
 
 ## Keeping secrets out of Git
 

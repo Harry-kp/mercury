@@ -477,13 +477,14 @@ impl MercuryApp {
                 true
             }
             Err(e) => {
+                self.last_save = self.time; // retry after AUTOSAVE_SECS, not every frame
                 self.notify(format!("Could not save: {e}"), true);
                 false
             }
         }
     }
 
-    fn autosave(&mut self) {
+    pub fn autosave(&mut self) {
         if self.has_unsaved_changes() {
             self.save_file();
         }
@@ -672,26 +673,44 @@ impl MercuryApp {
     /// changed on disk (unless the user has unsaved edits).
     fn on_files_changed(&mut self) {
         self.rebuild_tree();
-        if let Some(root) = self.workspace.clone() {
-            self.env_files = workspace::env_files(&root);
-        }
+        self.refresh_env_files();
         let Some(path) = self.current_file.clone() else {
             return;
         };
-        match fs::read_to_string(&path) {
+        let disk = match fs::read_to_string(&path) {
+            Ok(disk) => disk,
             Err(_) => {
                 self.load_request(Request::default(), None);
                 self.notify("File was deleted externally", true);
+                return;
             }
-            Ok(disk)
-                if !self.has_unsaved_changes() && self.saved_content.as_ref() != Some(&disk) =>
-            {
-                let response = self.response.take();
-                self.open_file(&path);
-                self.response = response;
-            }
-            Ok(_) => {}
+        };
+        // compare parsed content, not text: hand-written files never match
+        // our formatting byte-for-byte and would reload on every fs event
+        let parse = |s: &str| RequestFile::from_json(s).ok();
+        if parse(&disk) == self.saved_content.as_deref().and_then(parse) {
+            return;
         }
+        if self.has_unsaved_changes() {
+            self.notify("File changed on disk; keeping your unsaved edits", true);
+        } else {
+            let response = self.response.take();
+            self.open_file(&path);
+            self.response = response;
+        }
+    }
+
+    /// Re-list env files, keeping the selection by name, and reload values
+    /// (the selected file may be what changed).
+    fn refresh_env_files(&mut self) {
+        let Some(root) = &self.workspace else {
+            return;
+        };
+        let selected = self.env_name().map(str::to_string);
+        self.env_files = workspace::env_files(root);
+        self.selected_env =
+            selected.and_then(|name| self.env_files.iter().position(|f| *f == name));
+        self.load_env();
     }
 
     // -----------------------------------------------------------------------

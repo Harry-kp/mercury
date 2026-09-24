@@ -97,7 +97,12 @@ pub fn create_folder(parent: &Path, name: &str) -> Result<(), String> {
 
 /// Rename in place (same parent); returns the new path.
 pub fn rename(path: &Path, new_name: &str) -> Result<PathBuf, String> {
-    let new_path = path.with_file_name(new_name.trim());
+    let mut name = new_name.trim().to_string();
+    // a request renamed to "foo" must stay "foo.json" or it leaves the tree
+    if path.extension().is_some_and(|e| e == "json") && !name.ends_with(".json") {
+        name.push_str(".json");
+    }
+    let new_path = path.with_file_name(name);
     ensure_free(&new_path)?;
     fs::rename(path, &new_path).map_err(|e| format!("Could not rename: {e}"))?;
     Ok(new_path)
@@ -208,7 +213,8 @@ mod tests {
         assert_eq!(duplicate(&path).unwrap(), root.join("login_copy1.json"));
         assert_eq!(duplicate(&path).unwrap(), root.join("login_copy2.json"));
 
-        let renamed = rename(&path, "signin.json").unwrap();
+        let renamed = rename(&path, "signin").unwrap();
+        assert_eq!(renamed, root.join("signin.json"));
         assert!(renamed.exists() && !path.exists());
         assert!(rename(&renamed, "login_copy1.json").is_err());
 

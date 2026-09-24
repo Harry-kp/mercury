@@ -100,6 +100,23 @@ fn open_send_edit_and_save() {
     // saved requests don't go to Recent
     assert!(harness.state().recent.is_empty());
 
+    // a new env file that sorts first must not shift the selection, and
+    // edits to the selected file take effect (file watcher -> refresh)
+    std::fs::write(ws.join(".env.a-first"), "TOKEN=wrong\n").unwrap();
+    let dev = std::fs::read_to_string(ws.join(".env.dev")).unwrap();
+    std::fs::write(ws.join(".env.dev"), dev.replace("secret-token", "rotated")).unwrap();
+    for _ in 0..300 {
+        harness.step();
+        if harness.state().env_files.len() == 2
+            && harness.state().env_vars.get("TOKEN").map(String::as_str) == Some("rotated")
+        {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    assert_eq!(harness.state().env_name(), Some(".env.dev"));
+    assert_eq!(harness.state().env_vars["TOKEN"], "rotated");
+
     // typing "?" in the URL bar must not open the shortcuts dialog
     harness.key_press_modifiers(Modifiers::COMMAND, Key::L); // focus URL bar
     harness.run_steps(2);

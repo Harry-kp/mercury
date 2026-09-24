@@ -127,7 +127,9 @@ impl AuthMode {
 }
 
 fn is_auth_line(line: &str) -> bool {
-    line.len() >= 14 && line[..14].eq_ignore_ascii_case("authorization:")
+    // get() instead of [..14]: byte 14 may fall inside a UTF-8 char
+    line.get(..14)
+        .is_some_and(|p| p.eq_ignore_ascii_case("authorization:"))
 }
 
 /// Value of the first enabled `Authorization:` line. Only the space after the
@@ -347,6 +349,12 @@ mod tests {
         // disabled lines don't count
         let h = "# Authorization: Bearer old\nAuthorization: Bearer new";
         assert_eq!(bearer_token(auth_value(h).unwrap()), "new");
+    }
+
+    #[test]
+    fn non_ascii_header_lines_do_not_panic() {
+        assert_eq!(auth_mode("X-Usr: 张三丰"), AuthMode::None);
+        assert_eq!(auth_mode("X-Custom-Hdrxé: 1"), AuthMode::None);
     }
 
     #[test]

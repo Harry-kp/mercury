@@ -112,6 +112,7 @@ impl MercuryApp {
                 self.recent.remove(idx);
                 storage::save_recent(&self.recent);
             } else if let Some(request) = open {
+                self.autosave();
                 self.load_request(request, None);
             }
         }

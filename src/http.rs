@@ -191,7 +191,11 @@ fn detect_response_type(content_type: &str, body: &[u8], status: u16) -> Respons
     if text.starts_with('{') || text.starts_with('[') {
         ResponseType::Json
     } else if text.starts_with('<') {
-        let head = text[..text.len().min(512)].to_lowercase();
+        let head = text
+            .char_indices()
+            .nth(512)
+            .map_or(text, |(i, _)| &text[..i]);
+        let head = head.to_lowercase();
         if head.contains("<!doctype html") || head.contains("<html") {
             ResponseType::Html
         } else {
@@ -293,6 +297,12 @@ mod tests {
         );
         assert_eq!(detect_response_type("", b"hello", 200), PlainText);
         assert_eq!(detect_response_type("", b"\xff\xfe", 200), Binary);
+    }
+
+    #[test]
+    fn sniffing_is_utf8_safe() {
+        let body = format!("<{}é</x>", "a".repeat(510));
+        assert_eq!(detect_response_type("", body.as_bytes(), 200), Xml);
     }
 
     #[test]

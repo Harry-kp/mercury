@@ -23,6 +23,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `.env` files in subfolders showed up in the picker but never loaded (only root `.env*` files count now).
 - Import failures were silent. Insomnia request names with `/` could write outside the target folder. Postman `{{vars}}` in URL paths were percent-encoded.
 - Trailing spaces were stripped from header values.
+- Renaming a request without typing `.json` made it disappear from the sidebar.
+- Clicking a Recent item could drop the open file's last few seconds of edits.
+- **Save** was offered for binary responses restored from history, and wrote a placeholder instead of the file.
+- Imported environment keys like `api-key` were renamed to `api_key`, so `{{api-key}}` stopped resolving. Imported values containing quotes were corrupted.
+- Editing the selected `.env` file had no effect until you re-selected it.
 
 ### Changed
 - Request files write headers in sorted order, for stable git diffs.

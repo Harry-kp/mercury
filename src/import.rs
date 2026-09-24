@@ -39,18 +39,21 @@ fn sanitize_filename(name: &str) -> String {
     }
 }
 
+/// Keep keys as-is (requests reference them as `{{api-key}}`); only replace
+/// characters that would break a `KEY=VALUE` line.
 fn sanitize_env_key(key: &str) -> String {
     let key: String = key
+        .trim()
         .chars()
         .map(|c| {
-            if c.is_ascii_alphanumeric() || c == '_' {
-                c
-            } else {
+            if c == '=' || c.is_whitespace() {
                 '_'
+            } else {
+                c
             }
         })
         .collect();
-    if key.starts_with(|c: char| c.is_ascii_digit()) {
+    if key.starts_with('#') {
         format!("_{key}")
     } else {
         key
@@ -454,7 +457,7 @@ mod tests {
 
         let env = read_out(&dir, ".env.comprehensive-api");
         assert!(env.contains("host=api.test.com"));
-        assert!(env.contains("_1_bad_key=\"has space\""));
+        assert!(env.contains("1_bad-key=\"has space\""));
     }
 
     #[test]
@@ -526,6 +529,14 @@ resources:
             .1
             .unwrap_err();
         assert!(err.contains("Failed to parse as JSON") && err.contains("or YAML"));
+    }
+
+    #[test]
+    fn env_values_roundtrip_through_parse_env() {
+        for value in ["plain", "has space", r#"{"a":1}"#, "a=b"] {
+            let line = format!("K={}", escape_env_value(value));
+            assert_eq!(crate::vars::parse_env(&line)["K"], value);
+        }
     }
 
     #[test]

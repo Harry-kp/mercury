@@ -149,10 +149,8 @@ impl MercuryApp {
             kind,
             ResponseType::Json | ResponseType::Xml | ResponseType::Html | ResponseType::PlainText
         );
-        let can_save = matches!(
-            kind,
-            ResponseType::Binary | ResponseType::Image | ResponseType::LargeText
-        );
+        // binary bodies restored from history have no bytes to save
+        let can_save = kind == ResponseType::LargeText || response.raw_bytes.is_some();
 
         ui.horizontal(|ui| {
             status_badge(ui, response.status, &response.status_text);

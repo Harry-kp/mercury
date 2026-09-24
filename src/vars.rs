@@ -14,8 +14,13 @@ pub fn parse_env(content: &str) -> HashMap<String, String> {
             let quoted = v.len() >= 2
                 && ((v.starts_with('"') && v.ends_with('"'))
                     || (v.starts_with('\'') && v.ends_with('\'')));
-            let v = if quoted { &v[1..v.len() - 1] } else { v };
-            (k.trim().to_string(), v.to_string())
+            let v = match (quoted, v.starts_with('"')) {
+                // import writes `"` as `\"` inside double quotes
+                (true, true) => v[1..v.len() - 1].replace("\\\"", "\""),
+                (true, false) => v[1..v.len() - 1].to_string(),
+                _ => v.to_string(),
+            };
+            (k.trim().to_string(), v)
         })
         .collect()
 }
@@ -75,6 +80,7 @@ mod tests {
         assert_eq!(v["C"], "x");
         assert_eq!(v["D"], "\"unbalanced");
         assert_eq!(v["E"], "a=b");
+        assert_eq!(parse_env(r#"J="{\"a\":1}""#)["J"], r#"{"a":1}"#);
     }
 
     #[test]

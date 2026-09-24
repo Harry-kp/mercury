@@ -66,7 +66,7 @@ The Auth tab edits the `Authorization` header. See [Authentication](/docs/featur
 - Once a request has a file, Mercury saves it automatically every 5 seconds while there are unsaved changes, when you switch to another request, and when you quit. A dot after the name in the breadcrumb means there are unsaved changes.
 - `⌘ N` starts a new, empty, unsaved request.
 
-If a request file changes on disk (for example in another editor) and you have no unsaved edits, Mercury reloads it. If the file is deleted, Mercury clears the editor.
+If a request file changes on disk (for example in another editor) and you have no unsaved edits, Mercury reloads it. If you have unsaved edits, yours are kept (with a warning) and saved over the file. If the file is deleted, Mercury clears the editor.
 
 ## The response panel
 
@@ -122,7 +122,7 @@ Right-click a request in the sidebar:
 | Action | What it does |
 |--------|--------------|
 | **Duplicate** | Copies `name.json` to `name_copy1.json` (or the next free number) |
-| **Rename** | Renames the file. Keep the `.json` extension, or the file drops out of the sidebar. |
+| **Rename** | Renames the file; `.json` is added if you leave it off. |
 | **Delete** | Deletes the file permanently, after you confirm |
 | **Copy Path** | Copies the file's full path |
 

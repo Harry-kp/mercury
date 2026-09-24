@@ -62,7 +62,7 @@ Deleting is permanent. Nothing goes to the trash. If the workspace is in Git, yo
 
 ## Changes made outside Mercury
 
-Mercury watches the workspace folder. When files are added, removed or renamed, whether by an editor, `git pull` or a script, the tree and the environment list refresh within about half a second. If the open request's file changes and you have no unsaved edits, Mercury reloads it.
+Mercury watches the workspace folder. When files are added, removed or renamed, whether by an editor, `git pull` or a script, the tree and the environment list refresh within about half a second. If the open request's file changes and you have no unsaved edits, Mercury reloads it. If you do have unsaved edits, Mercury keeps yours, warns you, and saves over the file.
 
 ## Sharing with Git
 
