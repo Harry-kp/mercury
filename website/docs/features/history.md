@@ -6,91 +6,43 @@ sidebar_position: 5
 
 # Request History
 
-> Mercury keeps a timeline of your executed requests. Quickly view past responses and rerun previous requests.
+Every request that gets a response is saved to history together with that response. Requests that fail (timeouts, connection errors) aren't recorded.
 
-## What is Request History?
+## Opening history
 
-Every time you send a request, Mercury records:
-- The request details (method, URL, headers, body)
-- Timestamp of execution
-- Response status, time, and size
-- Response body and headers
+Press `⌘ H`, or click **History** in the response panel. The history list takes the place of the response panel. Press `⌘ H` again, or click ×, to close it.
 
-This lets you:
-- Review past API responses
-- Review previous responses
-- Restore and rerun previous requests
-- Debug API behavior over time
+Each entry shows:
 
-## Viewing History
+- the method and URL
+- when it was sent ("Just now", "5 min ago", "Yesterday", ...)
+- the status code
+- the response time
 
-The history timeline appears in the **Response panel**.
+Newest entries are at the top. The **Search history...** box filters entries by URL.
 
-1. Click the **Timeline** tab in the response panel
-2. See a list of recent executions
-3. Click any entry to view that response
+## Restoring an entry
 
-![History timeline - Replace with: Screenshot showing timeline tab with list of past request executions](/img/screenshots/placeholder.png)
+Click an entry to load its method, URL, headers and body into the editor and show the stored response. The list then closes. The restored request isn't linked to a file, so press `⌘ S` to save it as a new request.
 
-## Timeline Entry Details
+Bodies of images and binary responses aren't stored in history. A restored binary response shows its type and size, but you can't save its contents.
 
-Each timeline entry shows:
+## Storage and limits
 
-| Field | Description |
-|-------|-------------|
-| **Timestamp** | When the request was executed (relative time) |
-| **Status** | HTTP status code (color-coded) |
-| **Duration** | Response time in milliseconds |
-| **Method** | HTTP Method (GET, POST, etc.) |
+| | |
+|---|---|
+| File | `~/.mercury/history.json` (one list for all workspaces) |
+| Entries kept | The newest 50 |
+| Age | Entries older than 7 days are dropped |
+| Clearing | The trash icon in the history header deletes the file immediately, with no confirmation |
 
-Click an entry to restore it to the request panel.
+History stores full request headers and response bodies, including any tokens they contain, in plain text. Clear it if that's a concern.
 
-## Restoring a Request
+History is read from disk only when you first open the list or send a request, and only a summary of each entry is kept in memory. See [Performance](/docs/performance#lazy-loading).
 
-To reuse a previous request:
+To keep Mercury's data somewhere other than `~/.mercury/`, set the `MERCURY_HOME` environment variable before launching. See the [FAQ](/docs/faq#where-is-my-data-stored).
 
-1. Click on any history entry
-2. The request panel updates with that request's details (URL, method, headers, body)
-3. **The response panel immediately shows the stored response body and headers**
-4. Modify if needed, then click **Send** to rerun
+## Related
 
-## History Persistence
-
-Mercury automatically persists your request history:
-
-- **Automatic saving** — History is saved to `~/.mercury/history.json` after each request
-- **Survives restarts** — History is loaded when the app starts
-- **7-day retention** — Entries older than 7 days are automatically removed
-- **50 entry limit** — The most recent 50 entries are kept
-- **Global storage** — History is shared across all workspaces
-
-## Clearing History
-
-To clear all history entries:
-1. Open the History panel (click **History** or press `Cmd/Ctrl + H`)
-2. Click the **Clear** button in the header
-
-This permanently removes all history entries. The change is saved immediately.
-
-:::tip Timestamps
-Each history entry shows when it was executed using relative timestamps like "Just now", "5 min ago", "Yesterday", or "3 days ago".
-:::
-
-## Use Cases
-
-### Track API Changes
-
-Run the same request multiple times to see how the response evolves as you develop your API.
-
-### Debug Flaky Endpoints
-
-Review past responses to identify intermittent issues.
-
-### Reproduce Issues
-
-Restore a request that caused an error to investigate further.
-
-## Related Features
-
-- [Requests](/docs/features/requests) — Creating and editing requests
-- [Keyboard Shortcuts](/docs/reference/keyboard-shortcuts) — Shortcuts for history navigation
+- [Requests](/docs/features/requests)
+- [Keyboard Shortcuts](/docs/reference/keyboard-shortcuts)

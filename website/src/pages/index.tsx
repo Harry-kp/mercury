@@ -55,12 +55,12 @@ export default function Home(): ReactNode {
               <div className={styles.metricLabel}>Native UI</div>
             </div>
             <div className={styles.metric}>
-              <div className={styles.metricValue}>&lt;300ms</div>
-              <div className={styles.metricLabel}>Startup</div>
+              <div className={styles.metricValue}>~8MB</div>
+              <div className={styles.metricLabel}>Single binary</div>
             </div>
             <div className={styles.metric}>
-              <div className={styles.metricValue}>&lt;16ms</div>
-              <div className={styles.metricLabel}>Input Lag</div>
+              <div className={styles.metricValue}>0</div>
+              <div className={styles.metricLabel}>Accounts</div>
             </div>
             <div className={styles.metric}>
               <div className={styles.metricValue}>$0</div>
@@ -99,7 +99,7 @@ export default function Home(): ReactNode {
             <div className={styles.principle}>
               <div className={styles.principleIcon}>⚡</div>
               <h3>Native Performance</h3>
-              <p>GPU-accelerated 60fps rendering. <strong>&lt;16ms input latency.</strong> Scrolling that feels like butter. This is what native means.</p>
+              <p>GPU-accelerated 60fps rendering. Scrolling that feels like butter. This is what native means.</p>
             </div>
             <div className={styles.principle}>
               <div className={styles.principleIcon}>📁</div>
@@ -124,7 +124,7 @@ export default function Home(): ReactNode {
       <section className={styles.comparison}>
         <div className={styles.comparisonContainer}>
           <h2 className={styles.comparisonTitle}>The honest comparison</h2>
-          <p className={styles.comparisonSub}>Numbers don't lie. Marketing does.</p>
+          <p className={styles.comparisonSub}>No trials, no seats, no sign-in.</p>
 
           <div className={styles.comparisonTable}>
             <div className={styles.comparisonHeader}>
@@ -132,30 +132,6 @@ export default function Home(): ReactNode {
               <div>Postman</div>
               <div>Insomnia</div>
               <div className={styles.mercuryCol}>Mercury</div>
-            </div>
-            <div className={styles.comparisonRow}>
-              <div>Startup Time</div>
-              <div className={styles.bad}>3-5 seconds</div>
-              <div className={styles.bad}>2-4 seconds</div>
-              <div className={styles.good}>&lt;300ms</div>
-            </div>
-            <div className={styles.comparisonRow}>
-              <div>UI Frame Rate</div>
-              <div className={styles.bad}>Sluggish</div>
-              <div className={styles.warn}>Variable</div>
-              <div className={styles.good}>60fps native</div>
-            </div>
-            <div className={styles.comparisonRow}>
-              <div>Input Latency</div>
-              <div className={styles.bad}>50-100ms</div>
-              <div className={styles.bad}>30-50ms</div>
-              <div className={styles.good}>&lt;16ms</div>
-            </div>
-            <div className={styles.comparisonRow}>
-              <div>App Size</div>
-              <div className={styles.bad}>~500MB</div>
-              <div className={styles.bad}>~400MB</div>
-              <div className={styles.good}>6MB</div>
             </div>
             <div className={styles.comparisonRow}>
               <div>Price (Pro)</div>
@@ -218,17 +194,17 @@ export default function Home(): ReactNode {
             <Link to="https://github.com/Harry-kp/mercury/releases" className={styles.downloadCard}>
               <div className={styles.downloadIcon}>🍎</div>
               <div className={styles.downloadPlatform}>macOS</div>
-              <div className={styles.downloadMeta}>Universal • 6MB</div>
+              <div className={styles.downloadMeta}>Universal</div>
             </Link>
             <Link to="https://github.com/Harry-kp/mercury/releases" className={styles.downloadCard}>
               <div className={styles.downloadIcon}>⊞</div>
               <div className={styles.downloadPlatform}>Windows</div>
-              <div className={styles.downloadMeta}>x64 • 6MB</div>
+              <div className={styles.downloadMeta}>x64</div>
             </Link>
             <Link to="https://github.com/Harry-kp/mercury/releases" className={styles.downloadCard}>
               <div className={styles.downloadIcon}>🐧</div>
               <div className={styles.downloadPlatform}>Linux</div>
-              <div className={styles.downloadMeta}>x64/ARM64 • 6MB</div>
+              <div className={styles.downloadMeta}>x64 / ARM64</div>
             </Link>
           </div>
 

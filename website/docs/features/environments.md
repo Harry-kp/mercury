@@ -6,200 +6,95 @@ sidebar_position: 3
 
 # Environment Variables
 
-> Use variables to manage different environments (development, staging, production) and keep secrets out of your request files.
+Environments are `.env` files in the workspace root. Use them for base URLs, tokens and IDs that change between setups, and to keep secrets out of request files.
 
-## What are Environment Variables?
+## Environment files
 
-Environment variables let you:
-- Store base URLs that change per environment
-- Keep API keys and secrets separate from requests
-- Easily switch between development and production
-- Share requests without exposing credentials
-
-## Creating Environment Files
-
-Create `.env` files in your workspace root:
+Every file in the **workspace root** whose name starts with `.env` is an environment: `.env`, `.env.dev`, `.env.production`, `.env.local` and so on. `.env` files in subfolders are ignored.
 
 ```bash
-# .env (default, always loaded)
-BASE_URL=https://api.example.com
-TIMEOUT=5000
-
-# .env.development
+# .env.dev
 BASE_URL=http://localhost:3000
-API_KEY=dev-key-123
+API_TOKEN=dev-token
 
 # .env.production
-BASE_URL=https://api.production.com
-API_KEY=prod-key-secret
+BASE_URL=https://api.example.com
+API_TOKEN="prod token"
 ```
 
-Mercury loads `.env` by default and lets you switch between other environment files.
+## Choosing an environment
 
-## File Format
+**Only one environment is active at a time.** Files aren't layered or merged. A plain `.env` is not loaded on top of the selected one.
 
-Environment files use simple `KEY=VALUE` format:
+- Pick the environment in the menu at the **top right** of the window. **None** turns variables off.
+- `⌘ E` switches to the next environment. After the last one it goes to None, then starts over.
+- When you open a workspace, Mercury selects the first file (alphabetically) whose name contains `.dev`, or else the first file. When Mercury reopens the workspace at launch, it restores the environment you last had selected.
+- Environment names that contain `prod` are shown in red, and names that contain `stag` in amber, so it's harder to send to production by mistake.
+
+## File format
 
 ```bash
-# This is a comment
+# Full-line comments start with #
 BASE_URL=https://api.example.com
-
-# Quotes are optional but stripped
-API_KEY="my-secret-key"
-ANOTHER_KEY='single-quotes-work-too'
-
-# No spaces around equals sign
-USER_ID=12345
+USER_ID = 12345
+QUOTED="two words"
+SINGLE='also fine'
+EQUALS=a=b
 ```
 
-## Using Variables in Requests
+- One `KEY=VALUE` per line. The line is split at the first `=`.
+- Spaces around the key and value are trimmed.
+- A value wrapped in matching `"` or `'` has the quotes removed. No other escaping is done.
+- Blank lines and lines starting with `#` are ignored. Lines without `=` are ignored.
+- Keys are case-sensitive.
+- Values are used as they are. A value that contains `{{OTHER}}` is not expanded.
 
-Reference variables with double curly braces `{{variable}}`:
+## Using variables
 
-```http
+Write `{{NAME}}` in the URL, a header (including the Auth tab) or the body:
+
+```
 GET {{BASE_URL}}/users/{{USER_ID}}
 Authorization: Bearer {{API_TOKEN}}
-Content-Type: application/json
 ```
 
-Variables work everywhere:
-- **URL** — `{{BASE_URL}}/endpoint`
-- **Headers** — `Authorization: Bearer {{TOKEN}}`
-- **Body** — `{"user": "{{USERNAME}}"}`
+- Variables are substituted when you send a request or copy it as cURL. Request files always keep the `{{NAME}}` placeholders.
+- Spaces inside the braces are allowed: `{{ NAME }}` is the same as `{{NAME}}`.
+- A variable the active environment doesn't define is **left as-is** and sent as the literal text `{{NAME}}`.
 
-![Variable substitution - Replace with: Screenshot showing request with variables and their resolved values](/img/screenshots/placeholder.png)
+## Seeing what's missing
 
-## Variable Indicators
+- If any variable in the request is undefined, the URL bar gets an **amber border**. Hover over it to see the list.
+- The **Params** and **Headers** tabs show a chip for each variable they use: ✓ if it's defined, ✗ if it isn't.
 
-Mercury shows the status of each variable:
+## Editing environment files
 
-| Indicator | Meaning |
-|-----------|---------|
-| 🟢 Green | Variable is defined in current environment |
-| 🔴 Red | Variable is undefined (will be sent as literal `{{name}}`) |
+Edit `.env` files in any editor. When you add or remove an env file, the picker updates right away. After changing values in an existing file, select the environment again in the picker to reload them.
 
-Hover over a variable to see its current value.
-
-![Variable indicators - Replace with: Screenshot showing green/red variable indicators in request editor](/img/screenshots/placeholder.png)
-
-## Switching Environments
-
-Click the environment selector in the status bar to switch between:
-- `.env` (default)
-- `.env.development`
-- `.env.production`
-- `.env.staging`
-- (any `.env.*` file in your workspace)
-
-:::tip Quick Switch
-Use the keyboard shortcut shown in the environment selector for faster switching.
-:::
-
-## Environment Hierarchy
-
-Mercury loads environment files in this order:
-
-1. `.env` — Always loaded first (base values)
-2. `.env.{selected}` — Overrides values from base
-
-This means you can have defaults in `.env` and only override what changes per environment.
-
-### Example
-
-```bash
-# .env (base)
-BASE_URL=https://api.example.com
-TIMEOUT=5000
-DEBUG=false
-
-# .env.development (overrides)
-BASE_URL=http://localhost:3000
-DEBUG=true
-```
-
-With **development** selected:
-- `BASE_URL` = `http://localhost:3000` (overridden)
-- `TIMEOUT` = `5000` (from base)
-- `DEBUG` = `true` (overridden)
-
-## Secrets Management
-
-:::warning Never Commit Secrets
-Add `.env*` to your `.gitignore` to prevent committing secrets:
+## Keeping secrets out of Git
 
 ```gitignore
-# .gitignore
-.env
-.env.*
+.env*
 !.env.example
 ```
-:::
 
-Create a template for your team:
-
-```bash
-# .env.example (safe to commit)
-BASE_URL=https://api.example.com
-API_KEY=your-api-key-here
-```
-
-Team members copy and fill in their own values:
-```bash
-cp .env.example .env
-```
-
-## Common Patterns
-
-### Per-Environment Base URLs
+Commit a `.env.example` with placeholder values so that others can copy it:
 
 ```bash
-# .env.development
-BASE_URL=http://localhost:3000
-
-# .env.staging
-BASE_URL=https://staging.api.example.com
-
-# .env.production
-BASE_URL=https://api.example.com
-```
-
-### Auth Tokens
-
-```bash
-# .env
-AUTH_TOKEN=your-token-here
-
-# Use in request
-Authorization: Bearer {{AUTH_TOKEN}}
-```
-
-### Dynamic IDs
-
-```bash
-# .env
-USER_ID=12345
-ORDER_ID=67890
-
-# Use in request
-GET {{BASE_URL}}/users/{{USER_ID}}/orders/{{ORDER_ID}}
+cp .env.example .env.dev
 ```
 
 ## Troubleshooting
 
-### Variable Not Substituted?
+If a variable isn't substituted:
 
-1. Check for typos in the variable name
-2. Ensure the `.env` file is in workspace root
-3. Verify the correct environment is selected
-4. Look for red indicators — they mean undefined
+1. Check that the right environment is selected at the top right.
+2. Check that the file is in the workspace **root** and its name starts with `.env`.
+3. Check the spelling. Names are case-sensitive.
+4. If you just edited the file, select the environment again to reload it.
 
-### Changes Not Reflecting?
+## Related
 
-Mercury watches `.env` files automatically. If changes don't appear:
-1. Save the `.env` file
-2. Check for syntax errors (no spaces around `=`)
-
-## Related Features
-
-- [Requests](/docs/features/requests) — Using variables in `.json` files
-- [File Format](/docs/reference/file-format) — Complete variable syntax reference
+- [Requests](/docs/features/requests)
+- [Authentication](/docs/features/auth)
+- [Import & Export](/docs/features/import-export): Postman and Insomnia variables become `.env.<name>` files

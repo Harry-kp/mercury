@@ -6,145 +6,94 @@ sidebar_position: 2
 
 # Quick Start
 
-> Get productive with Mercury in 5 minutes. This guide walks you through the essential workflow.
+This page walks through sending, saving and organizing requests. It assumes Mercury is [installed](/docs/getting-started).
 
-## Step 1: Open a Workspace
+## The layout
 
-When you first launch Mercury, you'll see an empty state. Start by opening a folder where you want to store your API requests.
+| Area | What it shows |
+|------|---------------|
+| **Top bar** | Breadcrumb (`workspace / folder / METHOD name`), the search box, the **Help** and **Open** menus, and the environment picker |
+| **Sidebar** (left) | **Recent** unsaved requests and the workspace folder tree |
+| **Editor** (center) | Method, URL bar, and the **Body**, **Params**, **Headers** and **Auth** tabs |
+| **Response** (right) | Status, time, size, headers, cookies and body, or the history list |
+| **Status bar** | Notifications, the workspace name and a **? Shortcuts** link |
 
-1. Click **Open Folder** (or press `⌘+O` on Mac, `Ctrl+O` on Windows/Linux)
-2. Select or create a folder — this becomes your workspace
-3. Mercury watches this folder for changes in real-time
+## 1. Send a request
 
-![Opening a workspace - Replace with: Screenshot showing the folder picker dialog](/img/screenshots/placeholder.png)
+You don't need a workspace to send a request.
 
-:::tip Pro Tip
-Any folder works! If you have an existing project, open that folder. Mercury detects all `.json` files automatically.
+1. Click the URL bar (or press `⌘ L`) and type `https://httpbin.org/get`.
+2. Press `⌘ Enter`, or click the send button.
+
+The response panel shows the status, response time and size, followed by the body. JSON is pretty-printed and highlighted. While a request is running, press `Esc` or click the stop button to cancel it.
+
+Requests you send without saving appear under **Recent** in the sidebar. Click one to load it again.
+
+:::tip
+You can paste a cURL command into the URL bar. Mercury fills in the method, URL, headers and body from it. See [Import & Export](/docs/features/import-export#import-from-curl).
 :::
 
-## Step 2: Create Your First Request
+On Windows and Linux, `⌘` means `Ctrl`.
 
-Create a new request file:
+## 2. Open a workspace
 
-1. Right-click in the sidebar → **New Request**
-2. Or press `⌘+N` (Mac) / `Ctrl+N` (Windows/Linux)
-3. Give it a name like `get-users`
+A workspace is any folder. Mercury shows its subfolders and `.json` request files in the sidebar.
 
-Mercury creates a `.json` file that looks like this:
+1. Press `⌘ O`, or choose **Open → Open Folder...**
+2. Pick or create a folder.
+
+Mercury watches the folder, so files you add or edit in another editor show up in the sidebar.
+
+## 3. Save the request
+
+Press `⌘ S`. Mercury asks for a name and writes `<name>.json` to the workspace root:
 
 ```json
 {
   "method": "GET",
-  "url": "https://api.example.com",
-  "headers": {},
-  "body": ""
+  "url": "https://httpbin.org/get"
 }
 ```
 
-## Step 3: Configure the Request
+After that, Mercury saves changes to the open file automatically. See [Saving](/docs/features/requests#saving).
 
-Edit the request in the center panel:
+To save into a particular folder, right-click the folder in the sidebar and choose **New Request**. This saves the current editor contents into that folder under the name you give it.
 
-**URL Bar**: Enter the full URL with protocol
-```
-https://httpbin.org/get
-```
+## 4. Add an environment
 
-**Method**: Click the method badge to change (GET, POST, PUT, PATCH, DELETE)
+Create a `.env` file in the workspace root:
 
-**Headers**: Add custom headers in the Headers tab
-```
-Accept: application/json
-X-Custom-Header: my-value
-```
-
-**Body** (for POST/PUT/PATCH): Add JSON or text in the Body tab
-```json
-{
-  "name": "Mercury",
-  "type": "API Client"
-}
-```
-
-![Configuring a request - Replace with: Screenshot showing URL bar, method selector, and headers tab](/img/screenshots/placeholder.png)
-
-## Step 4: Send the Request
-
-Press `⌘+Enter` (Mac) or `Ctrl+Enter` (Windows/Linux) to send.
-
-You can also click the **Send** button in the URL bar.
-
-The send button animates while the request is in progress.
-
-## Step 5: View the Response
-
-The response panel shows:
-
-- **Status badge** — Color-coded (green for 2xx, red for 4xx/5xx)
-- **Response time** — How long the request took
-- **Body size** — Kilobytes received
-- **Headers** — Click the Headers tab to see response headers
-- **Body** — Syntax-highlighted JSON, XML, or HTML
-
-![Response panel - Replace with: Screenshot showing response with status badge, timing, and formatted JSON](/img/screenshots/placeholder.png)
-
-## Step 6: Use Environment Variables
-
-Store secrets and base URLs in environment files:
-
-1. Create `.env` file in your workspace root:
 ```bash
-# .env
-BASE_URL=https://api.example.com
-API_KEY=your-secret-key
+BASE_URL=https://httpbin.org
+TOKEN=secret-token
 ```
 
-2. Use variables in your requests with `{{variable}}` syntax:
-```json
-{
-  "method": "GET",
-  "url": "{{BASE_URL}}/users",
-  "headers": {
-    "Authorization": "Bearer {{API_KEY}}"
-  },
-  "body": ""
-}
+Choose it in the environment picker at the top right, then use the variables anywhere in the request:
+
+```
+{{BASE_URL}}/bearer
 ```
 
-Mercury shows variable indicators — green for defined, red for undefined.
+If the selected environment is missing a variable you use, the URL bar border turns amber. Hover over the URL bar to see which variables are missing. See [Environments](/docs/features/environments).
 
-![Environment variables - Replace with: Screenshot showing .env file and variable substitution in action](/img/screenshots/placeholder.png)
+## 5. Organize with folders
 
-## Step 7: Organize with Folders
+Subfolders of the workspace are collections:
 
-Keep your requests organized:
-
-1. Right-click in sidebar → **New Folder**
-2. Drag and drop requests into folders
-3. Collapse/expand folders to focus on what you need
-
-Your folder structure mirrors the file system:
 ```
-my-api-project/
+my-api/
 ├── .env
 ├── users/
-│   ├── get-users.json
+│   ├── list-users.json
 │   └── create-user.json
-└── products/
-    └── list-products.json
+└── health.json
 ```
 
-## What's Next?
+Right-click a folder for **New Request**, **New Folder**, **Rename**, **Delete** and **Copy Path**. See [Collections](/docs/features/collections).
 
-You now know the essentials! Explore more features:
+## Next
 
-| Feature | Description |
-|---------|-------------|
-| [Request History](/docs/features/history) | Rerun previous requests |
-| [Authentication](/docs/features/auth) | Basic Auth, Bearer tokens |
-| [Import Collections](/docs/features/import-export) | From Postman, Insomnia, or cURL |
-| [Keyboard Shortcuts](/docs/reference/keyboard-shortcuts) | Master the keyboard-first workflow |
-
-:::tip Live File Sync
-Edit `.json` files in VS Code or any editor — Mercury updates instantly. No import/export needed!
-:::
+- [History](/docs/features/history): reopen past requests together with their responses
+- [Authentication](/docs/features/auth): Basic, Bearer and custom `Authorization` headers
+- [Import & Export](/docs/features/import-export): Postman, Insomnia and cURL
+- [Keyboard Shortcuts](/docs/reference/keyboard-shortcuts)

@@ -6,189 +6,58 @@ sidebar_position: 4
 
 # Authentication
 
-> Mercury supports common authentication methods. Add credentials without manually encoding headers.
+The **Auth** tab edits the request's `Authorization` header. Mercury doesn't store auth anywhere else. Whatever you enter on the Auth tab is written to that header, and editing the header on the Headers tab updates the Auth tab.
 
-## Overview
+## Choosing a type
 
-Mercury provides a dedicated **Auth tab** for managing authentication. This is more convenient than manually adding `Authorization` headers.
+Click the ⏷ next to the tab names and pick a type. The tab label shows the current type.
 
-:::info Two-Way Sync
-The **Auth tab** and **Headers tab** are fully synchronized. If you add an `Authorization` header manually, Mercury automatically detects the scheme and updates the Auth tab to match.
-:::
+| Type | Header it writes |
+|------|------------------|
+| **None** | Removes the `Authorization` header |
+| **Basic** | `Authorization: Basic <base64 of username:password>` |
+| **Bearer** | `Authorization: Bearer <token>` |
+| **Custom** | `Authorization: <whatever you type>` |
 
-Supported methods:
-- **None** — No authentication
-- **Basic Auth** — Username and password
-- **Bearer Token** — Token-based auth (OAuth, JWT)
-- **Custom** — Any custom header format
+The type is detected from the header. A value that starts with `Basic` is Basic, a value that starts with `Bearer` is Bearer, any other value is Custom, and no header means None. If you paste `Authorization: Bearer abc` on the Headers tab, the Auth tab switches to Bearer and shows `abc`.
 
-## Basic Authentication
+## Basic
 
-Basic Auth sends credentials encoded as Base64.
+Enter a **Username** and **Password**. Mercury encodes them into the header as you type. A preview of the header, with a copy button, appears below the fields.
 
-### Using the Auth Tab
+## Bearer
 
-1. Open a request
-2. Click the **Auth** tab
-3. Select **Basic**
-4. Enter **Username** and **Password**
-5. Mercury generates the header automatically
+Paste a token (JWT, OAuth access token, API token). The header preview appears below the field.
 
-![Basic Auth tab - Replace with: Screenshot showing Basic Auth form with username/password fields](/img/screenshots/placeholder.png)
+## Custom
 
-### Manual Header
+Type the full header value, for example `ApiKey abc123` or `Digest username="admin", realm="example", ...`.
 
-You can also add the header directly:
+For API keys sent in another header (such as `X-API-Key`) or in the query string, use the **Headers** or **Params** tab instead.
 
-```http
-GET https://api.example.com/protected
-Authorization: Basic dXNlcm5hbWU6cGFzc3dvcmQ=
+## Using variables
+
+Auth values are ordinary header text, so `{{variables}}` work:
+
 ```
-
-The value after "Basic " is `username:password` encoded in Base64.
-
-:::tip
-Using the Auth tab is easier — Mercury handles the encoding for you.
-:::
-
-## Bearer Token
-
-Bearer tokens are commonly used for:
-- OAuth 2.0 access tokens
-- JWT (JSON Web Tokens)
-- API keys in header format
-
-### Using the Auth Tab
-
-1. Open a request
-2. Click the **Auth** tab
-3. Select **Bearer**
-4. Enter your **Token**
-
-Mercury adds: `Authorization: Bearer your-token`
-
-![Bearer Auth tab - Replace with: Screenshot showing Bearer token input field](/img/screenshots/placeholder.png)
-
-### Manual Header
-
-```http
-GET https://api.example.com/protected
-Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
-```
-
-### Using Environment Variables
-
-Store tokens in your `.env` file:
-
-```bash
-# .env
-API_TOKEN=your-secret-token
-```
-
-Use the variable in your request:
-
-```http
-GET https://api.example.com/protected
 Authorization: Bearer {{API_TOKEN}}
 ```
 
-This keeps secrets out of your request files.
+For Basic, the username and password are base64-encoded **before** variable substitution. Variables inside the username or password fields are therefore not replaced. To use variables with Basic, add `Authorization: Basic {{BASIC_CREDENTIALS}}` on the Headers tab and put the base64 value in your `.env`. The Auth tab will then show Basic with empty fields. Don't type in them, because that replaces the header.
 
-## Custom Authentication
+## Details
 
-Select **Custom** to manually enter the value for the `Authorization` header.
+- Only the first enabled `Authorization` line is used. A disabled `# Authorization: ...` line is left alone and not sent.
+- Auth applies to one request. Nothing is inherited from folders. To share a token, put it in an environment variable and reference it in each request.
+- Because auth is a header, it's saved in the request file as plain text. Use a variable for secrets and keep your `.env` files out of Git. See [Environments](/docs/features/environments#keeping-secrets-out-of-git).
 
-Values entered here are synced to the Headers tab.
-If you need to add other headers (like `X-API-Key`), use the **Headers** tab directly.
+## Troubleshooting 401s
 
-### API Key in Header
+- Check that the environment that defines the token is selected. An undefined `{{API_TOKEN}}` is sent literally, and the URL bar shows an amber border.
+- Check the Headers tab for a disabled or duplicate `Authorization` line.
+- Check whether the token has expired.
 
-```http
-GET https://api.example.com/data
-X-API-Key: your-api-key
-```
+## Related
 
-### API Key in Query String
-
-```http
-GET https://api.example.com/data?api_key={{API_KEY}}
-```
-
-### Digest Authentication
-
-Add the header manually:
-
-```http
-GET https://api.example.com/protected
-Authorization: Digest username="admin", realm="example", ...
-```
-
-## Auth Inheritance
-
-The Auth tab settings apply only to the current request. Each `.json` file manages its own authentication.
-
-:::tip Shared Auth
-For requests that share the same auth, add the header in each file or use a variable:
-
-```http
-Authorization: Bearer {{SHARED_TOKEN}}
-```
-:::
-
-## Security Best Practices
-
-### 1. Use Environment Variables
-
-Never hardcode secrets in `.json` files:
-
-```http
-# ❌ Bad
-Authorization: Bearer abc123secret
-
-# ✅ Good
-Authorization: Bearer {{API_TOKEN}}
-```
-
-### 2. Gitignore Secrets
-
-Add to `.gitignore`:
-
-```gitignore
-.env
-.env.*
-!.env.example
-```
-
-### 3. Rotate Tokens Regularly
-
-Update your `.env` file when tokens expire or need rotation.
-
-### 4. Use Different Tokens Per Environment
-
-```bash
-# .env.development
-API_TOKEN=dev-token-safe-for-testing
-
-# .env.production
-API_TOKEN=prod-token-real-data
-```
-
-## Troubleshooting
-
-### 401 Unauthorized
-
-- Check if the token/credentials are correct
-- Verify the auth method matches what the API expects
-- Check if the token has expired
-- Ensure variables are defined (look for red indicators)
-
-### Credentials Not Sent
-
-- Make sure you saved the request after adding auth
-- Check if the Auth tab shows the correct method selected
-- Verify there are no conflicting `Authorization` headers
-
-## Related Features
-
-- [Environments](/docs/features/environments) — Store tokens in environment variables
-- [Requests](/docs/features/requests) — Adding headers manually
+- [Environments](/docs/features/environments)
+- [Requests](/docs/features/requests)
