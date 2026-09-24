@@ -4,257 +4,103 @@ sidebar_label: FAQ
 sidebar_position: 99
 ---
 
-# Frequently Asked Questions
-
-Common questions and troubleshooting tips for Mercury.
+# FAQ
 
 ## General
 
 ### What is Mercury?
 
-Mercury is a **native** API client that actually feels native. It's built with Rust and GPU-accelerated rendering — no Electron, no web views. It launches in under 300ms and runs at a locked 60fps with zero input lag.
+Mercury is a desktop API client written in Rust with egui. It's a single native binary with no Electron or web view, and it stores requests as plain `.json` files in a folder you choose.
 
-### Why does Mercury feel so fast?
+### Is it free?
 
-Mercury renders directly to your GPU at 60 frames per second, just like a video game. Electron apps render through a web browser engine, adding 2-4 frames of latency to every click. You feel this difference immediately.
+Yes. Mercury is MIT-licensed and open source, with no account or subscription. The source is at [github.com/Harry-kp/mercury](https://github.com/Harry-kp/mercury).
 
-### Is Mercury free?
+### Which platforms are supported?
 
-Yes, completely free and open source. No accounts, no subscriptions, no limits.
-
-### What platforms are supported?
-
-- **macOS** — Intel and Apple Silicon (Universal binary)
-- **Windows** — x64
-- **Linux** — AppImage (most distributions)
+Releases are built for macOS (Apple Silicon and Intel), Linux (x86_64 and ARM64) and Windows (x64). See [Installation](/docs/getting-started#installation).
 
 ### Where is my data stored?
 
-Your data is stored in plain `.json` files in the folder you choose as your workspace. Mercury doesn't upload anything to the cloud.
+- **Requests and environments** are in your workspace folder, as `.json` and `.env*` files.
+- **App data** is in `~/.mercury/`: `state.json` (the last session), `recent.json` (unsaved requests you've sent) and `history.json` (request history). Set the `MERCURY_HOME` environment variable to use a different directory.
 
----
+Mercury doesn't upload anything. Network requests go only to the APIs you call and, if you use the **Help** menu, to GitHub links opened in your browser.
+
+### Are there settings?
+
+No. The timeout (30 s), redirect handling and response size limits are fixed. See [Defaults](/docs/features/requests#defaults).
 
 ## Migration
 
-### How do I import from Postman?
+### How do I import from Postman or Insomnia?
 
-1. In Postman, export your collection (File → Export Collection)
-2. Choose **Collection v2.1** format
-3. In Mercury, go to **Open → Import Postman...**
-4. Select your exported JSON file
-5. Mercury creates `.json` files for each request
+Use **Open → Import Postman...** or **Open → Import Insomnia...**. See [Import & Export](/docs/features/import-export) for what gets imported and where the files go.
 
-### How do I import from Insomnia?
+### How do I get requests out of Mercury?
 
-1. In Insomnia, go to **File → Export Data**
-2. Export as JSON or YAML
-3. In Mercury, click **Import** and select your file
-4. Mercury creates `.json` files for each request
-
-### Can I export my Mercury requests?
-
-Yes! Since requests are plain `.json` files, you can:
-- Copy them anywhere
-- Commit to Git
-- Share via email/Slack
-- Convert to cURL with `⌘+Shift+C`
-
----
+Request files are plain JSON, so you can copy them, commit them or send them to someone. To share one request, press `⌘ Shift C` to copy it as a cURL command.
 
 ## Requests
 
-### Why isn't my request sending?
+### My request doesn't send
 
-Check these common issues:
+- The URL needs to include `http://` or `https://`.
+- If a status bar message says "Request timed out after 30s", "Connection failed" or "SSL/TLS error", check the network, VPN or proxy.
+- Press `Esc` to cancel a request that is stuck.
 
-1. **URL missing protocol** — Make sure URL starts with `http://` or `https://`
-2. **Network issues** — Verify you have internet access
-3. **Firewall blocking** — Some corporate firewalls block certain domains
+### My `{{variable}}` is sent literally
 
-### Why are my variables showing in the request?
-
-Variables like `{{TOKEN}}` appear literally when:
-
-1. The variable is not defined in your `.env` file
-2. The `.env` file is not in your workspace root
-3. There's a typo in the variable name (case-sensitive)
-
-Look for **red indicators** next to undefined variables.
+The selected environment doesn't define it. Check the environment picker at the top right, and check that the file is in the workspace root. Only one environment is active at a time. See [Environments](/docs/features/environments#troubleshooting).
 
 ### How do I send form data?
 
-Use `Content-Type: application/x-www-form-urlencoded`:
+Set the header and write the body yourself:
 
-```http
-POST https://api.example.com/login
+```
 Content-Type: application/x-www-form-urlencoded
-
+```
+```
 username=john&password=secret
 ```
 
-### How do I upload a file?
+### Can I upload files (multipart)?
 
-File uploads (multipart form data) are coming soon. For now, use a base64-encoded body or a separate tool for file uploads.
+No. Multipart bodies aren't supported.
 
----
+### Does Mercury support GraphQL?
 
-## Environment Variables
+You can send GraphQL as a normal `POST` with a JSON body and `Content-Type: application/json`:
 
-### Where do I put my .env file?
-
-Put `.env` files in your workspace root (the folder you opened in Mercury):
-
-```
-my-workspace/          ← This folder
-├── .env               ← Here
-├── .env.development
-└── requests/
-    └── api.json
+```json
+{ "query": "{ users { id name } }" }
 ```
 
-### Can I have multiple environments?
+There's no schema explorer.
 
-Yes! Create multiple `.env` files:
+### WebSockets, gRPC?
 
-- `.env` — Default (always loaded)
-- `.env.development` — Dev overrides
-- `.env.production` — Prod overrides
+Not supported. Mercury only sends HTTP requests.
 
-Switch between them using the environment selector in the status bar.
+### Are cookies kept?
 
-### How do I keep secrets out of Git?
-
-Add to your `.gitignore`:
-
-```gitignore
-.env
-.env.*
-!.env.example
-```
-
-Create `.env.example` with placeholder values for documentation.
-
----
-
-## Performance
-
-### Why is Mercury so fast?
-
-Mercury is:
-
-1. **Native** — Written in Rust, compiled to machine code
-2. **No Electron** — No bundled browser engine
-3. **Minimal** — Does one thing well, no bloat
-
-### How much RAM does Mercury use?
-
-About **30MB** on average, compared to:
-- Postman: 300-800MB
-- Insomnia: 200-500MB
-
-### What's the binary size?
-
-About **5MB**, compared to:
-- Postman: ~500MB
-- Insomnia: ~400MB
-
----
+Yes, for the current session only. See [Cookies](/docs/features/requests#cookies).
 
 ## Troubleshooting
 
 ### Mercury won't start
 
-**Mac**: Right-click → Open → Open (bypasses Gatekeeper for unsigned apps)
+- **macOS:** if Gatekeeper blocks Mercury, open **System Settings → Privacy & Security** and click **Allow Anyway**.
+- **Windows:** at the SmartScreen prompt, click **More info**, then **Run anyway**.
 
-**Linux**: Make the AppImage executable:
-```bash
-chmod +x Mercury-*.AppImage
-```
+### Edits from my editor don't show up
 
-**Windows**: If blocked by SmartScreen, click "More info" → "Run anyway"
+Mercury reloads the open request when its file changes, **unless you have unsaved edits in Mercury** (shown by a dot after the name in the breadcrumb). In that case Mercury keeps its own version. For edits to `.env` values, select the environment again in the picker.
 
-### Changes in my editor don't appear
+### A large response isn't displayed
 
-Mercury watches your workspace for changes. If sync isn't working:
-
-1. Make sure the file is saved in your editor
-2. Check if the file is in your workspace directory
-3. Try reloading the workspace
-
-### Request stuck in loading state
-
-If the send button keeps spinning:
-
-1. Press `Esc` to cancel
-2. Check your internet connection
-3. Verify the URL is reachable
-4. Look for firewall or proxy issues
-
-### Response body not displaying
-
-Large responses (>100KB) show plain text without syntax highlighting to keep the UI responsive at 60fps. You can:
-
-1. Toggle **Raw View** to see the unformatted response
-2. Click **Save Response** to download the full response
-
----
-
-## Features
-
-### Does Mercury support GraphQL?
-
-Basic support — you can send GraphQL queries as POST requests with JSON body:
-
-```http
-POST https://api.example.com/graphql
-Content-Type: application/json
-
-{
-  "query": "{ users { id name } }"
-}
-```
-
-Dedicated GraphQL features (explorer, schema) are coming soon.
-
-### Does Mercury support WebSockets?
-
-Not yet. WebSocket support is on the roadmap.
-
-### Does Mercury support gRPC?
-
-Not yet. gRPC support is on the roadmap.
-
-### Can I sync requests across devices?
-
-Mercury doesn't have built-in sync, but since requests are plain files, you can use:
-- Git
-- Dropbox / Google Drive / iCloud
-- Any file sync tool
-
----
+Text bodies over 100 KB aren't shown inline. Click **Save** and open the file in an editor. Responses that declare a `Content-Length` over 10 MB aren't downloaded. See [Performance](/docs/performance#response-size-limits).
 
 ## Contributing
 
-### Is Mercury open source?
-
-Yes! MIT licensed. View the source at [github.com/Harry-kp/mercury](https://github.com/Harry-kp/mercury).
-
-### How can I contribute?
-
-- **Report bugs** — Open an issue on GitHub
-- **Request features** — Open a feature request
-- **Submit PRs** — Bug fixes and features welcome
-
-### Where do I report bugs?
-
-[GitHub Issues](https://github.com/Harry-kp/mercury/issues) — please include:
-- Mercury version
-- OS version
-- Steps to reproduce
-- Expected vs actual behavior
-
----
-
-## Still have questions?
-
-Open an issue on [GitHub](https://github.com/Harry-kp/mercury/issues) and we'll help you out!
+Bug reports and pull requests are welcome on [GitHub](https://github.com/Harry-kp/mercury/issues). The **Help → Report Issue** menu item opens the issue tracker. When you report a bug, include your Mercury version, your OS, the steps to reproduce, and what you expected to happen.

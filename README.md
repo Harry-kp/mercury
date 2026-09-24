@@ -13,7 +13,7 @@
   <a href="https://harry-kp.github.io/mercury/docs/getting-started">Documentation</a> •
   <a href="https://github.com/Harry-kp/mercury/releases">Download</a> •
   <a href="https://github.com/users/Harry-kp/projects/5">Roadmap</a> •
-  <a href="#philosophy">Philosophy</a> •
+  <a href="#why-mercury">Why Mercury</a> •
   <a href="#contributing">Contributing</a>
 </p>
 
@@ -38,30 +38,10 @@
 
 ## Why Mercury?
 
-| | Postman | Insomnia | **Mercury** |
-|---|---|---|---|
-| **Startup** | 3-5 sec | 2-4 sec | **<300ms** |
-| **Frame Rate** | Sluggish | Sluggish | **60fps native** |
-| **Input Lag** | 50-100ms | 30-50ms | **<16ms** |
-| **Binary Size** | ~500MB | ~400MB | **6MB** |
-| **Price** | $14-25/mo | $5-18/mo | **Free forever** |
-| **Scrolling** | Janky | Okay | **Buttery smooth** |
-
-> *Mercury uses ~100MB RAM to render at 60fps with native GPU acceleration. Electron apps use 500MB+ to feel like a slow website.*
-
----
-
-## Philosophy
-
-> *"Build half a product, not a half-assed product."* — 37signals
-
-Mercury is built on principles, not features:
-
-- **⚡ Native Rust** — Real performance, not wrapped web pages
-- **📁 Files, not databases** — Your requests are just files. Grep them. Git them.
-- **🔒 Truly local** — We don't have servers. Your secrets stay yours.
-- **⌨️ Keyboard-first** — Your hands never leave the keyboard
-- **🚫 No bloat** — No AI, no collaboration, no features you'll never use
+- **Native, not Electron.** Rust + egui draw directly on the GPU. It's a single ~8 MB binary with no runtime and no splash screen.
+- **Your requests are files.** Each request is a small JSON file in a folder you choose, so you can grep it, diff it, commit it, or edit it in VS Code. Mercury picks up outside edits live.
+- **Local only.** No account, no cloud, no telemetry. Your secrets stay on your disk.
+- **Keyboard first.** Every common action has a shortcut; press `?` to see them all.
 
 ---
 
@@ -201,111 +181,99 @@ cargo build --release
 
 ## Shortcuts
 
+`⌘` is `Ctrl` on Windows and Linux. Press `?` in the app for this list.
+
 | Shortcut | Action |
 |----------|--------|
 | `⌘ Enter` | Send request |
-| `⌘ S` | Save request |
-| `⌘ K` | Search |
 | `⌘ N` | New request |
+| `⌘ S` | Save request |
+| `⌘ O` | Open folder |
+| `⌘ K` | Search collection |
+| `⌘ L` | Focus URL bar |
+| `⌘ E` | Next environment |
+| `⌘ H` | Toggle history |
+| `⌘ R` | Toggle raw response |
+| `⌘ Shift C` | Copy as cURL |
 | `⌘ Shift F` | Focus mode |
-| `⌘ H` | History |
-| `Esc` | Cancel request |
-| `?` | All shortcuts |
+| `?` | Keyboard shortcuts |
+| `Esc` | Cancel request / close dialog / clear search |
 
 ---
 
-## File Format
+## File format
 
-Your requests are stored as JSON files. Version control friendly. No lock-in.
-
-```json
-{
-  "method": "GET",
-  "url": "https://api.example.com/users",
-  "headers": {},
-  "body": ""
-}
-```
+A workspace is a folder: subfolders are collections, and each `*.json` file is one request.
 
 ```json
 {
   "method": "POST",
-  "url": "https://api.example.com/users",
+  "url": "{{BASE_URL}}/users",
   "headers": {
-    "Content-Type": "application/json",
-    "Authorization": "Bearer {{token}}"
+    "Authorization": "Bearer {{TOKEN}}",
+    "Content-Type": "application/json"
   },
-  "body": "{\"name\": \"John Doe\", \"email\": \"john@example.com\"}"
+  "body": "{\"name\": \"Ada\"}"
 }
 ```
 
-Variables like `{{token}}` are loaded from `.env` files in your workspace.
+`headers` and `body` are optional. Headers are written in sorted order, so git diffs stay clean.
+
+**Environments** are `.env` files in the workspace root (`.env.dev`, `.env.production`, …). Pick one from the top-right menu, or cycle with `⌘ E`. `{{NAME}}` is replaced in the URL, headers and body when you send. Production environments show in red and staging in amber.
+
+```bash
+# .env.dev
+BASE_URL=http://localhost:3000
+TOKEN="dev token"
+```
 
 ---
 
 ## Features
 
-- **Live File Sync** — Edit in VS Code, updates instantly. Two-way sync.
-- **Auto-Save** — Changes are persisted immediately. Never lose work.
-- **Collections** — Organize requests in folders
-- **Environments** — `.env` file support with `{{variable}}` syntax
-- **History** — Timeline of all requests with restore
-- **Focus Mode** — Distraction-free editing
-- **cURL Import** — Paste cURL commands directly
-- **Collection Import** — Import from Postman or Insomnia
-- **Request Cancellation** — Stop runaway requests instantly
-- **Syntax Highlighting** — JSON responses beautifully formatted
-- **Dark Mode** — Easy on the eyes, built for late nights
-- **Automatic Cookies** — Auth flows work seamlessly
-
----
+- **Collections**: folders and files, with create, rename, duplicate and delete from the sidebar.
+- **Live file sync**: outside edits refresh the tree and the open request. Changes auto-save every few seconds.
+- **Environments**: `.env` files with `{{variable}}` substitution. Undefined variables are flagged.
+- **Auth tab**: Basic, Bearer or a custom `Authorization` value, kept in sync with the Headers tab.
+- **Query params**: a table that stays in sync with the URL.
+- **cURL**: paste a `curl …` command into the URL bar to import it; `⌘ Shift C` copies the request as cURL.
+- **Import**: Postman v2.1 collections and Insomnia exports (JSON or YAML), including their variables.
+- **Responses**: pretty-printed and highlighted JSON, XML and HTML; headers and cookies; save images, binaries or large bodies to a file.
+- **History**: your last 50 requests from the past 7 days, with full responses. **Recent** keeps unsaved requests you've sent.
+- **Cookies**: kept automatically for the session, so login flows just work.
 
 ## Defaults
 
-Mercury uses sensible defaults so you can focus on your API, not configuration:
+There's no settings screen. These are fixed:
 
-| Setting | Default | Behavior |
-|---------|---------|----------|
-| **Timeout** | 30 seconds | Requests fail after 30s of no response |
-| **Redirects** | Followed | HTTP redirects are followed automatically (up to 10) |
+| | |
+|---|---|
+| Timeout | 30 seconds |
+| Redirects | Followed (up to 10) |
+| Largest response downloaded | 10 MB |
+| Largest body shown inline | 100 KB (bigger ones offer **Save**) |
+| App data | `~/.mercury/` (session, recent, history). Set `MERCURY_HOME` to use another folder. |
 
 ---
 
 ## What Mercury is NOT
 
-We intentionally don't build:
-
-- ❌ Cloud sync
-- ❌ Team collaboration  
-- ❌ AI assistants
-- ❌ Plugins/extensions
-- ❌ User accounts
-- ❌ Analytics/telemetry
-
-These aren't missing features. They're features we chose not to build.
+We deliberately don't build cloud sync, team collaboration, AI assistants, plugins, user accounts or analytics. They aren't missing features; we chose to leave them out.
 
 ---
 
 ## Contributing
 
-Mercury is open source. PRs welcome.
+PRs are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md). The repo is set up for Claude Code: [CLAUDE.md](CLAUDE.md) holds the conventions, and `/fix-issue <number>` runs the whole fix-to-merge loop.
 
 ```bash
-# Development
-cargo run
-
-# Tests
-cargo test
-
-# Release build
-cargo build --release
+cargo run      # run the app
+cargo test     # unit tests + a headless UI smoke test
 ```
-
----
 
 ## License
 
-MIT License — do whatever you want.
+MIT. Do whatever you want.
 
 ---
 

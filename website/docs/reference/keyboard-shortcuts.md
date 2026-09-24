@@ -6,89 +6,36 @@ sidebar_position: 2
 
 # Keyboard Shortcuts
 
-> Master Mercury with keyboard shortcuts. All actions are available without touching the mouse.
+On macOS `⌘` is Command. On Windows and Linux it's `Ctrl`.
 
-## Essential Shortcuts
+| Shortcut | Action |
+|----------|--------|
+| `⌘ Enter` | Send request |
+| `⌘ N` | New request |
+| `⌘ S` | Save request |
+| `⌘ O` | Open folder |
+| `⌘ K` | Search collection |
+| `⌘ L` | Focus URL bar |
+| `⌘ E` | Next environment |
+| `⌘ H` | Toggle history |
+| `⌘ R` | Toggle raw response |
+| `⌘ Shift C` | Copy as cURL |
+| `⌘ Shift F` | Focus mode |
+| `?` | Keyboard shortcuts |
+| `Esc` | Cancel request / close dialog / clear search |
 
-These are the shortcuts you'll use most often:
+Press `?` (when you aren't typing in a field), click **? Shortcuts** in the status bar, or choose **Help → Keyboard Shortcuts** to see this list in the app.
 
-| Action | Mac | Windows/Linux |
-|--------|-----|---------------|
-| **Send Request** | `⌘ + Enter` | `Ctrl + Enter` |
-| **Save** | `⌘ + S` | `Ctrl + S` |
-| **New Request** | `⌘ + N` | `Ctrl + N` |
-| **Open Folder** | `⌘ + O` | `Ctrl + O` |
-| **Quick Search** | `⌘ + K` | `Ctrl + K` |
+## Notes
 
-## Request Actions
-
-| Action | Mac | Windows/Linux |
-|--------|-----|---------------|
-| Send Request | `⌘ + Enter` | `Ctrl + Enter` |
-| Save Request | `⌘ + S` | `Ctrl + S` |
-| New Request | `⌘ + N` | `Ctrl + N` |
-| Copy as cURL | `⌘ + Shift + C` | `Ctrl + Shift + C` |
-
-## Navigation
-
-| Action | Mac | Windows/Linux |
-|--------|-----|---------------|
-| Quick Search | `⌘ + K` | `Ctrl + K` |
-| Focus URL Bar | `⌘ + L` | `Ctrl + L` |
-| Clear Search | `Escape` | `Escape` |
-
-## File Operations
-
-| Action | Mac | Windows/Linux |
-|--------|-----|---------------|
-| Open Folder | `⌘ + O` | `Ctrl + O` |
-| Save | `⌘ + S` | `Ctrl + S` |
-
-## Response Panel
-
-| Action | Mac | Windows/Linux |
-|--------|-----|---------------|
-| Toggle Raw/Pretty | `⌘ + R` | `Ctrl + R` |
-
-## Environment
-
-| Action | Mac | Windows/Linux |
-|--------|-----|---------------|
-| Switch Environment | `⌘ + E` | `Ctrl + E` |
-
-## Interface
-
-| Action | Mac | Windows/Linux |
-|--------|-----|---------------|
-| Focus Mode | `⌘ + Shift + F` | `Ctrl + Shift + F` |
-| Toggle History | `⌘ + H` | `Ctrl + H` |
-| Show Shortcuts | `?` | `?` |
-
-## Keyboard Shortcuts Overlay
-
-Press `?` to show the keyboard shortcuts overlay at any time.
-
-![Keyboard shortcuts overlay - Replace with: Screenshot showing the shortcuts overlay/help panel](/img/screenshots/placeholder.png)
-
-## Tips for Keyboard-First Workflow
-
-### 1. Send and Save in One Motion
-
-Train your fingers: `⌘+S` → `⌘+Enter`
-
-### 2. Use Quick Search
-
-`⌘+K` to instantly jump to any request without touching the mouse.
-
-### 3. Copy Results Fast
-
-`⌘+Shift+C` copies the request as cURL for sharing.
-
-### 4. Focus Mode
-
-`⌘+Shift+F` hides the sidebar for distraction-free editing.
+- **`⌘ N`** clears the editor for a new, unsaved request. It saves the current request first if it has a file.
+- **`⌘ S`** on an unsaved request asks for a name and saves it to the workspace root. See [Saving](/docs/features/requests#saving).
+- **`⌘ K`** moves focus to the search box in the top bar, which filters the sidebar by name.
+- **`⌘ E`** steps through the environments in the picker, then None, then starts over.
+- **`⌘ Shift F`** hides the sidebar. Press it again to bring the sidebar back.
+- **`Esc`** cancels a running request. If no request is running, it clears the search. If a dialog is open, it closes the dialog.
 
 ## Related
 
-- [Quick Start](/docs/quickstart) — Learn the basic workflow
-- [Requests](/docs/features/requests) — Working with requests
+- [Quick Start](/docs/quickstart)
+- [Requests](/docs/features/requests)

@@ -6,126 +6,28 @@ sidebar_position: 3
 
 # Performance
 
-Mercury is built for developers who hate waiting.
+Mercury aims to stay responsive, and it does this with a few design choices rather than tuning.
 
-## The Numbers That Matter
+## Native rendering
 
-| Metric | Mercury | Postman | Insomnia |
-|--------|---------|---------|----------|
-| **Time to first request** | \<300ms | 3-5 sec | 2-4 sec |
-| **Frame rate** | 60fps | Variable | Variable |
-| **Input latency** | \<16ms | 50-100ms | 30-50ms |
-| **Scroll smoothness** | Native GPU | Janky | Okay |
+- **Rust, single binary.** There is no bundled browser engine or JavaScript runtime to start.
+- **egui, immediate mode.** The whole UI is redrawn each frame and rendered on the GPU through OpenGL (`glow`). No DOM or layout engine sits between the input and the pixels.
+- **Background work stays off the UI thread.** Requests, file dialogs and imports run on background threads, so the UI keeps drawing while they run.
 
-## Why Mercury Feels Instant
+## Response size limits
 
-### 1. Native GPU Rendering
+Two constants in `src/http.rs` control how much of a response Mercury handles:
 
-Mercury renders directly to your graphics card at 60 frames per second. Every scroll, every hover, every animation runs at native speed—the same technology used in video games.
+| Limit | Value | What happens |
+|-------|-------|--------------|
+| `MAX_RESPONSE_SIZE` | 10 MB | If the server's `Content-Length` is larger, the body isn't downloaded and the panel shows **Response Too Large**. |
+| `MAX_INLINE_SIZE` | 100 KB | Text bodies larger than this aren't shown in the panel. You get a **Save** link so you can open the body in an editor. |
 
-Electron apps (Postman, Insomnia) render through a web browser, which adds **2-4 frames of latency** to every interaction. That's 30-60ms of delay you feel on every click.
+The inline limit exists because syntax highlighting builds thousands of text spans every frame, and a large highlighted body would drop the UI below 60 fps. For the same reason, a body that grows past 100 KB when pretty-printed is shown without highlighting.
 
-### 2. Zero JavaScript
+Images and binary content (PDF, audio, video, archives, `application/octet-stream`) are never rendered inline. Use **Save** to write them to disk.
 
-Mercury has no JavaScript runtime, no garbage collector pauses, no event loop overhead. When you press `Cmd+Enter`, the request fires **that frame**.
+## Lazy loading
 
-### 3. Single Binary
-
-No runtime to initialize. No Node.js to boot. Mercury goes from double-click to usable in under 300ms.
-
----
-
-## "But what about memory?"
-
-You might notice Mercury uses ~100MB of RAM. Here's why that's a feature, not a bug:
-
-**That 100MB buys you:**
-- 60fps native rendering
-- \<16ms input latency
-- GPU-accelerated scrolling
-- Instant response to every interaction
-
-**Compare to Electron apps:**
-- Postman: 400-800MB for a sluggish web page
-- Insomnia: 200-500MB and still feels slow
-
-Mercury uses **1/4 to 1/8 the memory** of competitors while feeling **4x faster**.
-
-### The Trade-off
-
-We could use 50MB and feel like a web page, or use 100MB and feel like a native app. We chose native feel.
-
-> *"Performance is about perception, not benchmarks."*
-
----
-
-## Benchmarks
-
-### Startup Time (Cold)
-
-```
-Mercury:    280ms  ████
-Insomnia:  2400ms  ████████████████████████████████████
-Postman:   4200ms  ██████████████████████████████████████████████████████████████
-```
-
-### Input Latency (Click to Response)
-
-```
-Mercury:     12ms  ██
-Insomnia:    45ms  █████████
-Postman:     78ms  ████████████████
-```
-
-### Scroll Smoothness
-
-```
-Mercury:    60fps (locked)
-Insomnia:   45-60fps (variable)
-Postman:    30-50fps (janky)
-```
-
----
-
-## Technical Details
-
-Mercury achieves its performance through:
-
-- **Rust** — Zero-cost abstractions, no GC
-- **egui** — Immediate mode GPU-accelerated UI
-- **glow** — OpenGL ES backend
-- **mimalloc** — High-performance allocator
-
-The architecture prioritizes **perceived performance** over synthetic benchmarks. Every design decision optimizes for "does it feel fast?" rather than "is the number small?"
-
-### Smart Response Handling
-
-Mercury intelligently adapts to response size:
-
-- **Small responses (\<100KB)** — Full syntax highlighting with color-coded JSON/XML/HTML
-- **Large responses (\>100KB)** — Plain text display to maintain 60fps
-- **Lazy History Loading** — Only metadata is loaded at startup (~25KB RAM). Full response bodies are loaded from disk only when you click a history item, ensuring instant startup regardless of history size.
-
-Syntax highlighting is character-intensive. By skipping it for large responses, Mercury stays responsive even when your API returns megabytes of data.
-
----
-
-## FAQ
-
-### Why not use Tauri for lower memory?
-
-Tauri apps use ~50MB but feel noticeably slower due to WebView rendering latency. We tested both and chose the one that feels better to use.
-
-### Will you optimize memory in the future?
-
-We continuously optimize, but we won't sacrifice the native feel. If we find ways to reduce memory without adding latency, we'll ship it.
-
-### How does Mercury compare to terminal tools like curl?
-
-Terminal tools are faster (no UI), but Mercury gives you:
-- Visual response formatting
-- Request history
-- Environment variables
-- Collection management
-
-...while still feeling nearly as snappy as the command line.
+- **Folders.** At startup Mercury reads only the workspace root. It reads a subfolder the first time you expand it.
+- **History.** History isn't read at startup. It is loaded the first time you open the history list or send a request, and only a summary of each entry is kept in memory (method, URL, status, duration). The full request and response are read from disk when you click an entry.

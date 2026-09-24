@@ -6,175 +6,79 @@ sidebar_position: 2
 
 # Collections & Folders
 
-> Organize your API requests into logical groups using folders. Mercury's file-based approach means your collection structure mirrors your file system.
-
-## What is a Collection?
-
-In Mercury, a **collection** is simply a folder containing `.json` files. There's no special format or database — just your file system.
+Mercury has no collection format of its own. A **workspace** is a folder on disk, its **subfolders are collections**, and the **`*.json` files are requests**.
 
 ```
-my-api-project/         ← Workspace root (collection)
-├── .env                ← Environment variables
-├── auth/               ← Folder for auth-related requests
+my-api/                 ← workspace (the folder you open)
+├── .env                ← environments: .env* files in the root only
+├── .env.production
+├── auth/               ← collection
 │   ├── login.json
 │   └── register.json
-├── users/              ← Folder for user endpoints
-│   ├── get-user.json
-│   ├── list-users.json
-│   └── update-user.json
-└── products/
-    ├── list.json
-    └── create.json
-```
-
-## Opening a Workspace
-
-1. Launch Mercury
-2. Click **Open Folder** or press `⌘+O`
-3. Select any folder — this becomes your workspace
-
-Mercury scans recursively for all `.json` files and displays them in the sidebar.
-
-![Workspace sidebar - Replace with: Screenshot showing sidebar with folder tree and .json files](/img/screenshots/placeholder.png)
-
-## Creating Folders
-
-### From Mercury
-
-1. Right-click in the sidebar
-2. Select **New Folder**
-3. Enter a name
-
-### From Your File System
-
-Just create a folder in your workspace directory. Mercury detects it immediately.
-
-```bash
-mkdir users
-touch users/get-user.json
-```
-
-## Creating Requests in Folders
-
-1. Right-click on a folder in the sidebar
-2. Select **New Request**
-3. Enter the request name
-
-The `.json` file is created inside that folder.
-
-## Folder Structure Best Practices
-
-### By Resource Type
-
-```
-api-tests/
 ├── users/
-├── products/
-├── orders/
-└── auth/
+│   ├── admin/          ← collections can nest
+│   │   └── list-admins.json
+│   └── get-user.json
+└── health.json
 ```
 
-### By Environment
+## Opening a workspace
 
-```
-api-tests/
-├── development/
-├── staging/
-└── production/
-```
+Press `⌘ O`, choose **Open → Open Folder...**, or click **Open a folder** in the empty sidebar. Mercury remembers the workspace and reopens it on the next launch.
 
-### By Feature
+## The sidebar tree
 
-```
-api-tests/
-├── authentication/
-├── checkout-flow/
-├── search/
-└── admin/
-```
+- Folders come first, then requests, each sorted by name.
+- Only `.json` files are listed. Other files are ignored.
+- Hidden files and folders (names starting with `.`) are skipped.
+- Each request shows its method. If a `.json` file isn't a valid request, it's listed without a method and shows an error when you open it.
+- Mercury reads a folder the first time you expand it. Clicking a folder expands or collapses it.
 
-## Expanding and Collapsing
+Unsaved requests you've sent appear above the tree under **Recent** (up to 50). Click one to load it, or click × to remove it. When you save a request, it's removed from Recent.
 
-- Click the **arrow** next to a folder to expand/collapse
-- Your expansion state persists between sessions
+## Searching
 
-:::tip Keyboard Navigation
-Use arrow keys to navigate the sidebar tree when focused.
-:::
+The search box in the top bar (`⌘ K`) filters the tree by file and folder name. The search is case-insensitive, and matching folders expand while you search. `Esc` clears the search.
 
-## Moving Requests
+## Creating, renaming and deleting
 
-### Drag and Drop
+Right-click a **folder**:
 
-Drag a request to a different folder to move it.
+| Action | What it does |
+|--------|--------------|
+| **New Request** | Saves the current editor contents as `<name>.json` in this folder |
+| **New Folder** | Creates a subfolder |
+| **Rename** | Renames the folder in place |
+| **Delete** | Deletes the folder and everything in it, after you confirm |
+| **Copy Path** | Copies the folder's full path |
 
-### Rename Path
+Requests have **Duplicate**, **Rename**, **Delete** and **Copy Path**. See [Sidebar actions](/docs/features/requests#sidebar-actions).
 
-Rename the file in your file system:
-```bash
-mv users/old-request.json products/new-request.json
-```
-
-Mercury updates automatically.
-
-## Renaming
-
-1. Right-click on a folder or request
-2. Select **Rename**
-3. Enter the new name
-
-For folders, all child paths update automatically.
-
-## Deleting
-
-1. Right-click on a folder or request
-2. Select **Delete**
+To create a folder directly in the workspace root, use your file manager or a terminal (`mkdir users`). Mercury picks up the change.
 
 :::warning
-Deleting a folder removes all requests inside it. This action cannot be undone from within Mercury (but you can recover with `git checkout` if using version control).
+Deleting is permanent. Nothing goes to the trash. If the workspace is in Git, you can restore files with `git checkout`.
 :::
 
-## Live File Sync
+## Changes made outside Mercury
 
-Mercury watches your workspace in real-time:
+Mercury watches the workspace folder. When files are added, removed or renamed, whether by an editor, `git pull` or a script, the tree and the environment list refresh within about half a second. If the open request's file changes and you have no unsaved edits, Mercury reloads it. If you do have unsaved edits, Mercury keeps yours, warns you, and saves over the file.
 
-- **Add a file** → Appears in sidebar instantly
-- **Delete a file** → Disappears from sidebar
-- **Move a file** → Tree updates automatically
-- **Edit in VS Code** → Changes sync to Mercury
+## Sharing with Git
 
-No import/export ever needed!
-
-![Live sync - Replace with: Screenshot or GIF showing file edited in VS Code updating in Mercury](/img/screenshots/placeholder.png)
-
-## Git Integration
-
-Since collections are just folders and files, Git works perfectly:
+A workspace is just files, so version control works as usual:
 
 ```bash
-cd my-api-project
+cd my-api
 git init
 git add .
-git commit -m "Initial API collection"
+git commit -m "API requests"
 ```
 
-Share collections with your team:
-```bash
-git clone https://github.com/your-team/api-collection.git
-```
+Mercury writes headers sorted by name, so diffs stay small. Keep secrets out of the repository. See [Environments](/docs/features/environments#keeping-secrets-out-of-git).
 
-Open the cloned folder in Mercury — done!
+## Related
 
-## Searching Requests
-
-Press `⌘+K` (Mac) or `Ctrl+K` (Windows/Linux) to open quick search:
-
-- Search by request name
-- Search by URL
-- Jump directly to any request
-
-## Related Features
-
-- [Requests](/docs/features/requests) — Working with `.json` files
-- [Environments](/docs/features/environments) — Manage environment variables
-- [Import/Export](/docs/features/import-export) — Import from Postman or Insomnia
+- [Requests](/docs/features/requests)
+- [Environments](/docs/features/environments)
+- [Import & Export](/docs/features/import-export)

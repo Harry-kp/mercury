@@ -6,93 +6,39 @@ sidebar_position: 6
 
 # Import & Export
 
-> Migrate from other tools easily. Import from Postman, Insomnia, or cURL, and export your requests as cURL commands.
+Mercury imports Postman and Insomnia exports and cURL commands, and it can copy any request as a cURL command.
 
-## Import from Insomnia
+## Where imports go
 
-Mercury can import Insomnia collections in JSON or YAML format.
+Choose **Open → Import Postman...** or **Open → Import Insomnia...**. The empty sidebar also has **Import from ...** links. Pick the export file, and then:
 
-### How to Import
+- if a workspace is open, the requests are written **into that workspace**
+- if no workspace is open, Mercury asks for a folder to write to, then opens it as the workspace
 
-1. In Insomnia, export your collection (File → Export Data)
-2. Choose **JSON** or **YAML** format
-3. In Mercury, click **Import** in the sidebar (or use the menu)
-4. Select your exported file
-5. Mercury creates:
-   - `.json` files for each request
-   - Folders matching your Insomnia groups
-   - `.env` files for environments
+The status bar reports how many requests and environments were imported.
 
-![Import Insomnia - Replace with: Screenshot showing import dialog with Insomnia file selected](/img/screenshots/placeholder.png)
+File and folder names are sanitized: they're lowercased, and spaces and characters such as `/ \ : * ? " < > |` become `-`. For example, "Get User" becomes `get-user.json`. Existing files with the same name are **overwritten**.
 
-### What Gets Imported
+## Postman
 
-| Insomnia Item | Mercury Equivalent |
-|---------------|-------------------|
-| Requests | `.json` files |
-| Request Groups | Folders |
-| Environments | `.env.{name}` files |
-| Headers | Headers in `.json` file |
-| Body | Body in `.json` file |
-| Auth | Auth headers |
+Export the collection from Postman as **Collection v2.1** (JSON).
 
-### File Structure After Import
+| Postman | Mercury |
+|---------|---------|
+| Request | `<name>.json` |
+| Folder (any depth) | Folder, with the same nesting |
+| Collection variables | `.env.<collection-name>` in the import folder |
+| Headers | Headers (disabled ones are skipped) |
+| Raw body | Body |
+| URL | The raw URL. Without one, the URL is rebuilt from its parts, skipping disabled query params. |
 
-If you import an Insomnia collection with:
-- Request group "Users" containing "Get User" and "List Users"
-- Request group "Products" containing "Create Product"
-- Environment "Development"
+Postman `{{variables}}` stay as they are in URLs, headers and bodies, so they work with the generated `.env` file. Auth settings, form-data and other non-raw bodies, scripts and tests aren't imported. Add auth on the [Auth tab](/docs/features/auth) afterwards.
 
-Mercury creates:
+Example: importing a collection named "My API":
+
 ```
-your-workspace/
-├── .env.development
-├── users/
-│   ├── get-user.json
-│   └── list-users.json
-└── products/
-    └── create-product.json
-```
-
-## Import from Postman
-
-Mercury can import Postman Collection v2.1 files (JSON format).
-
-### How to Import
-
-1. In Postman, click **Export** on your collection (or go to File → Export Collection)
-2. Choose **Collection v2.1** format
-3. Save as JSON file
-4. In Mercury, click **Import Postman...** in the Open menu
-5. Select your exported file
-6. Mercury creates:
-   - `.json` files for each request
-   - Folders matching your Postman folder structure
-   - `.env.{collection-name}` file for collection variables
-
-### What Gets Imported
-
-| Postman Item | Mercury Equivalent |
-|--------------|-------------------|
-| Requests | `.json` files |
-| Folders | Directories |
-| Collection Variables | `.env.{name}` file |
-| Headers | Headers in `.json` file |
-| Body (raw/JSON) | Body in `.json` file |
-| Query Parameters | URL with query string |
-
-### File Structure After Import
-
-If you import a Postman collection named "My API" with:
-- Folder "Auth" containing "Login" request
-- Folder "Users" with subfolder "Admin" containing "List Admins"
-- Top-level "Health Check" request
-- Collection variables: `base_url`, `token`
-
-Mercury creates:
-```
-your-workspace/
-├── .env.my-api            # Collection variables
+workspace/
+├── .env.my-api
 ├── auth/
 │   └── login.json
 ├── users/
@@ -101,115 +47,76 @@ your-workspace/
 └── health-check.json
 ```
 
-:::tip Variable Preservation
-Postman variables like `{{base_url}}` are preserved in the `.json` files. Define them in your `.env` file to use them.
-:::
+## Insomnia
+
+Export from Insomnia as JSON or YAML.
+
+| Insomnia | Mercury |
+|----------|---------|
+| Request inside a request group | `<group-name>/<name>.json` |
+| Request not in a group | `imported/<name>.json` |
+| Environment (non-empty) | `.env.<environment-name>` |
+| Headers | Headers (disabled ones are skipped) |
+| Body text | Body |
+
+Each request goes into a folder named after its **direct parent** group. Nested groups aren't recreated as nested folders. Auth settings aren't imported.
+
+```
+workspace/
+├── .env.base-environment
+├── users/
+│   ├── get-user.json
+│   └── list-users.json
+└── imported/
+    └── health.json
+```
 
 ## Import from cURL
 
-Paste a cURL command to create a request.
+Paste a command that starts with `curl ` into the **URL bar**. Mercury parses it and replaces the method, URL, headers and body. This works with commands copied from browser DevTools or API docs, including multi-line commands that use `\` continuations.
 
-### How to Import
-
-1. Copy a cURL command from your terminal, browser DevTools, or API docs
-2. In Mercury, press `⌘+V` (Mac) or `Ctrl+V` (Windows/Linux) in the request panel
-3. Mercury parses and fills in the request details
-
-### Example
-
-This cURL command:
 ```bash
 curl -X POST https://api.example.com/users \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer token123" \
   -d '{"name": "John"}'
 ```
 
-Becomes:
-```http
-POST https://api.example.com/users
-Content-Type: application/json
-Authorization: Bearer token123
+| Flag | Effect |
+|------|--------|
+| `-X`, `--request` | Method |
+| `-H`, `--header` | Header |
+| `-d`, `--data`, `--data-raw`, `--data-binary` | Body. Changes a `GET` to `POST`. |
+| `--json` | Body plus `Content-Type: application/json`. Changes a `GET` to `POST`. |
+| `-u`, `--user` | `Authorization: Basic ...` |
+| `-A`, `--user-agent` | `User-Agent` header |
+| `-b`, `--cookie` | `Cookie` header |
+| `-I`, `--head` | `HEAD` |
+| `-G`, `--get` | `GET` |
+| `-o`, `-x`, `-c`, `-m`, `-w`, `-e`, `--output`, `--proxy`, `--cookie-jar`, `--connect-timeout`, `--max-time`, `--write-out`, `--cacert`, `--cert`, `--key`, `--referer` | Ignored, along with their argument |
+| Other flags (`-s`, `-L`, `-k`, `-v`, `--compressed`, ...) | Ignored |
 
-{"name": "John"}
-```
+The first argument that isn't a flag is used as the URL. If there isn't one, you get an error.
 
-### Supported cURL Flags
+## Copy as cURL
 
-| Flag | Support |
-|------|---------|
-| `-X, --request` | ✅ Method |
-| `-H, --header` | ✅ Headers |
-| `-d, --data` | ✅ Body |
-| `--data-raw` | ✅ Body |
-| `--data-binary` | ✅ Body |
-| `--json` | ✅ JSON body + Content-Type header |
-| `-u, --user` | ✅ Basic authentication |
-| `-A, --user-agent` | ✅ User-Agent header |
-| `-b, --cookie` | ✅ Cookie header |
-| `-I, --head` | ✅ HEAD request |
-| `-G, --get` | ✅ Force GET with data |
-| `-L, --location` | Ignored (Mercury handles redirects) |
-| `-k, --insecure` | Ignored |
-| `-s, --silent` | Ignored |
-| `--compressed` | Ignored |
-
-## Export as cURL
-
-Convert any request to a cURL command for sharing or CLI use.
-
-### How to Export
-
-1. Open a request
-2. Right-click → **Copy as cURL**
-3. Or press `⌘+Shift+C` (Mac) / `Ctrl+Shift+C` (Windows/Linux)
-
-The cURL command is copied to your clipboard.
-
-### Example
-
-This request:
-```http
-GET https://api.example.com/users
-Authorization: Bearer {{API_TOKEN}}
-Accept: application/json
-```
-
-Becomes (with variables substituted):
-```bash
-curl -X GET "https://api.example.com/users" \
-  -H "Authorization: Bearer your-substituted-token" \
-  -H "Accept: application/json"
-```
-
-:::tip Variable Substitution
-When exporting, Mercury substitutes environment variables with their current values.
-:::
-
-## File-Based Portability
-
-Since Mercury uses plain `.json` files, you can also:
-
-### Share via Email/Slack
-
-Just send the `.json` file — anyone with Mercury can open it.
-
-### Commit to Git
+Press `⌘ Shift C` to copy the current request to the clipboard as a cURL command:
 
 ```bash
-git add requests/
-git commit -m "Add user API endpoints"
-git push
+curl -X GET 'https://api.example.com/users' \
+  -H 'Accept: application/json' \
+  -H 'Authorization: Bearer abc123'
 ```
 
-### Copy Between Projects
+- Variables from the selected environment are substituted in. Undefined ones stay as `{{NAME}}`.
+- Disabled (`#`) headers are left out.
+- Arguments are single-quoted, so you can paste the command into a POSIX shell as is.
 
-```bash
-cp project-a/users/*.json project-b/users/
-```
+## Sharing request files
 
-## Related Features
+Requests are plain `.json` files, so you can also share them by copying them, committing them to Git, or sending them to someone. See [File Format](/docs/reference/file-format).
 
-- [Collections](/docs/features/collections) — Organizing imported requests
-- [Environments](/docs/features/environments) — Setting up imported environments
-- [File Format](/docs/reference/file-format) — The `.json` file specification
+## Related
+
+- [Collections](/docs/features/collections)
+- [Environments](/docs/features/environments)
+- [File Format](/docs/reference/file-format)

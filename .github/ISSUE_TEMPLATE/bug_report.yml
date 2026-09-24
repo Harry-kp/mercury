@@ -14,7 +14,7 @@ body:
     id: mercury-version
     attributes:
       label: Mercury Version
-      description: Run `mercury --version` in terminal
+      description: The release you installed (see the Releases page or `brew info mercury`)
       placeholder: "0.1.0-beta"
     validations:
       required: true
