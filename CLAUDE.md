@@ -38,6 +38,7 @@ Mercury is a native Rust + egui API client. Requests are plain JSON files in a f
 - Disabled `# Header` lines are not saved to request files (the file stores a map). This is a known limitation, not a bug.
 - A gitleaks pre-commit hook may reject credential-looking literals in tests (`-u user:pass`). Build them with `format!`.
 - Linux builds need GTK/xcb dev packages (see `.github/workflows/ci.yml`).
+- CI uses the latest stable Rust, which rejects float literals passed as `impl Into<f32>` (write `Stroke::new(1.0_f32, …)`). If CI fails on lints you can't reproduce, run `rustup update stable`.
 
 ## Keep docs in sync (same PR)
 | You changed | Also update |

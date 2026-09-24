@@ -23,7 +23,7 @@ impl MercuryApp {
             .frame(
                 egui::Frame::NONE
                     .fill(Colors::BG_CARD)
-                    .stroke(egui::Stroke::new(1.0, Colors::BORDER_SUBTLE))
+                    .stroke(egui::Stroke::new(1.0_f32, Colors::BORDER_SUBTLE))
                     .inner_margin(Spacing::MD),
             )
             .show(ctx, |ui| {

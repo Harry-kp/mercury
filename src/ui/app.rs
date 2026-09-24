@@ -1031,7 +1031,7 @@ impl MercuryApp {
 fn bar_frame() -> egui::Frame {
     egui::Frame::NONE
         .fill(Colors::BG_SURFACE)
-        .stroke(egui::Stroke::new(1.0, Colors::BORDER_SUBTLE))
+        .stroke(egui::Stroke::new(1.0_f32, Colors::BORDER_SUBTLE))
         .inner_margin(egui::Margin::symmetric(Spacing::MD as i8, 0))
 }
 

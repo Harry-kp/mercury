@@ -15,7 +15,7 @@ fn card() -> egui::Frame {
     egui::Frame::NONE
         .fill(Colors::BG_CARD)
         .corner_radius(Radius::MD)
-        .stroke(egui::Stroke::new(1.0, Colors::BORDER_SUBTLE))
+        .stroke(egui::Stroke::new(1.0_f32, Colors::BORDER_SUBTLE))
         .inner_margin(Spacing::MD)
         .outer_margin(egui::Margin {
             right: Spacing::SM as i8,
@@ -61,7 +61,7 @@ impl MercuryApp {
             Colors::BORDER_WARNING
         };
         let url_card = card()
-            .stroke(egui::Stroke::new(1.0, border))
+            .stroke(egui::Stroke::new(1.0_f32, border))
             .show(ui, |ui| self.url_bar(ui));
         if !undefined.is_empty() {
             let list: Vec<String> = undefined.iter().map(|v| format!("• {{{{{v}}}}}")).collect();

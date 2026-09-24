@@ -333,7 +333,7 @@ pub fn popup_menu(ui: &Ui, trigger: &Response, width: f32, add_contents: impl Fn
             egui::Frame::popup(ui.style())
                 .fill(Colors::BG_MODAL)
                 .corner_radius(Radius::MD)
-                .stroke(egui::Stroke::new(1.0, Colors::BORDER_SUBTLE))
+                .stroke(egui::Stroke::new(1.0_f32, Colors::BORDER_SUBTLE))
                 .inner_margin(Spacing::SM),
         )
         .style(|style: &mut egui::Style| {
@@ -502,7 +502,7 @@ pub fn error_state(ui: &mut Ui, error: &str) {
 pub fn key_cap(ui: &mut Ui, key: &str) {
     egui::Frame::NONE
         .fill(Colors::BG_WIDGET)
-        .stroke(egui::Stroke::new(1.0, Colors::BORDER_SUBTLE))
+        .stroke(egui::Stroke::new(1.0_f32, Colors::BORDER_SUBTLE))
         .corner_radius(Radius::SM)
         .inner_margin(egui::Margin::symmetric(6, 2))
         .show(ui, |ui| {
@@ -770,7 +770,7 @@ pub fn modal(
         .frame(
             egui::Frame::NONE
                 .fill(Colors::BG_MODAL)
-                .stroke(egui::Stroke::new(1.0, Colors::BORDER_SUBTLE))
+                .stroke(egui::Stroke::new(1.0_f32, Colors::BORDER_SUBTLE))
                 .corner_radius(Radius::MD)
                 .inner_margin(Spacing::MD),
         )
