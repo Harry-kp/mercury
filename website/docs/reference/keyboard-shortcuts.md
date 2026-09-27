@@ -24,7 +24,7 @@ On macOS `⌘` is Command. On Windows and Linux it's `Ctrl`.
 | `⌘ ⇧ C` | Copy as cURL |
 | `⌘ ⇧ F` | Focus mode |
 | `?` | Keyboard shortcuts |
-| `Esc` | Cancel request / close dialog / clear filter |
+| `Esc` | Close find / cancel request / close dialog / clear filter |
 
 Press `?` (when you aren't typing in a field), click **Shortcuts** in the status bar, or pick **Keyboard shortcuts** from the `⋯` menu to see this list in the app.
 
@@ -38,7 +38,7 @@ Press `?` (when you aren't typing in a field), click **Shortcuts** in the status
 - **`⌘ F`** opens the find bar over the response body: every match is highlighted, `⏎` steps to the next one, and `Esc` closes it.
 - **`⌘ Shift F`** hides the sidebar. Press it again to bring the sidebar back.
 - **`Tab`** moves between the controls on screen and `Space` or `⏎` activates the one you land on — the focus ring shows where you are. Everything Mercury can do is reachable without a mouse.
-- **`Esc`** cancels a running request. If no request is running, it clears the sidebar filter. If a dialog or the palette is open, it closes it.
+- **`Esc`** closes the find bar first, since that is what you are looking at when you press it. Otherwise it cancels a running request, and failing that clears the sidebar filter. A dialog or the palette closes before any of it.
 
 ## Related
 
