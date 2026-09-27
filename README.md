@@ -13,6 +13,7 @@
   <a href="https://harry-kp.github.io/mercury/docs/getting-started">Documentation</a> •
   <a href="https://github.com/Harry-kp/mercury/releases">Download</a> •
   <a href="https://github.com/users/Harry-kp/projects/5">Roadmap</a> •
+  <a href="#your-requests-are-files">Requests are files</a> •
   <a href="#why-mercury">Why Mercury</a> •
   <a href="#contributing">Contributing</a>
 </p>
@@ -40,92 +41,36 @@
   <sub><a href="assets/media/demo.mp4">Watch in higher quality (MP4, 32s)</a></sub>
 </p>
 
-## Why Mercury?
-
-- **Native, not Electron.** Rust + egui draw directly on the GPU. It's a single ~9 MB binary with no runtime and no splash screen.
-- **Your requests are files.** Each request is a small JSON file in a folder you choose, so you can grep it, diff it, commit it, or edit it in VS Code. Mercury picks up outside edits live.
-- **Local only.** No account, no cloud, no telemetry. Your secrets stay on your disk.
-- **Keyboard first.** `⌘K` opens a command palette over every request and command; press `?` for the full shortcut list.
-- **No setup tax.** Type `localhost:3000/api`, pick JSON or Form, hit send. Mercury fills in the scheme, the `Content-Type` and the decoding so the first request works.
-- **Light or dark.** Mercury follows your system theme, or `⌘D` pins one. Vector icons and bundled fonts mean it looks the same on macOS, Windows and Linux.
-
----
-
-## Installation
-
-### 🍺 macOS (Homebrew) - Recommended
+## Quick start
 
 ```bash
 brew install --cask harry-kp/tap/mercury
 ```
 
-Then launch from **Applications** or run `mercury` in terminal. Universal build — Apple Silicon and Intel.
+Launch from **Applications**, or run `mercury`. Universal build — Apple Silicon and Intel.
 
-> macOS will say the developer cannot be verified the first time: right-click Mercury in Applications and choose **Open**. Mercury is unsigned because a Developer ID costs $99/year; the [install guide](https://harry-kp.github.io/mercury/docs/getting-started) has the details.
+> The first launch says the developer cannot be verified: right-click Mercury in Applications and choose **Open**. Mercury is unsigned because a Developer ID costs $99/year.
 
----
+<details>
+<summary><strong>Windows, Linux, or without Homebrew</strong></summary>
 
-### ⚡ Alternative: Shell Installer
+**macOS / Linux**
 
-**macOS / Linux:**
 ```bash
 curl --proto '=https' --tlsv1.2 -LsSf https://github.com/Harry-kp/mercury/releases/latest/download/mercury-installer.sh | sh
 ```
 
-**Windows (PowerShell):**
+**Windows (PowerShell)**
+
 ```powershell
 irm https://github.com/Harry-kp/mercury/releases/latest/download/mercury-installer.ps1 | iex
 ```
 
-**Then launch:**
-```bash
-mercury
-```
-> 💡 If you get "command not found", restart your terminal or run `source ~/.zshrc`
+Then run `mercury`. The installer puts the binary in `~/.cargo/bin` — if the shell can't find it, restart your terminal.
 
----
+On Windows, SmartScreen says "Windows protected your PC": click **More info** → **Run anyway**.
 
-### 🖥️ Want it in your Applications folder?
-
-The installer puts `mercury` in `~/.cargo/bin`. If you prefer launching from Spotlight/Start Menu:
-
-<details>
-<summary><strong>macOS: Add to Applications + Dock</strong></summary>
-
-```bash
-# One-liner: creates Mercury.app you can add to Dock
-mkdir -p /Applications/Mercury.app/Contents/MacOS && \
-cp ~/.cargo/bin/mercury /Applications/Mercury.app/Contents/MacOS/ && \
-cat > /Applications/Mercury.app/Contents/Info.plist << 'EOF'
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>CFBundleExecutable</key>
-    <string>mercury</string>
-    <key>CFBundleName</key>
-    <string>Mercury</string>
-    <key>CFBundleIdentifier</key>
-    <string>com.mercury.app</string>
-</dict>
-</plist>
-EOF
-```
-Now search "Mercury" in Spotlight (⌘ Space) and drag to Dock!
-
-</details>
-
-<details>
-<summary><strong>Windows: Pin to Start Menu</strong></summary>
-
-1. Open File Explorer → `%USERPROFILE%\.cargo\bin\`
-2. Right-click `mercury.exe` → **Create shortcut**
-3. Right-click the shortcut → **Pin to Start**
-
-</details>
-
-<details>
-<summary><strong>Linux: Add to app launcher</strong></summary>
+On Linux, to get it in your app launcher:
 
 ```bash
 cat > ~/.local/share/applications/mercury.desktop << 'EOF'
@@ -137,53 +82,89 @@ Categories=Development;
 EOF
 ```
 
+**Manual download** — [every platform, from Releases](https://github.com/Harry-kp/mercury/releases).
+
+**From source** — `git clone`, then `cargo build --release`.
+
+</details>
+
+<details>
+<summary><strong>macOS says Mercury is damaged, or won't open</strong></summary>
+
+Right-click in Applications → **Open** is the normal path. If macOS refuses outright:
+
+```bash
+xattr -d com.apple.quarantine /Applications/Mercury.app
+```
+
+For the shell installer's binary rather than the app bundle:
+
+```bash
+xattr -d com.apple.quarantine ~/.cargo/bin/mercury
+```
+
+The Homebrew cask ships a signed, sealed universal `.app`. Don't hand-build a `Mercury.app` around the bare binary — an unsigned bundle is what makes macOS call it damaged instead of merely unverified.
+
 </details>
 
 ---
 
-### 🔧 Troubleshooting
+## Your requests are files
 
-<details>
-<summary><strong>🍎 macOS: "developer cannot be verified" error</strong></summary>
+A workspace is just a folder. Subfolders are collections, and every `*.json` file is one request:
 
-1. Run `mercury` (it will fail)
-2. **System Settings → Privacy & Security** → Click **"Allow Anyway"**
-3. Run `mercury` again
-
-Or run: `xattr -d com.apple.quarantine ~/.cargo/bin/mercury`
-
-</details>
-
-<details>
-<summary><strong>🪟 Windows: "Windows protected your PC"</strong></summary>
-
-Click **"More info"** → **"Run anyway"**
-
-</details>
-
-<details>
-<summary><strong>📦 Manual Download</strong></summary>
-
-📦 **[Download from Releases](https://github.com/Harry-kp/mercury/releases)** — macOS (Intel/ARM), Windows, Linux
-
-```bash
-# Extract and run
-tar -xf mercury-*.tar.xz && chmod +x mercury && ./mercury
+```
+api/
+├── .env.dev
+├── .env.production
+├── users/
+│   ├── list-users.json
+│   └── create-user.json
+└── health.json
 ```
 
-</details>
-
-<details>
-<summary><strong>🛠️ Build from Source</strong></summary>
-
-```bash
-git clone https://github.com/Harry-kp/mercury.git
-cd mercury
-cargo build --release
-./target/release/mercury
+```json
+{
+  "method": "POST",
+  "url": "{{BASE_URL}}/users",
+  "headers": {
+    "Authorization": "Bearer {{TOKEN}}",
+    "Content-Type": "application/json"
+  },
+  "body": "{\"name\": \"Ada\"}"
+}
 ```
 
-</details>
+Grep it, diff it, commit it, edit it in VS Code — Mercury picks up outside edits live. `headers` and `body` are optional, and headers are written in sorted order so git diffs stay clean.
+
+**Environments** are `.env` files in the workspace root. Pick one from the top-right menu or cycle with `⌘ E`; `{{NAME}}` is substituted into the URL, headers and body when you send. Undefined variables are flagged on the tab that holds them. Production shows in red, staging in amber.
+
+```bash
+# .env.dev
+BASE_URL=http://localhost:3000
+TOKEN="dev token"
+```
+
+---
+
+## Why Mercury
+
+- **Native, not Electron.** Rust + egui draw directly on the GPU. One ~9 MB binary, no runtime, no splash screen.
+- **Local only.** No account, no cloud, no telemetry. Your secrets stay on your disk.
+- **Keyboard first.** `⌘ K` opens a palette over every request and command, `⌘ F` finds anything in a response, `?` lists the rest.
+- **No setup tax.** Type `localhost:3000/api`, pick JSON or Form, hit send. Mercury fills in the scheme, the `Content-Type` and the decoding so the first request works.
+- **Light or dark.** Follows your system theme, or `⌘ D` pins one. Vector icons and bundled fonts, so it looks the same on every OS.
+
+### What's in it
+
+- **Collections** — create, rename, duplicate and delete from the sidebar; outside edits sync live and changes auto-save.
+- **Auth** — Basic, Bearer or a custom `Authorization` value, always in sync with the Headers tab.
+- **Query params** — a table that stays in sync with the URL, both ways.
+- **cURL** — paste a `curl …` command into the URL bar to import it; `⌘ ⇧ C` copies the request back out.
+- **Import** — Postman v2.1 and Insomnia (JSON or YAML), with their variables, auth and bodies.
+- **Responses** — pretty-printed and highlighted JSON, XML and HTML; headers and cookies; `⌘ F` to search; save images, binaries or large bodies to a file.
+- **History** — your last 50 requests from the past 7 days, with full responses. **Recent** keeps unsaved requests you've sent.
+- **Cookies** — kept for the session, so login flows just work.
 
 ---
 
@@ -207,50 +188,11 @@ cargo build --release
 | `⌘ ⇧ C` | Copy as cURL |
 | `⌘ ⇧ F` | Focus mode |
 | `?` | Keyboard shortcuts |
-| `Esc` | Cancel request / close dialog / clear filter |
+| `Esc` | Close find / cancel request / close dialog / clear filter |
+
+`Tab` moves between controls and `Space` activates the one you land on, so everything is reachable without a mouse.
 
 ---
-
-## File format
-
-A workspace is a folder: subfolders are collections, and each `*.json` file is one request.
-
-```json
-{
-  "method": "POST",
-  "url": "{{BASE_URL}}/users",
-  "headers": {
-    "Authorization": "Bearer {{TOKEN}}",
-    "Content-Type": "application/json"
-  },
-  "body": "{\"name\": \"Ada\"}"
-}
-```
-
-`headers` and `body` are optional. Headers are written in sorted order, so git diffs stay clean.
-
-**Environments** are `.env` files in the workspace root (`.env.dev`, `.env.production`, …). Pick one from the top-right menu, or cycle with `⌘ E`. `{{NAME}}` is replaced in the URL, headers and body when you send. Production environments show in red and staging in amber.
-
-```bash
-# .env.dev
-BASE_URL=http://localhost:3000
-TOKEN="dev token"
-```
-
----
-
-## Features
-
-- **Collections**: folders and files, with create, rename, duplicate and delete from the sidebar.
-- **Live file sync**: outside edits refresh the tree and the open request. Changes auto-save every few seconds.
-- **Environments**: `.env` files with `{{variable}}` substitution. Undefined variables are flagged.
-- **Auth tab**: Basic, Bearer or a custom `Authorization` value, kept in sync with the Headers tab.
-- **Query params**: a table that stays in sync with the URL.
-- **cURL**: paste a `curl …` command into the URL bar to import it; `⌘ Shift C` copies the request as cURL.
-- **Import**: Postman v2.1 collections and Insomnia exports (JSON or YAML), including their variables.
-- **Responses**: pretty-printed and highlighted JSON, XML and HTML; headers and cookies; save images, binaries or large bodies to a file.
-- **History**: your last 50 requests from the past 7 days, with full responses. **Recent** keeps unsaved requests you've sent.
-- **Cookies**: kept automatically for the session, so login flows just work.
 
 ## Defaults
 

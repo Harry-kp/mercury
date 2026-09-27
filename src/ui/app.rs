@@ -126,7 +126,10 @@ pub const SHORTCUTS: &[Shortcut] = &[
 ];
 
 /// Not a table entry because it does different things depending on context.
-pub const ESCAPE_HELP: (&str, &str) = ("Esc", "Cancel request / close dialog / clear filter");
+pub const ESCAPE_HELP: (&str, &str) = (
+    "Esc",
+    "Close find / cancel request / close dialog / clear filter",
+);
 
 impl Shortcut {
     fn pressed(&self, i: &egui::InputState, typing: bool) -> bool {
