@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The request editor's `⋯` menu, the workspace menu and the environment picker replace the old Help/Open menus.
 
 ### Fixed
+- **The sidebar grew 2px wider every frame, and sprang back after you resized it.** A text field ended up two pixels wider than the space it was given — a frame occupies `content + margin + 2 × stroke width`, and only the margin was being subtracted. Inside a panel that feeds back into the panel width, so it crept outward forever. The response panel did the same whenever history was open.
 - **The macOS app was Apple Silicon only, despite being published as "universal".** Intel Macs could not run the Homebrew cask at all. The bundle is now a real universal binary, and the release fails if it ever isn't.
 - **macOS called the app "damaged".** The bundle claimed a sealed signature it did not have, so Gatekeeper refused it outright instead of offering the usual unidentified-developer prompt. It is now ad-hoc signed and sealed, so right-click → Open works.
 - **Windows opened a console window behind the GUI.**

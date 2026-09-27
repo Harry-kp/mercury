@@ -86,6 +86,32 @@ fn open_send_edit_and_save() {
     harness.run_steps(2);
     assert_eq!(harness.state().env_name(), Some(".env.dev"));
 
+    // Panel widths must not drift. A widget that ends up wider than the space
+    // it was handed feeds straight back into the panel width, and the panel
+    // grows a little every frame — and springs back after you resize it.
+    let panel_width = |harness: &Harness<'_, MercuryApp>, name: &str| {
+        egui::containers::panel::PanelState::load(&harness.ctx, egui::Id::new(name))
+            .map(|state| state.rect.width())
+            .expect("panel is laid out")
+    };
+    harness.state_mut().show_history = true;
+    harness.run_steps(4);
+    let settled = [
+        panel_width(&harness, "sidebar"),
+        panel_width(&harness, "response_panel"),
+    ];
+    harness.run_steps(8);
+    assert_eq!(
+        [
+            panel_width(&harness, "sidebar"),
+            panel_width(&harness, "response_panel")
+        ],
+        settled,
+        "a panel width drifted while nothing was interacting with it"
+    );
+    harness.state_mut().show_history = false;
+    harness.run_steps(2);
+
     // expand the folder, open the request
     harness.get_by_label("users").click();
     harness.run_steps(2);
