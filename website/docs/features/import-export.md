@@ -10,12 +10,12 @@ Mercury imports Postman and Insomnia exports and cURL commands, and it can copy 
 
 ## Where imports go
 
-Choose **Open → Import Postman...** or **Open → Import Insomnia...**. The empty sidebar also has **Import from ...** links. Pick the export file, and then:
+Choose **Import from Postman…** or **Import from Insomnia…** from the workspace menu in the top bar. The empty sidebar also has **Import from ...** links. Pick the export file, and then:
 
 - if a workspace is open, the requests are written **into that workspace**
 - if no workspace is open, Mercury asks for a folder to write to, then opens it as the workspace
 
-The status bar reports how many requests and environments were imported.
+A notification reports how many requests and environments were imported.
 
 File and folder names are sanitized: they're lowercased, and spaces and characters such as `/ \ : * ? " < > |` become `-`. For example, "Get User" becomes `get-user.json`. Existing files with the same name are **overwritten**.
 

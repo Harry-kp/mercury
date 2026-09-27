@@ -35,7 +35,7 @@ No. The timeout (30 s), redirect handling and response size limits are fixed. Se
 
 ### How do I import from Postman or Insomnia?
 
-Use **Open → Import Postman...** or **Open → Import Insomnia...**. See [Import & Export](/docs/features/import-export) for what gets imported and where the files go.
+Use **Import from Postman…** or **Import from Insomnia…** in the workspace menu (the folder chip in the top bar). See [Import & Export](/docs/features/import-export) for what gets imported and where the files go.
 
 ### How do I get requests out of Mercury?
 
@@ -46,7 +46,7 @@ Request files are plain JSON, so you can copy them, commit them or send them to 
 ### My request doesn't send
 
 - The URL needs to include `http://` or `https://`.
-- If a status bar message says "Request timed out after 30s", "Connection failed" or "SSL/TLS error", check the network, VPN or proxy.
+- If a message says "Request timed out after 30s", "Connection failed" or "SSL/TLS error", check the network, VPN or proxy.
 - Press `Esc` to cancel a request that is stuck.
 
 ### My `{{variable}}` is sent literally
@@ -103,4 +103,4 @@ Text bodies over 100 KB aren't shown inline. Click **Save** and open the file in
 
 ## Contributing
 
-Bug reports and pull requests are welcome on [GitHub](https://github.com/Harry-kp/mercury/issues). The **Help → Report Issue** menu item opens the issue tracker. When you report a bug, include your Mercury version, your OS, the steps to reproduce, and what you expected to happen.
+Bug reports and pull requests are welcome on [GitHub](https://github.com/Harry-kp/mercury/issues). **Report an issue** in the `⋯` menu opens the issue tracker. When you report a bug, include your Mercury version, your OS, the steps to reproduce, and what you expected to happen.

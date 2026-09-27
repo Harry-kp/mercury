@@ -129,6 +129,15 @@ impl From<&HistoryEntry> for HistorySummary {
     }
 }
 
+/// Appearance preference. `System` follows the OS.
+#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub enum ThemeMode {
+    #[default]
+    System,
+    Light,
+    Dark,
+}
+
 /// Session restored on launch (`~/.mercury/state.json`).
 #[derive(Clone, Debug, Serialize, Deserialize, Default)]
 #[serde(default)]
@@ -141,6 +150,10 @@ pub struct AppState {
     pub selected_tab: usize,
     /// Environment file name, e.g. ".env.dev".
     pub env_name: Option<String>,
+    pub theme: ThemeMode,
+    /// The request file that was open, so a restart reopens it instead of
+    /// orphaning the editor into an "Untitled" request.
+    pub current_file: Option<String>,
 }
 
 /// Sidebar tree node. `children` is `None` until the folder is first expanded.
@@ -202,11 +215,30 @@ mod tests {
 
     #[test]
     fn app_state_ignores_legacy_fields() {
-        // v0.2 wrote method as a string plus auth_text/selected_env
+        // v0.2 wrote method as a string plus auth_text/selected_env, and had
+        // no theme preference at all
         let old = r#"{"workspace_path":null,"method":"TRACE","url":"u","headers_text":"",
             "body_text":"","auth_text":"","selected_tab":1,"selected_env":2}"#;
         let s: AppState = serde_json::from_str(old).unwrap();
         assert_eq!(s.method, HttpMethod::TRACE);
         assert_eq!(s.selected_tab, 1);
+        assert_eq!(s.theme, ThemeMode::System);
+        assert_eq!(s.current_file, None);
+    }
+
+    #[test]
+    fn app_state_roundtrips_the_session() {
+        let state = AppState {
+            theme: ThemeMode::Light,
+            current_file: Some("/ws/users/list.json".into()),
+            ..Default::default()
+        };
+        let restored: AppState =
+            serde_json::from_str(&serde_json::to_string(&state).unwrap()).unwrap();
+        assert_eq!(restored.theme, ThemeMode::Light);
+        assert_eq!(
+            restored.current_file.as_deref(),
+            Some("/ws/users/list.json")
+        );
     }
 }

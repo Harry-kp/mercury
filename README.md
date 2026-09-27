@@ -41,7 +41,8 @@
 - **Native, not Electron.** Rust + egui draw directly on the GPU. It's a single ~8 MB binary with no runtime and no splash screen.
 - **Your requests are files.** Each request is a small JSON file in a folder you choose, so you can grep it, diff it, commit it, or edit it in VS Code. Mercury picks up outside edits live.
 - **Local only.** No account, no cloud, no telemetry. Your secrets stay on your disk.
-- **Keyboard first.** Every common action has a shortcut; press `?` to see them all.
+- **Keyboard first.** `⌘K` opens a command palette over every request and command; press `?` for the full shortcut list.
+- **Light or dark.** Mercury follows your system theme, or `⌘D` pins one. Vector icons and bundled fonts mean it looks the same on macOS, Windows and Linux.
 
 ---
 
@@ -185,19 +186,20 @@ cargo build --release
 
 | Shortcut | Action |
 |----------|--------|
-| `⌘ Enter` | Send request |
+| `⌘ ⏎` | Send request |
+| `⌘ K` | Command palette |
 | `⌘ N` | New request |
 | `⌘ S` | Save request |
 | `⌘ O` | Open folder |
-| `⌘ K` | Search collection |
 | `⌘ L` | Focus URL bar |
 | `⌘ E` | Next environment |
 | `⌘ H` | Toggle history |
 | `⌘ R` | Toggle raw response |
-| `⌘ Shift C` | Copy as cURL |
-| `⌘ Shift F` | Focus mode |
+| `⌘ D` | Toggle light / dark |
+| `⌘ ⇧ C` | Copy as cURL |
+| `⌘ ⇧ F` | Focus mode |
 | `?` | Keyboard shortcuts |
-| `Esc` | Cancel request / close dialog / clear search |
+| `Esc` | Cancel request / close dialog / clear filter |
 
 ---
 
