@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- On a first launch, the URL bar has focus — you can just type.
 - **A body type next to the Body tab** — JSON, Form, Text or none — which writes the `Content-Type` header for you. A JSON body used to be sent with no `Content-Type` at all, so a first POST failed against most APIs. Picking **Form** edits `a=1&b=2` as a table and percent-encodes the values, which is what an OAuth token request needs.
 - Mercury reopens the request file you had open when you quit, instead of restoring its contents as an "Untitled" unsaved request.
 - **A light theme.** Mercury follows your system appearance and `⌘ D` overrides it. The choice is remembered.
@@ -16,6 +17,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The request editor's `⋯` menu, the workspace menu and the environment picker replace the old Help/Open menus.
 
 ### Fixed
+- **The macOS app was Apple Silicon only, despite being published as "universal".** Intel Macs could not run the Homebrew cask at all. The bundle is now a real universal binary, and the release fails if it ever isn't.
+- **macOS called the app "damaged".** The bundle claimed a sealed signature it did not have, so Gatekeeper refused it outright instead of offering the usual unidentified-developer prompt. It is now ad-hoc signed and sealed, so right-click → Open works.
+- **Windows opened a console window behind the GUI.**
 - **Compressed responses rendered as mojibake.** Any server with gzip on — and every cURL pasted from a browser, which always asks for gzip — produced garbage. Mercury now decodes gzip, brotli and deflate.
 - **`localhost:3000/api` failed with "Invalid URL".** A URL without a scheme gets one: `http` for loopback, `https` otherwise.
 - **A request or folder named `../x` was created outside the folder you picked.** Names are now a single file name; `/`, `\`, `..` and a leading `.` are rejected.

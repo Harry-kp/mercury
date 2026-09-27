@@ -24,6 +24,8 @@ brew install --cask harry-kp/tap/mercury
 
 Then launch Mercury from **Applications**, or run `mercury` in a terminal.
 
+The cask installs a universal build, so it runs on both Apple Silicon and Intel Macs.
+
 ### Shell installer
 
 **macOS / Linux:**
@@ -96,12 +98,35 @@ EOF
 
 </details>
 
+### Linux: runtime libraries
+
+The Linux binary links against the system GUI libraries. On a minimal install you may need:
+
+```bash
+# Debian / Ubuntu
+sudo apt install libgtk-3-0 libxkbcommon0 libxcb-render0 libxcb-shape0 libxcb-xfixes0 libssl3
+
+# Fedora
+sudo dnf install gtk3 libxkbcommon libxcb openssl-libs
+```
+
+If Mercury exits immediately with an error mentioning a missing `.so` file, that library is the one to install.
+
 ### Troubleshooting installation
 
-**macOS: "developer cannot be verified"**
-1. Run `mercury` once (it will be blocked)
-2. Open **System Settings → Privacy & Security** and click **Allow Anyway**
-3. Run `mercury` again
+Mercury is not signed with an Apple Developer ID or submitted to Microsoft, because
+both cost money a free tool doesn't have. Your operating system will say so the
+first time you open it. Nothing is wrong with the download.
+
+**macOS: "Mercury cannot be opened because the developer cannot be verified"**
+
+Right-click (or Control-click) Mercury in **Applications** and choose **Open**, then
+**Open** again in the dialog. macOS remembers the choice. Alternatively, open
+**System Settings → Privacy & Security** and click **Open Anyway** just after the
+warning appears.
+
+If you installed with the shell installer and run `mercury` from a terminal, macOS
+does not check it at all and it just starts.
 
 **Windows SmartScreen:** click **More info**, then **Run anyway**.
 
