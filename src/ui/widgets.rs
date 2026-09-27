@@ -632,13 +632,20 @@ fn field(
     let border = if focused { t.accent } else { t.border };
     let lead = leading.map_or(0.0, |_| 14.0 + Space::SM);
 
-    egui::Frame::NONE
+    let frame = egui::Frame::NONE
         .fill(t.input)
         .corner_radius(Radius::SM)
         .stroke(Stroke::new(1.0_f32, border))
-        .inner_margin(Margin::symmetric(Space::MD as i8, Space::SM as i8))
+        .inner_margin(Margin::symmetric(Space::MD as i8, Space::SM as i8));
+    // A frame occupies `content + inner_margin + 2 * stroke.width`. Subtract
+    // all of it: overshooting by even the stroke makes the field wider than
+    // the space it was given, and inside a SidePanel that feeds back into the
+    // panel width and grows it every frame.
+    let content = (width - frame.total_margin().sum().x).max(0.0);
+
+    frame
         .show(ui, |ui| {
-            ui.set_width(width - Space::MD * 2.0);
+            ui.set_width(content);
             ui.horizontal(|ui| {
                 ui.spacing_mut().item_spacing.x = Space::SM;
                 if let Some(what) = leading {
@@ -648,7 +655,7 @@ fn field(
                     egui::TextEdit::singleline(text)
                         .id(id)
                         .hint_text(muted(hint))
-                        .desired_width(width - Space::MD * 2.0 - lead)
+                        .desired_width(content - lead)
                         .frame(false)
                         .font(ui_font(Text::BODY)),
                 )
