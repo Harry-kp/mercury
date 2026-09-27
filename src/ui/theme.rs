@@ -76,7 +76,7 @@ pub const DARK: Theme = Theme {
 
     text: rgb(0xE4E8EE),
     text_muted: rgb(0x98A1AE),
-    text_faint: rgb(0x6A7381),
+    text_faint: rgb(0x7D8898),
 
     accent: rgb(0xA78BFA),
     accent_hover: rgb(0xC4B5FD),
@@ -104,7 +104,7 @@ pub const DARK: Theme = Theme {
         number: rgb(0xFCD34D),
         boolean: rgb(0xF0ABFC),
         null: rgb(0x94A3B8),
-        punct: rgb(0x5C6675),
+        punct: rgb(0x778397),
     },
 };
 
@@ -122,8 +122,8 @@ pub const LIGHT: Theme = Theme {
     border_strong: rgb(0xC7CDD6),
 
     text: rgb(0x101419),
-    text_muted: rgb(0x5A6470),
-    text_faint: rgb(0x8A94A1),
+    text_muted: rgb(0x4A525C),
+    text_faint: rgb(0x6A717B),
 
     accent: rgb(0x6D45E0),
     accent_hover: rgb(0x5A34C9),
@@ -143,15 +143,15 @@ pub const LIGHT: Theme = Theme {
         rgb(0x475569), // HEAD
         rgb(0xC2410C), // OPTIONS
         rgb(0x4D7C0F), // CONNECT
-        rgb(0x64748B), // TRACE
+        rgb(0x62728A), // TRACE
     ],
     syntax: Syntax {
         key: rgb(0x0E7490),
         string: rgb(0x15803D),
         number: rgb(0xB45309),
         boolean: rgb(0xA21CAF),
-        null: rgb(0x64748B),
-        punct: rgb(0x98A1AE),
+        null: rgb(0x627188),
+        punct: rgb(0x6B717B),
     },
 };
 
@@ -470,6 +470,105 @@ mod tests {
             for (i, method) in HttpMethod::ALL.into_iter().enumerate() {
                 assert_eq!(palette.method(method), palette.methods[i]);
             }
+        }
+    }
+
+    /// WCAG relative luminance.
+    fn luminance(c: Color32) -> f32 {
+        let channel = |v: u8| {
+            let v = v as f32 / 255.0;
+            if v <= 0.03928 {
+                v / 12.92
+            } else {
+                ((v + 0.055) / 1.055).powf(2.4)
+            }
+        };
+        0.2126 * channel(c.r()) + 0.7152 * channel(c.g()) + 0.0722 * channel(c.b())
+    }
+
+    fn contrast(fg: Color32, bg: Color32) -> f32 {
+        let (a, b) = (luminance(fg), luminance(bg));
+        (a.max(b) + 0.05) / (a.min(b) + 0.05)
+    }
+
+    /// Mercury's text is 11-13px, which WCAG treats as small: AA is 4.5:1.
+    /// Every color that carries readable text has to clear it on every
+    /// surface it can land on, or the dimmest tiers turn into decoration.
+    #[test]
+    fn every_text_color_clears_wcag_aa_on_its_surfaces() {
+        for (name, t) in [("dark", &DARK), ("light", &LIGHT)] {
+            let surfaces = [
+                ("bg", t.bg),
+                ("panel", t.panel),
+                ("card", t.card),
+                ("elevated", t.elevated),
+            ];
+            let code = [("input", t.input), ("code", t.code)];
+            let on_surfaces = [
+                ("text", t.text),
+                ("text_muted", t.text_muted),
+                ("text_faint", t.text_faint),
+                ("accent", t.accent),
+                ("success", t.success),
+                ("warning", t.warning),
+                ("error", t.error),
+                ("syntax.key", t.syntax.key),
+            ];
+            // syntax.key also labels kv rows, so it lands on the panel surfaces.
+            let on_code = [
+                ("syntax.string", t.syntax.string),
+                ("syntax.number", t.syntax.number),
+                ("syntax.boolean", t.syntax.boolean),
+                ("syntax.null", t.syntax.null),
+                ("syntax.punct", t.syntax.punct),
+            ];
+            let mut pairs: Vec<(&str, Color32, &str, Color32)> = Vec::new();
+            for (fg_name, fg) in on_surfaces {
+                for (bg_name, bg) in surfaces.into_iter().chain(code) {
+                    pairs.push((fg_name, fg, bg_name, bg));
+                }
+            }
+            for (fg_name, fg) in on_code {
+                for (bg_name, bg) in code {
+                    pairs.push((fg_name, fg, bg_name, bg));
+                }
+            }
+            for method in HttpMethod::ALL {
+                for (bg_name, bg) in surfaces {
+                    pairs.push(("method", t.method(method), bg_name, bg));
+                }
+            }
+            // the ink on a filled button, in both palettes
+            pairs.push(("on_accent", t.on_accent, "accent", t.accent));
+            pairs.push(("on_accent", t.on_accent, "error", t.error));
+            for (fg_name, fg, bg_name, bg) in pairs {
+                let ratio = contrast(fg, bg);
+                assert!(
+                    ratio >= 4.5,
+                    "{name}: {fg_name} on {bg_name} is {ratio:.2}:1, below WCAG AA (4.5:1)"
+                );
+            }
+        }
+    }
+
+    /// The three text tiers have to stay visibly apart. Raising the dimmest
+    /// one to clear AA is easy; doing it until it sits on top of the tier
+    /// above turns a hierarchy into two colors that read the same.
+    #[test]
+    fn the_three_text_tiers_stay_visibly_apart() {
+        for (name, t) in [("dark", &DARK), ("light", &LIGHT)] {
+            let on = |c| contrast(c, t.panel);
+            let (text, muted, faint) = (on(t.text), on(t.text_muted), on(t.text_faint));
+            assert!(
+                text / muted >= 1.3,
+                "{name}: text and text_muted are {:.2}x apart",
+                text / muted
+            );
+            assert!(
+                muted / faint >= 1.3,
+                "{name}: text_muted and text_faint are {:.2}x apart",
+                muted / faint
+            );
         }
     }
 

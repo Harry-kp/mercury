@@ -111,6 +111,7 @@ impl MercuryApp {
             t.tint(color, 0.13)
         };
         ui.painter().rect_filled(rect, Radius::SM, fill);
+        widgets::focus_ring(ui, rect, &response);
         ui.painter().galley(
             egui::pos2(
                 rect.left() + Space::LG,
@@ -128,6 +129,9 @@ impl MercuryApp {
             ),
             color,
         );
+        response.widget_info(|| {
+            egui::WidgetInfo::labeled(egui::WidgetType::ComboBox, true, self.method.as_str())
+        });
         let response = response
             .on_hover_cursor(egui::CursorIcon::PointingHand)
             .on_hover_text("HTTP method");
