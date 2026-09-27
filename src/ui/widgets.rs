@@ -8,9 +8,10 @@ use super::theme::{mono, semibold, theme, ui_font, Layout, Radius, Space, Text};
 use crate::kv::{self, KeyValue};
 use crate::model::HttpMethod;
 use eframe::egui::{
-    self, text::LayoutJob, Align, Color32, CornerRadius, Margin, Rect, Response, RichText, Sense,
-    Stroke, StrokeKind, TextFormat, Ui, UiBuilder, Vec2,
+    self, text::LayoutJob, text::LayoutSection, Align, Color32, CornerRadius, Margin, Rect,
+    Response, RichText, Sense, Stroke, StrokeKind, TextFormat, Ui, UiBuilder, Vec2,
 };
+use std::ops::Range;
 
 /// How long the ✓ confirmation shows after a copy/clear click.
 const CONFIRM_SECS: f64 = 1.2;
@@ -191,6 +192,56 @@ fn push(job: &mut LayoutJob, text: &str, color: Color32) {
             ..Default::default()
         },
     );
+}
+
+/// Byte ranges of every match of `needle`, ignoring ASCII case.
+///
+/// `to_ascii_lowercase` is deliberate: `to_lowercase` can change a string's
+/// byte length (`İ` becomes two bytes), and the offsets are used to slice the
+/// original text.
+pub fn find_all(haystack: &str, needle: &str) -> Vec<Range<usize>> {
+    if needle.is_empty() {
+        return Vec::new();
+    }
+    haystack
+        .to_ascii_lowercase()
+        .match_indices(&needle.to_ascii_lowercase())
+        .map(|(at, m)| at..at + m.len())
+        .collect()
+}
+
+/// Paint `color` behind `ranges` in an already-highlighted job, splitting the
+/// syntax runs where a match starts or ends so both colors survive.
+pub fn highlight_ranges(job: &mut LayoutJob, ranges: &[Range<usize>], color: Color32) {
+    if ranges.is_empty() {
+        return;
+    }
+    let piece = |section: &LayoutSection, range: Range<usize>, hit: bool| {
+        let mut section = section.clone();
+        section.byte_range = range;
+        section.format.background = if hit { color } else { Color32::TRANSPARENT };
+        section
+    };
+    let mut out = Vec::with_capacity(job.sections.len());
+    for section in std::mem::take(&mut job.sections) {
+        let end = section.byte_range.end;
+        let mut at = section.byte_range.start;
+        for hit in ranges {
+            if hit.start >= end || hit.end <= at {
+                continue;
+            }
+            let (from, to) = (hit.start.max(at), hit.end.min(end));
+            if from > at {
+                out.push(piece(&section, at..from, false));
+            }
+            out.push(piece(&section, from..to, true));
+            at = to;
+        }
+        if at < end {
+            out.push(piece(&section, at..end, false));
+        }
+    }
+    job.sections = out;
 }
 
 fn json_value_color(token: &str) -> Color32 {
@@ -1433,6 +1484,49 @@ pub fn divider(ui: &mut Ui) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn find_all_is_ascii_case_insensitive_and_byte_exact() {
+        assert_eq!(find_all("aXbxc", "x"), vec![1..2, 3..4]);
+        assert_eq!(find_all("abc", ""), vec![]);
+        assert_eq!(find_all("abc", "zz"), vec![]);
+        // the offsets index the original string, so a multi-byte char before
+        // a match must not shift it
+        let text = "héllo world";
+        let hit = find_all(text, "WORLD");
+        assert_eq!(&text[hit[0].clone()], "world");
+        // `İ` lowercases to two bytes; slicing with a shifted offset would
+        // panic or return the wrong span
+        let tricky = "İx";
+        let hit = find_all(tricky, "x");
+        assert_eq!(&tricky[hit[0].clone()], "x");
+    }
+
+    #[test]
+    fn highlight_ranges_splits_runs_without_losing_text() {
+        let ctx = egui::Context::default();
+        super::super::theme::ensure_installed(&ctx);
+        let mut job = json_job(r#"{"sku":"SKU-1","id":2}"#, f32::INFINITY);
+        let before = job.text.clone();
+        let hits = find_all(&job.text, "sku");
+        assert_eq!(hits.len(), 2, "the key and the value both contain it");
+        highlight_ranges(&mut job, &hits, Color32::YELLOW);
+        assert_eq!(job.text, before, "highlighting must not touch the text");
+        let marked: Vec<_> = job
+            .sections
+            .iter()
+            .filter(|s| s.format.background == Color32::YELLOW)
+            .map(|s| &job.text[s.byte_range.clone()])
+            .collect();
+        assert_eq!(marked, vec!["sku", "SKU"]);
+        // every byte still belongs to exactly one section, in order
+        let mut at = 0;
+        for section in &job.sections {
+            assert_eq!(section.byte_range.start, at);
+            at = section.byte_range.end;
+        }
+        assert_eq!(at, job.text.len());
+    }
 
     #[test]
     fn truncate_is_char_safe() {

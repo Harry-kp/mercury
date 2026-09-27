@@ -282,6 +282,7 @@ impl Layout {
     pub const PALETTE_WIDTH: f32 = 560.0;
     pub const MENU_WIDTH: f32 = 200.0;
     pub const KEY_FIELD_WIDTH: f32 = 148.0;
+    pub const FIND_FIELD_WIDTH: f32 = 180.0;
 }
 
 // ---------------------------------------------------------------------------

@@ -20,6 +20,7 @@ On macOS `⌘` is Command. On Windows and Linux it's `Ctrl`.
 | `⌘ H` | Toggle history |
 | `⌘ R` | Toggle raw response |
 | `⌘ D` | Toggle light / dark |
+| `⌘ F` | Find in response |
 | `⌘ ⇧ C` | Copy as cURL |
 | `⌘ ⇧ F` | Focus mode |
 | `?` | Keyboard shortcuts |
@@ -34,6 +35,7 @@ Press `?` (when you aren't typing in a field), click **Shortcuts** in the status
 - **`⌘ K`** opens the command palette: type to search every request in the workspace and every command Mercury has. `↑`/`↓` move, `⏎` opens, `Esc` closes.
 - **`⌘ D`** switches between the light and dark theme. Mercury follows your system theme until you press it.
 - **`⌘ E`** steps through the environments in the picker, then None, then starts over.
+- **`⌘ F`** opens the find bar over the response body: every match is highlighted, `⏎` steps to the next one, and `Esc` closes it.
 - **`⌘ Shift F`** hides the sidebar. Press it again to bring the sidebar back.
 - **`Tab`** moves between the controls on screen and `Space` or `⏎` activates the one you land on — the focus ring shows where you are. Everything Mercury can do is reachable without a mouse.
 - **`Esc`** cancels a running request. If no request is running, it clears the sidebar filter. If a dialog or the palette is open, it closes it.
