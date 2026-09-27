@@ -1,4 +1,7 @@
 //! Mercury: a fast, minimal, file-based API client. See CLAUDE.md for the map.
+// Without this, launching the .exe on Windows opens a console window behind
+// the GUI. Debug builds keep the console so `eprintln!` still shows up.
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod curl;
 mod http;

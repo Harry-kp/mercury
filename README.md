@@ -55,7 +55,9 @@
 brew install --cask harry-kp/tap/mercury
 ```
 
-Then launch from **Applications** or run `mercury` in terminal.
+Then launch from **Applications** or run `mercury` in terminal. Universal build — Apple Silicon and Intel.
+
+> macOS will say the developer cannot be verified the first time: right-click Mercury in Applications and choose **Open**. Mercury is unsigned because a Developer ID costs $99/year; the [install guide](https://harry-kp.github.io/mercury/docs/getting-started) has the details.
 
 ---
 

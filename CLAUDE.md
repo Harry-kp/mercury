@@ -65,5 +65,10 @@ Mercury is a native Rust + egui API client. Requests are plain JSON files in a f
 Run `/fix-issue <number>`: failing test → root-cause fix → checks → docs → PR → green CI → squash-merge.
 Done means: the new test failed before the fix and passes after; fmt, clippy and test are clean; docs are synced; CI is green.
 
+## Distribution
+- The macOS `.app` must be a real universal binary and ad-hoc signed (`codesign --force --deep --sign -`). Unsealed, Gatekeeper calls it "damaged" rather than merely unsigned, and the user has no way through. `release.yml` verifies both and fails the release otherwise.
+- Mercury is unsigned by Apple/Microsoft on purpose (no paid certificates). Install docs must tell people what their OS will say and how to get past it.
+- App data lives in `~/.mercury`. The Homebrew cask's `zap` list must match it.
+
 ## Releasing (only when asked)
 Bump `version` in `Cargo.toml`, move the CHANGELOG `[Unreleased]` notes under the new version, commit, then `git tag vX.Y.Z && git push origin vX.Y.Z`. cargo-dist (`release.yml`) builds and publishes the installers. The Homebrew cask is updated by hand: copy the SHA256 that the release job prints into `Harry-kp/homebrew-tap/Casks/mercury.rb`.

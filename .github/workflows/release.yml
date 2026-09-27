@@ -301,9 +301,38 @@ jobs:
       
       - name: Build .app bundle
         run: |
+          # cargo bundle gives us Info.plist and the icon; the binary it
+          # builds is host-only, so replace it with a real universal one made
+          # from the two binaries dist already published.
           cargo bundle --release
+          gh release download "${{ needs.plan.outputs.tag }}" \
+            --pattern 'mercury-aarch64-apple-darwin.tar.xz' \
+            --pattern 'mercury-x86_64-apple-darwin.tar.xz' \
+            --dir arches
+          tar -xf arches/mercury-aarch64-apple-darwin.tar.xz -C arches
+          tar -xf arches/mercury-x86_64-apple-darwin.tar.xz -C arches
+          lipo -create -output target/release/bundle/osx/Mercury.app/Contents/MacOS/mercury \
+            arches/mercury-aarch64-apple-darwin/mercury \
+            arches/mercury-x86_64-apple-darwin/mercury
+
+          # An ad-hoc signature is not notarised, but it does seal the bundle.
+          # Without this, Gatekeeper calls the app "damaged" instead of
+          # offering the usual unidentified-developer prompt.
+          codesign --force --deep --sign - target/release/bundle/osx/Mercury.app
+
           cd target/release/bundle/osx
           tar -czf Mercury-${{ needs.plan.outputs.tag }}-universal-apple-darwin.tar.gz Mercury.app
+
+      - name: Verify the bundle
+        run: |
+          cd target/release/bundle/osx
+          archs=$(lipo -archs Mercury.app/Contents/MacOS/mercury)
+          echo "architectures: $archs"
+          case "$archs" in
+            *x86_64*arm64*|*arm64*x86_64*) ;;
+            *) echo "::error::the app bundle is not universal ($archs)"; exit 1 ;;
+          esac
+          codesign --verify --strict --verbose=2 Mercury.app
       
       - name: Calculate SHA256
         id: sha
