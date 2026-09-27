@@ -7,7 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Mercury reopens the request file you had open when you quit, instead of restoring its contents as an "Untitled" unsaved request.
+- **A light theme.** Mercury follows your system appearance and `⌘ D` overrides it. The choice is remembered.
+- **A command palette (`⌘ K`)** over every request in the workspace and every command Mercury has. Arrow keys move, `⏎` opens, `Esc` closes.
+- The response panel has **Body / Headers / Cookies** tabs instead of checkboxes.
+- The request editor's `⋯` menu, the workspace menu and the environment picker replace the old Help/Open menus.
+
 ### Fixed
+- **A request or folder named `../x` was created outside the folder you picked.** Names are now a single file name; `/`, `\`, `..` and a leading `.` are rejected.
+- A response that arrived after you opened a different request was shown as *that* request's response. It now goes to history only, and says so.
+- Deleting the workspace folder on disk left Mercury claiming it was still open, with buttons that could only fail.
+- A 4xx or 5xx was announced with a green tick.
+- The response body could not be selected in Pretty mode — only copied whole.
+- Binary and large responses told you to "Use Save" without showing one; they now offer a **Save response…** button, and the useless copy icon is gone for bodies that are not text.
+- Recent grew without limit in the sidebar while the file kept only 50, and 50 entries pushed the collection off the bottom. It is capped, scrolls, and has a clear button.
+- Recent and history rows truncated URLs at a fixed character count instead of the width actually available.
+- Failing to open a request printed the whole absolute path across three lines.
+- Clicking a folder while filtering silently flipped its expanded state.
+- The sidebar filter only searched folders you had already expanded, so a request two folders deep could not be found.
+- Pressing Enter in the New request / New folder / Rename dialog did nothing, and the name field did not take focus — you had to click it and then click Create.
+- History paired a response with whatever was in the editor when it arrived, not with the request that was actually sent.
+- Response headers were capped at ~170px, hiding all but the first few. Headers and Cookies now fill the panel.
+- A failed request reported the same error twice, once in the panel and once as a notification.
+- The notification after a request read "200 200 OK".
+- Formatted JSON wrapped long values onto an unindented next line; it now keeps its structure and scrolls.
+- The response panel grew wider when it showed an empty state or a long error, shifting the whole layout.
+- At the minimum window size the editor was squeezed to about 50px wide, leaving no room for the URL.
+- Icon buttons, tabs and badges had no accessible names, so screen readers announced nothing.
+- Sub-millisecond responses showed "0 ms".
 - Crash when a URL or error message contained non-ASCII characters.
 - Query params with UTF-8 (`%C3%A9`) were decoded incorrectly.
 - Copy as cURL included disabled (`#`) headers and didn't escape quotes.
@@ -30,12 +58,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Editing the selected `.env` file had no effect until you re-selected it.
 
 ### Changed
+- **The interface was rebuilt.** New palettes (light and dark), a real type scale, hand-drawn vector icons in place of emoji, list rows with hover and selection, a prominent Send button, a filter box in the sidebar, floating notifications, and dialogs on a dimmed backdrop.
+- Mercury ships Inter and JetBrains Mono (subset, ~200 KB) so text looks the same on every platform, and no longer scales the whole UI by 1.25.
+- `⌘ K` opens the command palette; the sidebar filter box is always visible instead.
+- The status bar shows the workspace path relative to `~`.
+- Side panel widths are derived from the window size; the minimum window is 900x620 and the default 1280x840.
+- **Pretty / Raw** is a two-state switch instead of a link that showed the current mode.
+- `⌘ S` on an unsaved request saves into the collection you have selected, not always the workspace root.
 - Request files write headers in sorted order, for stable git diffs.
 - Error messages include the actual cause (file, reason) instead of generic advice.
 - Removed the "About Mercury" menu item, which did nothing.
 - Postman import is offered next to Insomnia in the empty sidebar.
 
 ### Technical
+- `ui/theme.rs` holds both palettes behind one `Theme` shape; `ui/icon.rs` draws every icon from a 24x24 geometry table.
+- `AppState` gained a `theme` field (defaults to following the system).
 - Flattened the codebase into domain modules, with one implementation per concept (~30% less code).
 - Added a headless UI smoke test (egui_kittest).
 - Added CLAUDE.md and a `/fix-issue` Claude Code skill. CI now runs on every PR.

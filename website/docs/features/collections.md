@@ -24,7 +24,7 @@ my-api/                 ← workspace (the folder you open)
 
 ## Opening a workspace
 
-Press `⌘ O`, choose **Open → Open Folder...**, or click **Open a folder** in the empty sidebar. Mercury remembers the workspace and reopens it on the next launch.
+Press `⌘ O`, choose **Open folder…** from the workspace menu, or click **Open a folder** in the empty sidebar. Names you type are file names, not paths: `/` and `..` are rejected so nothing is written outside the folder you picked. If the workspace folder is deleted while Mercury has it open, it closes the workspace and keeps whatever you were editing as an unsaved request. Mercury remembers the workspace and reopens it on the next launch.
 
 ## The sidebar tree
 
@@ -38,7 +38,9 @@ Unsaved requests you've sent appear above the tree under **Recent** (up to 50). 
 
 ## Searching
 
-The search box in the top bar (`⌘ K`) filters the tree by file and folder name. The search is case-insensitive, and matching folders expand while you search. `Esc` clears the search.
+The filter box at the top of the sidebar narrows the tree by file and folder name. It searches the whole workspace, including folders you have never opened, and matching folders expand while you type. It is case-insensitive; `Esc` clears it.
+
+To jump straight to a request without touching the tree, press `⌘ K` and type its name. The command palette searches every request in the workspace, however deeply nested, plus every command Mercury has.
 
 ## Creating, renaming and deleting
 

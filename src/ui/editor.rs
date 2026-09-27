@@ -1,77 +1,26 @@
-//! Center panel: URL bar and the Body / Params / Headers / Auth tabs.
+//! Center panel: the URL bar and the Body / Params / Headers / Auth tabs.
 
-use super::app::{MercuryApp, Tab};
-use super::theme::{Colors, FontSize, Icons, Radius, Spacing};
+use super::app::{Action, MercuryApp, Tab};
+use super::icon::Icon;
+use super::theme::{mono, semibold, theme, Layout, Radius, Space, Text};
 use super::widgets::{
-    copy_button, json_job, key_value_editor, link, popup_menu, send_stop_button, variable_chip,
+    self, copy_button, faint, icon_button, json_job, key_value_editor, menu_item, muted,
+    popup_menu, section_label, send_button, tab_button,
 };
 use crate::kv::{self, AuthMode};
 use crate::model::HttpMethod;
-use crate::{curl, http, vars};
-use eframe::egui::{self, FontId, RichText, ScrollArea, Ui};
+use crate::{curl, vars};
+use eframe::egui::{self, Align, Margin, RichText, ScrollArea, Sense, Stroke, Ui, Vec2};
 use std::collections::BTreeSet;
-
-fn card() -> egui::Frame {
-    egui::Frame::NONE
-        .fill(Colors::BG_CARD)
-        .corner_radius(Radius::MD)
-        .stroke(egui::Stroke::new(1.0_f32, Colors::BORDER_SUBTLE))
-        .inner_margin(Spacing::MD)
-        .outer_margin(egui::Margin {
-            right: Spacing::SM as i8,
-            ..Default::default()
-        })
-}
-
-fn mono() -> FontId {
-    FontId::monospace(FontSize::SM)
-}
 
 impl MercuryApp {
     pub fn editor(&mut self, ui: &mut Ui) {
-        if self.focus_mode {
-            egui::Frame::NONE
-                .fill(Colors::PRIMARY_MUTED)
-                .corner_radius(Radius::SM)
-                .inner_margin(egui::Margin::symmetric(
-                    Spacing::MD as i8,
-                    Spacing::XS as i8,
-                ))
-                .show(ui, |ui| {
-                    ui.horizontal(|ui| {
-                        ui.label(
-                            RichText::new("Focus Mode")
-                                .color(Colors::PRIMARY)
-                                .size(FontSize::SM),
-                        );
-                        ui.label(
-                            RichText::new("⌘ Shift F to exit")
-                                .color(Colors::TEXT_MUTED)
-                                .size(FontSize::XS),
-                        );
-                    });
-                });
-            ui.add_space(Spacing::SM);
-        }
-
-        let undefined = self.undefined_vars();
-        let border = if undefined.is_empty() {
-            Colors::BORDER_SUBTLE
-        } else {
-            Colors::BORDER_WARNING
-        };
-        let url_card = card()
-            .stroke(egui::Stroke::new(1.0_f32, border))
-            .show(ui, |ui| self.url_bar(ui));
-        if !undefined.is_empty() {
-            let list: Vec<String> = undefined.iter().map(|v| format!("• {{{{{v}}}}}")).collect();
-            url_card
-                .response
-                .on_hover_text(format!("Undefined variables:\n{}", list.join("\n")));
-        }
-
-        ui.add_space(Spacing::XS);
-        card().show(ui, |ui| self.request_tabs(ui));
+        self.url_bar(ui);
+        ui.add_space(Space::LG);
+        widgets::card().show(ui, |ui| {
+            ui.set_min_height(ui.available_height());
+            self.request_tabs(ui);
+        });
     }
 
     /// Variables used anywhere in the request that the selected env lacks.
@@ -84,43 +33,109 @@ impl MercuryApp {
     }
 
     fn url_bar(&mut self, ui: &mut Ui) {
-        ui.horizontal(|ui| {
-            let method = link(
-                ui,
-                RichText::new(self.method.as_str())
-                    .color(Colors::method(self.method))
-                    .strong()
-                    .size(FontSize::MD),
-            );
-            popup_menu(ui, &method, 100.0, |ui| {
-                for m in HttpMethod::ALL {
-                    let label = RichText::new(m.as_str()).color(Colors::method(m));
-                    if ui.selectable_label(self.method == m, label).clicked() {
-                        self.method = m;
+        let t = theme();
+        let undefined = self.undefined_vars();
+        let focused = ui.memory(|m| m.has_focus(egui::Id::new("url_bar")));
+        let border = match (focused, undefined.is_empty()) {
+            (true, _) => t.accent,
+            (false, false) => t.warning,
+            (false, true) => t.border,
+        };
+
+        let frame = widgets::card()
+            .stroke(Stroke::new(1.0_f32, border))
+            .inner_margin(Margin::same(Space::SM as i8))
+            .show(ui, |ui| {
+                ui.horizontal(|ui| {
+                    ui.spacing_mut().item_spacing.x = Space::SM;
+                    ui.set_min_height(Layout::CONTROL_HEIGHT);
+                    self.method_picker(ui);
+                    ui.painter().vline(
+                        ui.cursor().min.x,
+                        egui::Rangef::new(ui.max_rect().top() + 4.0, ui.max_rect().bottom() - 4.0),
+                        Stroke::new(1.0_f32, t.border),
+                    );
+                    ui.add_space(Space::SM);
+
+                    let executing = self.in_flight.is_some();
+                    let send_width = if executing { 86.0 } else { 104.0 };
+                    let url = ui.add(
+                        egui::TextEdit::singleline(&mut self.url)
+                            .hint_text(muted("https://api.example.com/users"))
+                            .desired_width(
+                                (ui.available_width() - send_width - Space::MD).max(72.0),
+                            )
+                            .frame(false)
+                            .font(mono(Text::BODY))
+                            .id(egui::Id::new("url_bar")),
+                    );
+                    if url.changed() {
+                        self.on_url_edited();
                     }
-                }
+                    ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
+                        if send_button(ui, executing).clicked() {
+                            if executing {
+                                self.cancel_request();
+                            } else {
+                                self.send_request();
+                            }
+                        }
+                    });
+                });
             });
 
-            let url = ui.add(
-                egui::TextEdit::singleline(&mut self.url)
-                    .hint_text(
-                        RichText::new("https://example.com/ or paste cURL")
-                            .color(Colors::PLACEHOLDER),
-                    )
-                    .desired_width(ui.available_width() - 24.0)
-                    .frame(false)
-                    .id(egui::Id::new("url_bar")),
-            );
-            if url.changed() {
-                self.on_url_edited();
-            }
+        if !undefined.is_empty() {
+            let list: Vec<String> = undefined.iter().map(|v| format!("{{{{{v}}}}}")).collect();
+            frame.response.on_hover_text(format!(
+                "Not defined in this environment:\n{}",
+                list.join("\n")
+            ));
+        }
+    }
 
-            let executing = self.in_flight.is_some();
-            if send_stop_button(ui, executing).clicked() {
-                if executing {
-                    self.cancel_request();
-                } else {
-                    self.send_request();
+    fn method_picker(&mut self, ui: &mut Ui) {
+        let t = theme();
+        let color = t.method(self.method);
+        let galley = ui.fonts_mut(|f| {
+            f.layout_no_wrap(
+                self.method.as_str().to_owned(),
+                semibold(Text::SMALL),
+                color,
+            )
+        });
+        let size = Vec2::new(galley.size().x + Space::LG * 2.0 + 12.0, 26.0);
+        let (rect, response) = ui.allocate_exact_size(size, Sense::click());
+        let fill = if response.hovered() {
+            t.tint(color, 0.22)
+        } else {
+            t.tint(color, 0.13)
+        };
+        ui.painter().rect_filled(rect, Radius::SM, fill);
+        ui.painter().galley(
+            egui::pos2(
+                rect.left() + Space::LG,
+                rect.center().y - galley.size().y / 2.0,
+            ),
+            galley,
+            color,
+        );
+        super::icon::paint(
+            ui.painter(),
+            Icon::ChevronDown,
+            egui::Rect::from_center_size(
+                egui::pos2(rect.right() - Space::LG + 2.0, rect.center().y),
+                Vec2::splat(10.0),
+            ),
+            color,
+        );
+        let response = response
+            .on_hover_cursor(egui::CursorIcon::PointingHand)
+            .on_hover_text("HTTP method");
+        popup_menu(ui, &response, 132.0, |ui| {
+            for m in HttpMethod::ALL {
+                let check = (self.method == m).then_some(Icon::Check);
+                if menu_item(ui, check, m.as_str(), "") {
+                    self.method = m;
                 }
             }
         });
@@ -149,80 +164,69 @@ impl MercuryApp {
     }
 
     fn request_tabs(&mut self, ui: &mut Ui) {
-        let with_count = |name: &str, n: usize| {
-            if n > 0 {
-                format!("{name} ({n})")
-            } else {
-                name.to_string()
-            }
-        };
         let auth_mode = kv::auth_mode(&self.headers_text);
         let tabs = [
-            (Tab::Body, "Body".to_string()),
-            (
-                Tab::Params,
-                with_count("Params", kv::count_enabled(&self.query_params)),
-            ),
+            (Tab::Body, "Body", 0),
+            (Tab::Params, "Params", kv::count_enabled(&self.query_params)),
             (
                 Tab::Headers,
-                with_count(
-                    "Headers",
-                    kv::count_enabled(&kv::parse_lines(&self.headers_text, ":")),
-                ),
+                "Headers",
+                kv::count_enabled(&kv::parse_lines(&self.headers_text, ":")),
             ),
             (
                 Tab::Auth,
                 match auth_mode {
-                    AuthMode::None => "Auth".to_string(),
-                    mode => mode.label().to_string(),
+                    AuthMode::None => "Auth",
+                    _ => auth_mode.label(),
                 },
+                0,
             ),
         ];
 
-        ui.horizontal(|ui| {
-            for (tab, label) in tabs {
-                let color = if self.tab == tab {
-                    Colors::PRIMARY
-                } else {
-                    Colors::TEXT_MUTED
-                };
-                let button =
-                    egui::Button::new(RichText::new(label).size(FontSize::MD).color(color))
-                        .frame(false);
-                if ui
-                    .add(button)
-                    .on_hover_cursor(egui::CursorIcon::PointingHand)
-                    .clicked()
-                {
-                    self.tab = tab;
+        let mut picked = None;
+        let mut auth_trigger = None;
+        let mut format = false;
+        egui::containers::Sides::new().shrink_left().show(
+            ui,
+            |ui| {
+                ui.spacing_mut().item_spacing.x = Space::XS;
+                for (tab, text, count) in tabs {
+                    if tab_button(ui, text, count, self.tab == tab) {
+                        picked = Some(tab);
+                    }
                 }
-                if tab != Tab::Auth {
-                    ui.add_space(Spacing::MD);
+                auth_trigger = Some(icon_button(ui, Icon::ChevronDown, "Auth type"));
+            },
+            |ui| {
+                if self.tab != Tab::Body {
+                    return;
                 }
-            }
-            let chevron = link(
-                ui,
-                RichText::new(Icons::CHEVRON_DOWN)
-                    .size(FontSize::SM)
-                    .color(Colors::TEXT_MUTED),
-            )
-            .on_hover_text("Auth type");
-            popup_menu(ui, &chevron, 100.0, |ui| {
+                format = icon_button(ui, Icon::Sparkle, "Format JSON").clicked();
+                if !self.body_text.is_empty() {
+                    ui.label(faint(format!("{} chars", self.body_text.len())));
+                }
+            },
+        );
+        if let Some(tab) = picked {
+            self.tab = tab;
+        }
+        if let Some(trigger) = auth_trigger {
+            popup_menu(ui, &trigger, 132.0, |ui| {
                 for mode in AuthMode::ALL {
-                    if ui
-                        .selectable_label(auth_mode == mode, mode.label())
-                        .clicked()
-                    {
+                    let check = (auth_mode == mode).then_some(Icon::Check);
+                    if menu_item(ui, check, mode.label(), "") {
                         self.set_auth_mode(auth_mode, mode);
                         self.tab = Tab::Auth;
                     }
                 }
             });
-        });
-
-        ui.add_space(Spacing::SM);
-        ui.separator();
-        ui.add_space(Spacing::SM);
+        }
+        if format {
+            self.run(Action::FormatBody);
+        }
+        ui.add_space(Space::MD);
+        widgets::divider(ui);
+        ui.add_space(Space::LG);
 
         ScrollArea::vertical()
             .id_salt("request_content")
@@ -236,35 +240,20 @@ impl MercuryApp {
     }
 
     fn body_tab(&mut self, ui: &mut Ui) {
-        let top_right = ui.cursor().min + egui::vec2(ui.available_width(), 0.0);
         let mut layouter = |ui: &Ui, text: &dyn egui::TextBuffer, wrap_width: f32| {
             ui.fonts_mut(|f| f.layout_job(json_job(text.as_str(), wrap_width)))
         };
-        ui.add(
-            egui::TextEdit::multiline(&mut self.body_text)
-                .hint_text(RichText::new(r#"{"key": "value"}"#).color(Colors::PLACEHOLDER))
-                .desired_width(ui.available_width())
-                .desired_rows(15)
-                .frame(false)
-                .layouter(&mut layouter),
-        );
-        let format_rect =
-            egui::Rect::from_min_size(top_right - egui::vec2(30.0, 0.0), egui::vec2(30.0, 20.0));
-        let format = ui
-            .put(
-                format_rect,
-                egui::Label::new(
-                    RichText::new(Icons::FORMAT)
-                        .size(FontSize::LG)
-                        .color(Colors::PRIMARY),
-                )
-                .sense(egui::Sense::click()),
-            )
-            .on_hover_cursor(egui::CursorIcon::PointingHand)
-            .on_hover_text("Format JSON");
-        if format.clicked() {
-            self.body_text = http::format_json(&self.body_text);
-        }
+        widgets::code_frame().show(ui, |ui| {
+            let rows = widgets::fill_rows(ui, Space::XXL, 12);
+            ui.add(
+                egui::TextEdit::multiline(&mut self.body_text)
+                    .hint_text(muted(r#"{ "key": "value" }"#))
+                    .desired_width(ui.available_width())
+                    .desired_rows(rows)
+                    .frame(false)
+                    .layouter(&mut layouter),
+            );
+        });
     }
 
     fn params_tab(&mut self, ui: &mut Ui) {
@@ -278,7 +267,7 @@ impl MercuryApp {
             &mut self.params_text,
             "=",
             &mut self.params_bulk_edit,
-            "key=value\npage=1\n# disabled=param",
+            "page=1\nlimit=20\n# disabled=param",
         );
         if changed {
             self.query_params = kv::parse_lines(&self.params_text, "=");
@@ -309,11 +298,13 @@ impl MercuryApp {
         if names.is_empty() {
             return;
         }
-        ui.add_space(Spacing::SM);
+        ui.add_space(Space::XL);
+        ui.label(section_label("Variables"));
+        ui.add_space(Space::MD);
         ui.horizontal_wrapped(|ui| {
+            ui.spacing_mut().item_spacing = Vec2::splat(Space::SM);
             for name in &names {
-                variable_chip(ui, name, self.env_vars.contains_key(name));
-                ui.add_space(Spacing::SM);
+                widgets::variable_chip(ui, name, self.env_vars.contains_key(name));
             }
         });
     }
@@ -335,46 +326,70 @@ impl MercuryApp {
     /// The Auth tab is a view over the Authorization header: fields are
     /// decoded from it every frame and edits write straight back.
     fn auth_tab(&mut self, ui: &mut Ui, mode: AuthMode) {
+        let t = theme();
         let value = kv::auth_value(&self.headers_text).unwrap_or("").to_string();
-        let field = |ui: &mut Ui, text: &mut String, hint: &str, rows: usize| {
-            let edit = if rows == 1 {
-                egui::TextEdit::singleline(text)
-            } else {
-                egui::TextEdit::multiline(text).desired_rows(rows)
+        let field =
+            |ui: &mut Ui, id: &str, text: &mut String, label: &str, hint: &str, rows: usize| {
+                ui.label(section_label(label));
+                ui.add_space(Space::SM);
+                let changed = if rows == 1 {
+                    widgets::text_input(ui, id, text, hint, 0.0).changed()
+                } else {
+                    widgets::field_frame()
+                        .show(ui, |ui| {
+                            ui.add(
+                                egui::TextEdit::multiline(text)
+                                    .id(egui::Id::new(id))
+                                    .hint_text(muted(hint))
+                                    .desired_width(ui.available_width())
+                                    .desired_rows(rows)
+                                    .frame(false)
+                                    .font(mono(Text::SMALL)),
+                            )
+                            .changed()
+                        })
+                        .inner
+                };
+                ui.add_space(Space::LG);
+                changed
             };
-            ui.add(
-                edit.hint_text(RichText::new(hint).color(Colors::PLACEHOLDER))
-                    .desired_width(ui.available_width())
-                    .frame(false)
-                    .font(mono()),
-            )
-            .changed()
-        };
 
         let new_value = match mode {
             AuthMode::None => {
-                ui.label(
-                    RichText::new("No authentication. Pick a type from the ⏷ next to Auth.")
-                        .color(Colors::TEXT_MUTED)
-                        .font(mono()),
-                );
+                ui.label(muted(
+                    "No authentication. Pick a type from the chevron next to the tabs.",
+                ));
                 None
             }
             AuthMode::Basic => {
                 let (mut user, mut pass) = kv::decode_basic(&value);
-                let user_changed = field(ui, &mut user, "Username", 1);
-                ui.add_space(Spacing::SM);
-                let pass_changed = field(ui, &mut pass, "Password", 1);
+                let user_changed = field(ui, "auth_user", &mut user, "Username", "", 1);
+                let pass_changed = field(ui, "auth_pass", &mut pass, "Password", "", 1);
                 (user_changed || pass_changed).then(|| kv::basic_auth(&user, &pass))
             }
             AuthMode::Bearer => {
                 let mut token = kv::bearer_token(&value).to_string();
-                field(ui, &mut token, "Paste token or {{TOKEN}}", 4)
-                    .then(|| format!("Bearer {token}"))
+                field(
+                    ui,
+                    "auth_token",
+                    &mut token,
+                    "Token",
+                    "eyJhbGciOi… or {{TOKEN}}",
+                    4,
+                )
+                .then(|| format!("Bearer {token}"))
             }
             AuthMode::Custom => {
                 let mut custom = value.clone();
-                field(ui, &mut custom, "ApiKey abc123, Digest ...", 4).then_some(custom)
+                field(
+                    ui,
+                    "auth_custom",
+                    &mut custom,
+                    "Authorization value",
+                    "ApiKey abc123",
+                    4,
+                )
+                .then_some(custom)
             }
         };
         if let Some(v) = new_value {
@@ -382,23 +397,26 @@ impl MercuryApp {
         }
 
         if matches!(mode, AuthMode::Basic | AuthMode::Bearer) {
-            ui.add_space(Spacing::MD);
             let value = kv::auth_value(&self.headers_text).unwrap_or("").to_string();
-            egui::Frame::NONE
-                .fill(Colors::BG_CODE)
-                .corner_radius(Radius::SM)
-                .inner_margin(Spacing::SM)
-                .show(ui, |ui| {
-                    ui.horizontal(|ui| {
-                        let text =
-                            |s: &str, c| RichText::new(s).size(FontSize::XS).color(c).monospace();
-                        ui.label(text("Authorization: ", Colors::PRIMARY));
-                        ui.label(text(&value, Colors::TEXT_SECONDARY));
-                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            copy_button(ui, "auth_preview", || format!("Authorization: {value}"));
-                        });
+            ui.label(section_label("Sent as"));
+            ui.add_space(Space::SM);
+            widgets::code_frame().show(ui, |ui| {
+                ui.horizontal(|ui| {
+                    ui.label(
+                        RichText::new("Authorization:")
+                            .font(mono(Text::SMALL))
+                            .color(t.syntax.key),
+                    );
+                    ui.label(
+                        RichText::new(widgets::truncate(&value, 64))
+                            .font(mono(Text::SMALL))
+                            .color(t.text_muted),
+                    );
+                    ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
+                        copy_button(ui, "auth_preview", || format!("Authorization: {value}"));
                     });
                 });
+            });
         }
     }
 }

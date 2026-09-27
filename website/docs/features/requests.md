@@ -19,7 +19,7 @@ If the URL, headers or body use a `{{variable}}` that the selected environment d
 
 ## Tabs
 
-The editor has four tabs: **Body**, **Params**, **Headers** and **Auth**. The Params and Headers tabs show how many entries are enabled, for example `Headers (2)`. The Auth tab is labeled with the current auth type.
+The editor has four tabs: **Body**, **Params**, **Headers** and **Auth**. The Params and Headers tabs show how many entries are enabled as a small count next to the name. The Auth tab is labeled with the current auth type.
 
 ### Body
 
@@ -33,11 +33,11 @@ This is a table of the URL's query parameters, and it stays in sync with the URL
 - Editing the table rewrites the URL's query string. Keys and values are percent-encoded, and `{{variables}}` are left as they are.
 - Unchecking a row removes that parameter from the URL. Because the URL holds the params, a disabled row is gone the next time the URL is re-read (when you edit the URL or reopen the request).
 
-**Bulk Edit** switches to raw text with one `key=value` per line. A leading `#` disables a line.
+**Bulk edit** switches to raw text with one `key=value` per line. A leading `#` disables a line.
 
 ### Headers
 
-Headers use the same table and **Bulk Edit** toggle. In text form each line is `Key: Value`:
+Headers use the same table and **Bulk edit** toggle. In text form each line is `Key: Value`:
 
 ```
 Content-Type: application/json
@@ -61,10 +61,12 @@ The Auth tab edits the `Authorization` header. See [Authentication](/docs/featur
 
 ## Saving
 
-- `⌘ S` saves the open request. If the request isn't saved yet, Mercury asks for a name and creates `<name>.json` in the workspace root. If no workspace is open, it asks you to open a folder first.
+- `⌘ S` saves the open request. If the request isn't saved yet, Mercury asks for a name and creates `<name>.json` in the selected collection, or in the workspace root if you haven't clicked one. If no workspace is open, it asks you to open a folder first.
 - Right-click a folder and choose **New Request** to save the current editor contents into that folder.
 - Once a request has a file, Mercury saves it automatically every 5 seconds while there are unsaved changes, when you switch to another request, and when you quit. A dot after the name in the breadcrumb means there are unsaved changes.
 - `⌘ N` starts a new, empty, unsaved request.
+
+If a response arrives after you have opened a different request, it is recorded in [history](/docs/features/history) rather than shown under the request you are now looking at.
 
 If a request file changes on disk (for example in another editor) and you have no unsaved edits, Mercury reloads it. If you have unsaved edits, yours are kept (with a warning) and saved over the file. If the file is deleted, Mercury clears the editor.
 
@@ -72,13 +74,13 @@ If a request file changes on disk (for example in another editor) and you have n
 
 The top row shows the status (colored by class), the response time and the size. The time is green under 200 ms, amber up to 1 s, and red above that.
 
-Below that:
+Below that are three tabs:
 
-- **Headers (N)** shows the response headers.
-- **Cookies (N)** appears when the response sets cookies and lists them as `name=value`.
-- **Raw** shows text bodies exactly as received, without formatting. `⌘ R` toggles it.
-- **Save** appears for images, binary bodies and large text, and writes the body to a file.
-- **History** opens the [history list](/docs/features/history).
+- **Body** is the response body (see the table below).
+- **Headers** lists every response header.
+- **Cookies** appears with a count when the response sets cookies, and lists them as `name=value`.
+
+On the Body tab, the **Pretty / Raw** switch chooses between the formatted body and the exact bytes (`⌘ R`), and the copy icon copies the whole body. You can also select part of the body and copy that. For images, other binary content and bodies too large to show, the panel offers a **Save response…** button instead. In the top row, the download icon saves the body to a file and the clock icon opens the [history list](/docs/features/history).
 
 How the body is displayed depends on its type:
 

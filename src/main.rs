@@ -12,6 +12,8 @@ mod workspace;
 mod ui {
     pub mod app;
     pub mod editor;
+    pub mod icon;
+    pub mod palette;
     pub mod response;
     pub mod sidebar;
     pub mod theme;
@@ -30,8 +32,8 @@ fn main() -> eframe::Result {
     let (width, height) = icon.dimensions();
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
-            .with_inner_size([1200.0, 800.0])
-            .with_min_inner_size([800.0, 600.0])
+            .with_inner_size([1280.0, 840.0])
+            .with_min_inner_size([900.0, 620.0])
             .with_title("Mercury")
             .with_icon(egui::IconData {
                 rgba: icon.into_raw(),
@@ -44,7 +46,7 @@ fn main() -> eframe::Result {
         "Mercury",
         options,
         Box::new(|cc| {
-            ui::theme::apply(&cc.egui_ctx);
+            ui::theme::ensure_installed(&cc.egui_ctx);
             Ok(Box::new(ui::app::MercuryApp::new(&cc.egui_ctx)))
         }),
     )

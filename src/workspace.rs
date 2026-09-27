@@ -53,6 +53,29 @@ pub fn scan(dir: &Path, expanded: &HashSet<PathBuf>) -> Vec<CollectionItem> {
     folders
 }
 
+/// Every request in the workspace, depth-first — what the command palette
+/// searches. Unlike [`scan`] this does not stop at collapsed folders.
+pub fn all_requests(root: &Path) -> Vec<CollectionItem> {
+    /// Deep enough for any real collection; stops runaway symlink loops.
+    const MAX_DEPTH: usize = 16;
+
+    fn walk(dir: &Path, depth: usize, out: &mut Vec<CollectionItem>) {
+        if depth == 0 {
+            return;
+        }
+        for item in scan(dir, &HashSet::new()) {
+            match item {
+                CollectionItem::Folder { path, .. } => walk(&path, depth - 1, out),
+                request => out.push(request),
+            }
+        }
+    }
+
+    let mut out = Vec::new();
+    walk(root, MAX_DEPTH, &mut out);
+    out
+}
+
 /// `.env*` files in the workspace root, sorted.
 pub fn env_files(root: &Path) -> Vec<String> {
     let mut names: Vec<String> = fs::read_dir(root)
@@ -67,6 +90,23 @@ pub fn env_files(root: &Path) -> Vec<String> {
     names
 }
 
+/// A name the user typed is a single file name, never a path: `../x` would
+/// write outside the folder they picked, and a leading `.` hides the result
+/// from the tree (`scan` skips dot entries).
+fn safe_name(name: &str) -> Result<&str, String> {
+    let name = name.trim();
+    if name.is_empty() {
+        return Err("Name cannot be empty".into());
+    }
+    if name.starts_with('.') {
+        return Err("Name cannot start with a dot".into());
+    }
+    if name.contains(['/', '\\']) || name.contains("..") {
+        return Err("Name cannot contain a path".into());
+    }
+    Ok(name)
+}
+
 fn ensure_free(path: &Path) -> Result<(), String> {
     if path.exists() {
         Err(format!("'{}' already exists", file_name(path)))
@@ -77,7 +117,7 @@ fn ensure_free(path: &Path) -> Result<(), String> {
 
 /// Create `<parent>/<name>.json` with `content`; returns the new path.
 pub fn create_request(parent: &Path, name: &str, content: &str) -> Result<PathBuf, String> {
-    let name = name.trim();
+    let name = safe_name(name)?;
     let file = if name.ends_with(".json") {
         name.to_string()
     } else {
@@ -90,14 +130,14 @@ pub fn create_request(parent: &Path, name: &str, content: &str) -> Result<PathBu
 }
 
 pub fn create_folder(parent: &Path, name: &str) -> Result<(), String> {
-    let path = parent.join(name.trim());
+    let path = parent.join(safe_name(name)?);
     ensure_free(&path)?;
     fs::create_dir(&path).map_err(|e| format!("Could not create folder '{name}': {e}"))
 }
 
 /// Rename in place (same parent); returns the new path.
 pub fn rename(path: &Path, new_name: &str) -> Result<PathBuf, String> {
-    let mut name = new_name.trim().to_string();
+    let mut name = safe_name(new_name)?.to_string();
     // a request renamed to "foo" must stay "foo.json" or it leaves the tree
     if path.extension().is_some_and(|e| e == "json") && !name.ends_with(".json") {
         name.push_str(".json");
@@ -153,6 +193,30 @@ pub fn watch(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn names_the_user_types_cannot_escape_their_folder() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let inside = dir.path().join("collection");
+        fs::create_dir(&inside).unwrap();
+
+        for bad in ["../escaped", "a/b", "a\\b", "..", "", "   ", ".hidden"] {
+            assert!(
+                create_request(&inside, bad, "{}").is_err(),
+                "create_request accepted {bad:?}"
+            );
+            assert!(
+                create_folder(&inside, bad).is_err(),
+                "create_folder accepted {bad:?}"
+            );
+        }
+        assert!(!dir.path().join("escaped.json").exists());
+
+        let file = create_request(&inside, "ok", "{}").unwrap();
+        assert!(rename(&file, "../escaped").is_err());
+        assert!(!dir.path().join("escaped.json").exists());
+        assert!(rename(&file, "renamed").is_ok());
+    }
+
     use super::*;
     use tempfile::TempDir;
 
