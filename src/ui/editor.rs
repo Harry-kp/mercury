@@ -301,8 +301,34 @@ impl MercuryApp {
                     .layouter(&mut layouter),
             );
         });
+        if kind == BodyKind::None && !self.body_text.trim().is_empty() {
+            // the type picker lives in the corner of the tab row, which is
+            // not where anyone looks while typing a body
+            self.missing_content_type(ui);
+        }
         let text = self.body_text.clone();
         self.variable_chips(ui, &text);
+    }
+
+    /// Most APIs reject a body with no `Content-Type`, and the failure comes
+    /// back from the server looking like something else entirely.
+    fn missing_content_type(&mut self, ui: &mut Ui) {
+        let t = theme();
+        ui.add_space(Space::MD);
+        let mut chosen = None;
+        ui.horizontal_wrapped(|ui| {
+            ui.spacing_mut().item_spacing.x = Space::SM;
+            widgets::glyph(ui, Icon::Alert, 13.0, t.warning);
+            ui.label(muted("No Content-Type. Most APIs need one —").color(t.warning));
+            for kind in [BodyKind::Json, BodyKind::Form, BodyKind::Text] {
+                if widgets::link(ui, muted(kind.label()).color(t.accent)).clicked() {
+                    chosen = Some(kind);
+                }
+            }
+        });
+        if let Some(kind) = chosen {
+            self.headers_text = kv::set_body_kind(&self.headers_text, kind);
+        }
     }
 
     fn params_tab(&mut self, ui: &mut Ui) {
