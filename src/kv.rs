@@ -126,20 +126,46 @@ impl AuthMode {
     }
 }
 
-fn is_auth_line(line: &str) -> bool {
-    // get() instead of [..14]: byte 14 may fall inside a UTF-8 char
-    line.get(..14)
-        .is_some_and(|p| p.eq_ignore_ascii_case("authorization:"))
+/// `name:` at the start of a line, case-insensitively. `get()` instead of
+/// slicing: the boundary may fall inside a UTF-8 char.
+fn is_header_line(line: &str, name: &str) -> bool {
+    line.get(..name.len() + 1)
+        .is_some_and(|p| p.eq_ignore_ascii_case(&format!("{name}:")))
+}
+
+/// The value of `name`, or `None` if the header is not there.
+pub fn header_value<'a>(headers_text: &'a str, name: &str) -> Option<&'a str> {
+    headers_text
+        .lines()
+        .map(str::trim_start)
+        .find(|l| is_header_line(l, name))
+        .map(|l| l[name.len() + 1..].trim_start())
+}
+
+/// Set, replace or (with `None`) remove `name`, keeping its position.
+pub fn set_header(headers_text: &str, name: &str, value: Option<&str>) -> String {
+    let mut lines: Vec<String> = Vec::new();
+    let mut replaced = false;
+    for line in headers_text.lines() {
+        if !replaced && is_header_line(line.trim_start(), name) {
+            replaced = true;
+            if let Some(v) = value {
+                lines.push(format!("{name}: {v}"));
+            }
+        } else {
+            lines.push(line.to_string());
+        }
+    }
+    if let (false, Some(v)) = (replaced, value) {
+        lines.push(format!("{name}: {v}"));
+    }
+    lines.join("\n")
 }
 
 /// Value of the first enabled `Authorization:` line. Only the space after the
 /// colon is stripped so users can type trailing spaces (e.g. "Digest ").
 pub fn auth_value(headers_text: &str) -> Option<&str> {
-    headers_text
-        .lines()
-        .map(str::trim_start)
-        .find(|l| is_auth_line(l))
-        .map(|l| l[14..].trim_start())
+    header_value(headers_text, "Authorization")
 }
 
 pub fn auth_mode(headers_text: &str) -> AuthMode {
@@ -154,22 +180,7 @@ pub fn auth_mode(headers_text: &str) -> AuthMode {
 /// Replace, add (`Some`) or remove (`None`) the enabled Authorization line.
 /// Disabled `# Authorization:` lines are left alone.
 pub fn set_auth(headers_text: &str, value: Option<&str>) -> String {
-    let mut lines: Vec<String> = Vec::new();
-    let mut replaced = false;
-    for line in headers_text.lines() {
-        if !replaced && is_auth_line(line.trim_start()) {
-            replaced = true;
-            if let Some(v) = value {
-                lines.push(format!("Authorization: {v}"));
-            }
-        } else {
-            lines.push(line.to_string());
-        }
-    }
-    if let (false, Some(v)) = (replaced, value) {
-        lines.push(format!("Authorization: {v}"));
-    }
-    lines.join("\n")
+    set_header(headers_text, "Authorization", value)
 }
 
 pub fn basic_auth(username: &str, password: &str) -> String {
@@ -203,6 +214,76 @@ pub fn bearer_token(value: &str) -> &str {
 // ---------------------------------------------------------------------------
 // Query params <-> URL
 // ---------------------------------------------------------------------------
+
+/// What the body is, read from the `Content-Type` header. The header stays
+/// the source of truth, exactly like [`AuthMode`] and `Authorization`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BodyKind {
+    None,
+    Json,
+    Form,
+    Text,
+}
+
+impl BodyKind {
+    pub const ALL: [BodyKind; 4] = [
+        BodyKind::None,
+        BodyKind::Json,
+        BodyKind::Form,
+        BodyKind::Text,
+    ];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            BodyKind::None => "No type",
+            BodyKind::Json => "JSON",
+            BodyKind::Form => "Form",
+            BodyKind::Text => "Text",
+        }
+    }
+
+    pub fn content_type(self) -> Option<&'static str> {
+        match self {
+            BodyKind::None => Option::None,
+            BodyKind::Json => Some("application/json"),
+            BodyKind::Form => Some("application/x-www-form-urlencoded"),
+            BodyKind::Text => Some("text/plain"),
+        }
+    }
+}
+
+pub fn body_kind(headers_text: &str) -> BodyKind {
+    match header_value(headers_text, "Content-Type") {
+        None => BodyKind::None,
+        Some(v) if v.contains("json") => BodyKind::Json,
+        Some(v) if v.contains("x-www-form-urlencoded") => BodyKind::Form,
+        Some(_) => BodyKind::Text,
+    }
+}
+
+pub fn set_body_kind(headers_text: &str, kind: BodyKind) -> String {
+    set_header(headers_text, "Content-Type", kind.content_type())
+}
+
+/// `a=1&b=2` as editable rows, so a form body is a table and not a string
+/// the user has to percent-encode by hand.
+pub fn parse_form(body: &str) -> Vec<KeyValue> {
+    body.split('&')
+        .filter(|s| !s.is_empty())
+        .map(|pair| {
+            let (k, v) = pair.split_once('=').unwrap_or((pair, ""));
+            KeyValue::new(url_decode(k), url_decode(v))
+        })
+        .collect()
+}
+
+pub fn build_form(rows: &[KeyValue]) -> String {
+    rows.iter()
+        .filter(|r| r.enabled && !r.key.is_empty())
+        .map(|r| format!("{}={}", url_encode(&r.key), url_encode(&r.value)))
+        .collect::<Vec<_>>()
+        .join("&")
+}
 
 pub fn parse_query_params(url: &str) -> Vec<KeyValue> {
     let Some((_, query)) = url.split_once('?') else {

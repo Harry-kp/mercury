@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **A body type next to the Body tab** — JSON, Form, Text or none — which writes the `Content-Type` header for you. A JSON body used to be sent with no `Content-Type` at all, so a first POST failed against most APIs. Picking **Form** edits `a=1&b=2` as a table and percent-encodes the values, which is what an OAuth token request needs.
 - Mercury reopens the request file you had open when you quit, instead of restoring its contents as an "Untitled" unsaved request.
 - **A light theme.** Mercury follows your system appearance and `⌘ D` overrides it. The choice is remembered.
 - **A command palette (`⌘ K`)** over every request in the workspace and every command Mercury has. Arrow keys move, `⏎` opens, `Esc` closes.
@@ -15,6 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The request editor's `⋯` menu, the workspace menu and the environment picker replace the old Help/Open menus.
 
 ### Fixed
+- **Compressed responses rendered as mojibake.** Any server with gzip on — and every cURL pasted from a browser, which always asks for gzip — produced garbage. Mercury now decodes gzip, brotli and deflate.
+- **`localhost:3000/api` failed with "Invalid URL".** A URL without a scheme gets one: `http` for loopback, `https` otherwise.
 - **A request or folder named `../x` was created outside the folder you picked.** Names are now a single file name; `/`, `\`, `..` and a leading `.` are rejected.
 - A response that arrived after you opened a different request was shown as *that* request's response. It now goes to history only, and says so.
 - Deleting the workspace folder on disk left Mercury claiming it was still open, with buttons that could only fail.

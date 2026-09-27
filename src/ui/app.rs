@@ -215,6 +215,9 @@ pub struct MercuryApp {
     pub url: String,
     pub query_params: Vec<KeyValue>,
     pub params_text: String,
+    /// A form body shown as a table; `body_text` stays the source of truth.
+    pub form_text: String,
+    pub form_bulk_edit: bool,
     pub headers_text: String,
     pub body_text: String,
     pub tab: Tab,
@@ -282,6 +285,8 @@ impl MercuryApp {
             url: String::new(),
             query_params: Vec::new(),
             params_text: String::new(),
+            form_text: String::new(),
+            form_bulk_edit: false,
             headers_text: String::new(),
             body_text: String::new(),
             tab: Tab::Body,
@@ -744,7 +749,7 @@ impl MercuryApp {
         let sub = |s: &str| vars::substitute(s, &self.env_vars);
         let curl = curl::generate(
             self.method,
-            &sub(&self.url),
+            &http::with_scheme(&sub(&self.url)),
             &kv::headers_to_map(&sub(&self.headers_text)),
             &sub(&self.body_text),
         );

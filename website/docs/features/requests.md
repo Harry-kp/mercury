@@ -19,7 +19,18 @@ If the URL, headers or body use a `{{variable}}` that the selected environment d
 
 ## Tabs
 
-The editor has four tabs: **Body**, **Params**, **Headers** and **Auth**. The Params and Headers tabs show how many entries are enabled as a small count next to the name. The Auth tab is labeled with the current auth type.
+The editor has four tabs: **Body**, **Params**, **Headers** and **Auth**.
+
+The body type sits at the right of the tab row and writes the `Content-Type` header for you:
+
+| Type | Header | Editor |
+|------|--------|--------|
+| **JSON** | `application/json` | Highlighted, with a format button |
+| **Form** | `application/x-www-form-urlencoded` | A table; values are percent-encoded into `a=1&b=2` |
+| **Text** | `text/plain` | Plain |
+| **No type** | none | Plain |
+
+The header stays the source of truth, so editing `Content-Type` by hand in the Headers tab changes the body type too. A content type Mercury doesn't recognise (`application/xml`, say) shows the plain editor and is left alone unless you pick a different type. The Params and Headers tabs show how many entries are enabled as a small count next to the name. The Auth tab is labeled with the current auth type.
 
 ### Body
 

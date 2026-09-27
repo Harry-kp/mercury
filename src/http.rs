@@ -53,6 +53,23 @@ pub fn client() -> reqwest::blocking::Client {
         .expect("HTTP client builds with static config")
 }
 
+/// `localhost:3000/users` is what people type into a URL bar. Give a
+/// scheme-less URL one: http for loopback, https for anything else.
+pub fn with_scheme(url: &str) -> String {
+    let url = url.trim();
+    if url.is_empty() || url.contains("://") {
+        return url.to_string();
+    }
+    if let Some(rest) = url.strip_prefix("//") {
+        return format!("https://{rest}");
+    }
+    let host = url.split(['/', ':', '?', '#']).next().unwrap_or(url);
+    let loopback = matches!(host, "localhost" | "127.0.0.1" | "0.0.0.0" | "[::1]")
+        || host.ends_with(".localhost");
+    let scheme = if loopback { "http" } else { "https" };
+    format!("{scheme}://{url}")
+}
+
 /// Blocking; call from a background thread.
 pub fn execute(
     client: &reqwest::blocking::Client,
@@ -61,7 +78,7 @@ pub fn execute(
     let start = Instant::now();
     let method = reqwest::Method::from_bytes(request.method.as_str().as_bytes())
         .expect("HttpMethod names are valid HTTP methods");
-    let mut builder = client.request(method, &request.url);
+    let mut builder = client.request(method, with_scheme(&request.url));
     for (key, value) in &request.headers {
         builder = builder.header(key, value);
     }
@@ -258,6 +275,102 @@ pub fn format_xml(body: &str) -> String {
 mod tests {
     use super::*;
     use ResponseType::*;
+
+    use std::io::{Read, Write};
+    use std::net::TcpListener;
+
+    /// Serves one gzip-encoded JSON response. Hand-rolled so the test needs
+    /// no extra dependency: a gzip header, one stored deflate block, CRC32.
+    fn gzip_server(payload: &'static str) -> String {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        std::thread::spawn(move || {
+            for mut stream in listener.incoming().flatten() {
+                let _ = stream.read(&mut [0; 4096]);
+                let raw = payload.as_bytes();
+                let mut body = vec![0x1f, 0x8b, 0x08, 0, 0, 0, 0, 0, 0, 0xff];
+                body.push(0x01);
+                body.extend((raw.len() as u16).to_le_bytes());
+                body.extend((!(raw.len() as u16)).to_le_bytes());
+                body.extend_from_slice(raw);
+                let mut crc = 0xffff_ffff_u32;
+                for b in raw {
+                    crc ^= *b as u32;
+                    for _ in 0..8 {
+                        crc = if crc & 1 == 1 {
+                            (crc >> 1) ^ 0xEDB8_8320
+                        } else {
+                            crc >> 1
+                        };
+                    }
+                }
+                body.extend((!crc).to_le_bytes());
+                body.extend((raw.len() as u32).to_le_bytes());
+                let _ = write!(
+                    stream,
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Encoding: gzip\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                    body.len()
+                );
+                let _ = stream.write_all(&body);
+            }
+        });
+        format!("http://{addr}")
+    }
+
+    fn get(url: &str, headers: &[(&str, &str)]) -> Result<HttpResponse, String> {
+        let mut map = std::collections::BTreeMap::new();
+        for (k, v) in headers {
+            map.insert((*k).to_string(), (*v).to_string());
+        }
+        execute(
+            &client(),
+            &RequestFile {
+                method: crate::model::HttpMethod::GET,
+                url: url.to_string(),
+                headers: map,
+                body: String::new(),
+            },
+        )
+    }
+
+    /// Any server with compression on — and any cURL pasted from a browser,
+    /// which always asks for gzip — used to render as mojibake.
+    #[test]
+    fn compressed_responses_are_decoded() {
+        let base = gzip_server(r#"{"ok":true}"#);
+        let plain = get(&base, &[]).expect("request");
+        assert_eq!(plain.body, r#"{"ok":true}"#);
+        assert_eq!(plain.response_type, Json);
+
+        let asked = get(&base, &[("Accept-Encoding", "gzip, deflate, br")]).expect("request");
+        assert_eq!(
+            asked.body, r#"{"ok":true}"#,
+            "an explicit Accept-Encoding must still decode"
+        );
+    }
+
+    #[test]
+    fn scheme_less_urls_get_one() {
+        assert_eq!(
+            with_scheme("localhost:3000/api"),
+            "http://localhost:3000/api"
+        );
+        assert_eq!(with_scheme("127.0.0.1:8080"), "http://127.0.0.1:8080");
+        assert_eq!(
+            with_scheme("api.example.com/v1"),
+            "https://api.example.com/v1"
+        );
+        assert_eq!(
+            with_scheme("//cdn.example.com/x"),
+            "https://cdn.example.com/x"
+        );
+        // already fine, and left exactly as typed
+        assert_eq!(with_scheme("http://a.test/x"), "http://a.test/x");
+        assert_eq!(with_scheme("https://a.test/x"), "https://a.test/x");
+        assert_eq!(with_scheme(""), "");
+        // an unresolved variable is still invalid, just as before
+        assert_eq!(with_scheme("{{BASE}}/users"), "https://{{BASE}}/users");
+    }
 
     #[test]
     fn detects_by_content_type() {

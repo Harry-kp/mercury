@@ -4,10 +4,10 @@ use super::app::{Action, MercuryApp, Tab};
 use super::icon::Icon;
 use super::theme::{mono, semibold, theme, Layout, Radius, Space, Text};
 use super::widgets::{
-    self, copy_button, faint, icon_button, json_job, key_value_editor, menu_item, muted,
+    self, copy_button, icon_button, json_job, key_value_editor, link, menu_item, muted, plain_job,
     popup_menu, section_label, send_button, tab_button,
 };
-use crate::kv::{self, AuthMode};
+use crate::kv::{self, AuthMode, BodyKind};
 use crate::model::HttpMethod;
 use crate::{curl, vars};
 use eframe::egui::{self, Align, Margin, RichText, ScrollArea, Sense, Stroke, Ui, Vec2};
@@ -165,6 +165,7 @@ impl MercuryApp {
 
     fn request_tabs(&mut self, ui: &mut Ui) {
         let auth_mode = kv::auth_mode(&self.headers_text);
+        let body_kind = kv::body_kind(&self.headers_text);
         let tabs = [
             (Tab::Body, "Body", 0),
             (Tab::Params, "Params", kv::count_enabled(&self.query_params)),
@@ -185,6 +186,7 @@ impl MercuryApp {
 
         let mut picked = None;
         let mut auth_trigger = None;
+        let mut body_trigger = None;
         let mut format = false;
         egui::containers::Sides::new().shrink_left().show(
             ui,
@@ -201,10 +203,13 @@ impl MercuryApp {
                 if self.tab != Tab::Body {
                     return;
                 }
-                format = icon_button(ui, Icon::Sparkle, "Format JSON").clicked();
-                if !self.body_text.is_empty() {
-                    ui.label(faint(format!("{} chars", self.body_text.len())));
+                if body_kind == BodyKind::Json {
+                    format = icon_button(ui, Icon::Sparkle, "Format JSON").clicked();
                 }
+                body_trigger = Some(link(
+                    ui,
+                    muted(format!("{} ⌄", body_kind.label())).color(theme().accent),
+                ));
             },
         );
         if let Some(tab) = picked {
@@ -221,6 +226,17 @@ impl MercuryApp {
                 }
             });
         }
+        if let Some(trigger) = body_trigger {
+            popup_menu(ui, &trigger, 150.0, |ui| {
+                for kind in BodyKind::ALL {
+                    let check = (body_kind == kind).then_some(Icon::Check);
+                    if menu_item(ui, check, kind.label(), "") && kind != body_kind {
+                        self.headers_text = kv::set_body_kind(&self.headers_text, kind);
+                        self.tab = Tab::Body;
+                    }
+                }
+            });
+        }
         if format {
             self.run(Action::FormatBody);
         }
@@ -232,28 +248,61 @@ impl MercuryApp {
             .id_salt("request_content")
             .auto_shrink([false, false])
             .show(ui, |ui| match self.tab {
-                Tab::Body => self.body_tab(ui),
+                Tab::Body => self.body_tab(ui, body_kind),
                 Tab::Params => self.params_tab(ui),
                 Tab::Headers => self.headers_tab(ui),
                 Tab::Auth => self.auth_tab(ui, auth_mode),
             });
     }
 
-    fn body_tab(&mut self, ui: &mut Ui) {
+    fn body_tab(&mut self, ui: &mut Ui, kind: BodyKind) {
+        if kind == BodyKind::Form {
+            // the body is `a=1&b=2`; the table is regenerated from it unless
+            // the user is bulk-editing raw text
+            if !self.form_bulk_edit {
+                self.form_text = kv::format_lines(&kv::parse_form(&self.body_text), "=");
+            }
+            let changed = key_value_editor(
+                ui,
+                &mut self.form_text,
+                "=",
+                &mut self.form_bulk_edit,
+                "grant_type=client_credentials\nclient_id=abc",
+            );
+            if changed {
+                self.body_text = kv::build_form(&kv::parse_lines(&self.form_text, "="));
+            }
+            let text = self.body_text.clone();
+            self.variable_chips(ui, &text);
+            return;
+        }
+
+        let json = kind == BodyKind::Json;
         let mut layouter = |ui: &Ui, text: &dyn egui::TextBuffer, wrap_width: f32| {
-            ui.fonts_mut(|f| f.layout_job(json_job(text.as_str(), wrap_width)))
+            let job = if json {
+                json_job(text.as_str(), wrap_width)
+            } else {
+                plain_job(text.as_str(), wrap_width)
+            };
+            ui.fonts_mut(|f| f.layout_job(job))
         };
         widgets::code_frame().show(ui, |ui| {
             let rows = widgets::fill_rows(ui, Space::XXL, 12);
             ui.add(
                 egui::TextEdit::multiline(&mut self.body_text)
-                    .hint_text(muted(r#"{ "key": "value" }"#))
+                    .hint_text(muted(if json {
+                        r#"{ "key": "value" }"#
+                    } else {
+                        "Request body"
+                    }))
                     .desired_width(ui.available_width())
                     .desired_rows(rows)
                     .frame(false)
                     .layouter(&mut layouter),
             );
         });
+        let text = self.body_text.clone();
+        self.variable_chips(ui, &text);
     }
 
     fn params_tab(&mut self, ui: &mut Ui) {
