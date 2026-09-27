@@ -35,6 +35,7 @@ Press `?` (when you aren't typing in a field), click **Shortcuts** in the status
 - **`⌘ D`** switches between the light and dark theme. Mercury follows your system theme until you press it.
 - **`⌘ E`** steps through the environments in the picker, then None, then starts over.
 - **`⌘ Shift F`** hides the sidebar. Press it again to bring the sidebar back.
+- **`Tab`** moves between the controls on screen and `Space` or `⏎` activates the one you land on — the focus ring shows where you are. Everything Mercury can do is reachable without a mouse.
 - **`Esc`** cancels a running request. If no request is running, it clears the sidebar filter. If a dialog or the palette is open, it closes it.
 
 ## Related

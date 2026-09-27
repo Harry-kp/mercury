@@ -17,6 +17,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The request editor's `⋯` menu, the workspace menu and the environment picker replace the old Help/Open menus.
 
 ### Fixed
+- **Tab moved the keyboard focus but nothing showed where it had gone.** Every button, tab, list row and the method picker is drawn by hand, and egui only marks focus on the widgets it draws itself. They now paint a focus ring, so the app can be driven from the keyboard without guessing.
+- **Sidebar rows, the method picker and the status-bar links were invisible to screen readers.** They reached the accessibility tree as anonymous boxes, so VoiceOver announced nothing for the request list — the app's main navigation. Each one now carries its name.
+- **Text that was too faint to read, in both themes.** Hints, counters, timestamps and JSON punctuation sat as low as 2.4:1 against their background; the light theme was the worse of the two. Every text colour now clears WCAG AA (4.5:1) on every surface it lands on, and a test keeps it that way.
+- **The delete button's label was white on pink in the dark theme** — 2.7:1, the least readable text in the app.
 - **The sidebar grew 2px wider every frame, and sprang back after you resized it.** A text field ended up two pixels wider than the space it was given — a frame occupies `content + margin + 2 × stroke width`, and only the margin was being subtracted. Inside a panel that feeds back into the panel width, so it crept outward forever. The response panel did the same whenever history was open.
 - **The macOS app was Apple Silicon only, despite being published as "universal".** Intel Macs could not run the Homebrew cask at all. The bundle is now a real universal binary, and the release fails if it ever isn't.
 - **macOS called the app "damaged".** The bundle claimed a sealed signature it did not have, so Gatekeeper refused it outright instead of offering the usual unidentified-developer prompt. It is now ad-hoc signed and sealed, so right-click → Open works.

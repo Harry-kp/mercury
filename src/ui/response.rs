@@ -159,8 +159,12 @@ impl MercuryApp {
                     if !search.is_empty() && !entry.url.to_lowercase().contains(&search) {
                         continue;
                     }
-                    let row =
-                        widgets::row(ui, ("history", entry.timestamp.to_bits()), false, |ui| {
+                    let row = widgets::row(
+                        ui,
+                        ("history", entry.timestamp.to_bits()),
+                        &entry.url,
+                        false,
+                        |ui| {
                             egui::containers::Sides::new().shrink_left().show(
                                 ui,
                                 |ui| {
@@ -178,7 +182,8 @@ impl MercuryApp {
                                     );
                                 },
                             );
-                        });
+                        },
+                    );
                     if row.on_hover_text(&entry.url).clicked() {
                         open = Some(entry.timestamp);
                     }

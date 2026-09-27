@@ -3,7 +3,7 @@
 //! Copy a block from here to reproduce a UI bug before fixing it.
 
 use super::app::{Dialog, MercuryApp};
-use eframe::egui::{self, Key, Modifiers};
+use eframe::egui::{self, accesskit, Key, Modifiers};
 use egui_kittest::{kittest::Queryable, Harness};
 use std::io::{Read, Write};
 use std::net::TcpListener;
@@ -86,6 +86,19 @@ fn open_send_edit_and_save() {
     harness.run_steps(2);
     assert_eq!(harness.state().env_name(), Some(".env.dev"));
 
+    // Every control Mercury draws by hand has to name itself in the
+    // accessibility tree, or it reaches a screen reader — and the keyboard
+    // Tab order — as an anonymous box. The text *inside* a row is not
+    // enough: it is the row itself that takes focus and the click.
+    for (role, name) in [
+        (accesskit::Role::Button, "users"),   // a sidebar tree row
+        (accesskit::Role::ComboBox, "GET"),   // the method picker
+        (accesskit::Role::Link, "Shortcuts"), // a status-bar link
+        (accesskit::Role::Button, "Send"),
+    ] {
+        harness.get_by_role_and_label(role, name);
+    }
+
     // Panel widths must not drift. A widget that ends up wider than the space
     // it was handed feeds straight back into the panel width, and the panel
     // grows a little every frame — and springs back after you resize it.
@@ -113,9 +126,13 @@ fn open_send_edit_and_save() {
     harness.run_steps(2);
 
     // expand the folder, open the request
-    harness.get_by_label("users").click();
+    harness
+        .get_by_role_and_label(accesskit::Role::Button, "users")
+        .click();
     harness.run_steps(2);
-    harness.get_by_label("list-users").click();
+    harness
+        .get_by_role_and_label(accesskit::Role::Button, "list-users")
+        .click();
     harness.run_steps(2);
     assert_eq!(
         harness.state().current_file.as_deref(),
@@ -185,7 +202,9 @@ fn open_send_edit_and_save() {
     harness.state_mut().search = "invoice".into();
     harness.run_steps(3);
     assert!(
-        harness.query_by_label("get-invoice").is_some(),
+        harness
+            .query_by_role_and_label(accesskit::Role::Button, "get-invoice")
+            .is_some(),
         "the sidebar filter must search the whole workspace, not just open folders"
     );
     harness.state_mut().search.clear();

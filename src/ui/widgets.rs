@@ -369,10 +369,29 @@ pub fn bar_frame() -> egui::Frame {
 // Buttons and rows
 // ---------------------------------------------------------------------------
 
+/// Draws the keyboard focus ring. Every control Mercury paints by hand takes
+/// Tab focus and activates on Space/Enter, but egui only draws a focus
+/// indicator for the widgets it paints itself — without this, a keyboard user
+/// has no idea where they are.
+pub fn focus_ring(ui: &Ui, rect: Rect, response: &Response) {
+    if !response.has_focus() {
+        return;
+    }
+    ui.painter().rect_stroke(
+        rect.expand(1.0),
+        Radius::SM,
+        Stroke::new(2.0_f32, theme().accent),
+        StrokeKind::Inside,
+    );
+}
+
 /// Clickable text with a pointer cursor.
 pub fn link(ui: &mut Ui, text: RichText) -> Response {
-    ui.add(egui::Label::new(text).sense(Sense::click()))
-        .on_hover_cursor(egui::CursorIcon::PointingHand)
+    let name = text.text().to_owned();
+    let response = ui.add(egui::Label::new(text).sense(Sense::click()));
+    focus_ring(ui, response.rect, &response);
+    response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Link, true, &name));
+    response.on_hover_cursor(egui::CursorIcon::PointingHand)
 }
 
 /// A non-interactive icon that takes part in layout like a label.
@@ -395,6 +414,7 @@ fn icon_button_colored(ui: &mut Ui, what: Icon, tooltip: &str, color: Color32) -
         ui.painter().rect_filled(rect, Radius::XS, t.hover);
     }
     let color = if response.hovered() { t.text } else { color };
+    focus_ring(ui, rect, &response);
     icon::paint(ui.painter(), what, rect.shrink(5.0), color);
     // hand-painted icons carry no text, so name them for screen readers
     response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, tooltip));
@@ -419,7 +439,9 @@ pub fn button(ui: &mut Ui, kind: Button, text: &str, leading: Option<Icon>) -> R
     let (fill, hover, fg, border) = match kind {
         Button::Primary => (t.accent, t.accent_hover, t.on_accent, false),
         Button::Ghost => (t.input, t.hover, t.text, true),
-        Button::Danger => (t.error, t.error.gamma_multiply(0.85), Color32::WHITE, false),
+        // not `WHITE`: white on the dark palette's error pink is 2.7:1.
+        // `on_accent` is the ink that reads on a saturated fill in both.
+        Button::Danger => (t.error, t.error.gamma_multiply(0.85), t.on_accent, false),
     };
     let font = if kind == Button::Ghost {
         ui_font(Text::BODY)
@@ -443,6 +465,7 @@ pub fn button(ui: &mut Ui, kind: Button, text: &str, leading: Option<Icon>) -> R
             StrokeKind::Inside,
         );
     }
+    focus_ring(ui, rect, &response);
     let mut cursor = rect.center().x - (label.size().x + icon_space) / 2.0;
     if let Some(what) = leading {
         let icon_rect =
@@ -472,6 +495,7 @@ pub fn ghost_button(ui: &mut Ui, text: &str) -> Response {
 pub fn row(
     ui: &mut Ui,
     id: impl std::hash::Hash,
+    name: &str,
     selected: bool,
     add: impl FnOnce(&mut Ui),
 ) -> Response {
@@ -500,6 +524,9 @@ pub fn row(
     };
     ui.painter()
         .set(background, egui::Shape::rect_filled(rect, Radius::XS, fill));
+    focus_ring(ui, rect.shrink(1.0), &response);
+    response
+        .widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::Button, true, selected, name));
     response.on_hover_cursor(egui::CursorIcon::PointingHand)
 }
 
@@ -519,6 +546,7 @@ pub fn row_action(ui: &mut Ui, row: &Response, what: Icon, tooltip: &str) -> Res
     if response.hovered() {
         ui.painter().rect_filled(rect, Radius::XS, t.hover);
     }
+    focus_ring(ui, rect, &response);
     let color = if response.hovered() {
         t.text
     } else {
@@ -756,7 +784,7 @@ pub fn popup_menu(ui: &Ui, trigger: &Response, width: f32, add_contents: impl Fn
 /// One row in a [`popup_menu`]: optional icon, label, optional trailing hint.
 pub fn menu_item(ui: &mut Ui, what: Option<Icon>, text: &str, trailing: &str) -> bool {
     let t = theme();
-    let response = row(ui, text, false, |ui| {
+    let response = row(ui, text, text, false, |ui| {
         ui.spacing_mut().item_spacing.x = Space::MD;
         if let Some(what) = what {
             glyph(ui, what, 14.0, t.text_muted);
@@ -807,6 +835,7 @@ pub fn tab_button(ui: &mut Ui, text: &str, count: usize, active: bool) -> bool {
     if response.hovered() && !active {
         ui.painter().rect_filled(rect, Radius::XS, t.hover);
     }
+    focus_ring(ui, rect.shrink(2.0), &response);
     let mut x = rect.center().x - (galley.size().x + count_width) / 2.0;
     let text_size = galley.size();
     ui.painter().galley(
@@ -1485,6 +1514,43 @@ mod tests {
     }
 
     /// `row` registers its click area after its contents, so a trailing
+    /// Tab moves focus through every hand-rolled control and Space activates
+    /// it, but egui only draws a focus indicator for the widgets it paints
+    /// itself — without a ring of our own, keyboard users navigate blind.
+    #[test]
+    fn a_focused_control_paints_a_focus_ring() {
+        let ctx = egui::Context::default();
+        super::super::theme::ensure_installed(&ctx);
+
+        // counts the rings: rects stroked in the accent color
+        let rings = |focus: bool| {
+            let output = ctx.run(Default::default(), |ctx| {
+                egui::CentralPanel::default().show(ctx, |ui| {
+                    let response = row(ui, "r", "a request", false, |ui| {
+                        ui.label(label("a request"));
+                    });
+                    if focus {
+                        response.request_focus();
+                    } else {
+                        response.surrender_focus();
+                    }
+                });
+            });
+            output
+                .shapes
+                .iter()
+                .filter(|clipped| match &clipped.shape {
+                    egui::Shape::Rect(r) => r.stroke.color == theme().accent,
+                    _ => false,
+                })
+                .count()
+        };
+
+        assert_eq!(rings(false), 0, "an unfocused row painted a focus ring");
+        rings(true); // focus only applies on the next frame
+        assert_eq!(rings(true), 1, "a focused row painted no focus ring");
+    }
+
     /// control has to be drawn after the row ([`row_action`]) to be clickable
     /// at all — this is the Recent list's "remove" ×.
     #[test]
@@ -1503,7 +1569,7 @@ mod tests {
             .with_size(egui::vec2(320.0, 60.0))
             .build_ui_state(
                 |ui, state: &mut State| {
-                    let response = row(ui, "test_row", false, |ui| {
+                    let response = row(ui, "test_row", "test row", false, |ui| {
                         ui.label(label("a request"));
                     });
                     let action = row_action(ui, &response, Icon::Close, "remove");

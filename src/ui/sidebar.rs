@@ -58,7 +58,7 @@ impl MercuryApp {
         let t = theme();
         let expanded = self.recent_expanded;
         let count = self.recent.len();
-        let header = widgets::row(ui, "recent_header", false, |ui| {
+        let header = widgets::row(ui, "recent_header", "Recent", false, |ui| {
             chevron(ui, expanded);
             ui.label(widgets::section_label("Recent"));
             ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
@@ -91,7 +91,7 @@ impl MercuryApp {
             .show(ui, |ui| {
                 for (idx, recent) in self.recent.iter().enumerate().rev() {
                     let request = &recent.request;
-                    let row = widgets::row(ui, ("recent", idx), false, |ui| {
+                    let row = widgets::row(ui, ("recent", idx), &request.url, false, |ui| {
                         // leave room for the × that is painted on top of the row
                         ui.set_max_width((ui.available_width() - 26.0).max(40.0));
                         ui.label(method_text(request.method));
@@ -195,16 +195,17 @@ impl MercuryApp {
                     // while filtering, every folder is shown open
                     let expanded = !search.is_empty() || self.expanded.contains(path.as_path());
                     let selected = self.selected_folder.as_ref() == Some(path);
-                    let response = widgets::row(ui, ("folder", path.as_path()), selected, |ui| {
-                        ui.add_space(indent);
-                        chevron(ui, expanded);
-                        widgets::glyph(ui, Icon::Folder, 13.0, t.text_muted);
-                        ui.label(if selected {
-                            strong(name.clone())
-                        } else {
-                            label(name.clone())
+                    let response =
+                        widgets::row(ui, ("folder", path.as_path()), name, selected, |ui| {
+                            ui.add_space(indent);
+                            chevron(ui, expanded);
+                            widgets::glyph(ui, Icon::Folder, 13.0, t.text_muted);
+                            ui.label(if selected {
+                                strong(name.clone())
+                            } else {
+                                label(name.clone())
+                            });
                         });
-                    });
                     if response.clicked() {
                         self.selected_folder = Some(path.clone());
                         // while filtering every folder is shown open, so a
@@ -227,18 +228,20 @@ impl MercuryApp {
                 }
                 CollectionItem::Request { name, path, method } => {
                     let current = self.current_file.as_ref() == Some(path);
-                    let response = widgets::row(ui, ("request", path.as_path()), current, |ui| {
-                        ui.add_space(indent + 11.0 + Space::SM);
-                        if let Some(m) = method {
-                            ui.label(method_text(*m));
-                        }
-                        let text = name.strip_suffix(".json").unwrap_or(name).to_string();
-                        ui.label(if current {
-                            strong(text).color(t.accent)
-                        } else {
-                            label(text)
+                    let shown = name.strip_suffix(".json").unwrap_or(name);
+                    let response =
+                        widgets::row(ui, ("request", path.as_path()), shown, current, |ui| {
+                            ui.add_space(indent + 11.0 + Space::SM);
+                            if let Some(m) = method {
+                                ui.label(method_text(*m));
+                            }
+                            let text = shown.to_string();
+                            ui.label(if current {
+                                strong(text).color(t.accent)
+                            } else {
+                                label(text)
+                            });
                         });
-                    });
                     if response.clicked() {
                         self.open_file(path);
                     }

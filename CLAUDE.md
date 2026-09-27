@@ -23,9 +23,9 @@ Mercury is a native Rust + egui API client. Requests are plain JSON files in a f
 - Parse header/param/auth text only through `kv.rs`; variables only through `vars.rs`.
 - `headers_text` is the truth for headers, auth AND body type: the Auth tab is a view over the `Authorization` line, the body type picker a view over `Content-Type`. Both go through `kv::{header_value, set_header}`.
 - Timestamps: `storage::now()`. Truncating user text: `widgets::truncate` (never `&s[..n]`: it panics on UTF-8).
-- Colors, spacing, radii, type sizes: `theme.rs`. Read a color with `theme()`, never a literal — both palettes must stay in sync.
+- Colors, spacing, radii, type sizes: `theme.rs`. Read a color with `theme()`, never a literal — both palettes must stay in sync. Every text color must clear WCAG AA (4.5:1) on every surface it lands on and the three text tiers must stay a step apart; `theme::tests` measures both, in both palettes.
 - Icons: `icon.rs`. No emoji anywhere: they render differently on every OS and can't be recolored.
-- Buttons, rows, inputs, badges, modals: `widgets.rs` (`row`, `icon_button`, `primary_button`, `text_input`, `tab_button`, `menu_item`, `key_combo`, `input_modal`, `confirm_modal`).
+- Buttons, rows, inputs, badges, modals: `widgets.rs` (`row`, `icon_button`, `primary_button`, `text_input`, `tab_button`, `menu_item`, `key_combo`, `input_modal`, `confirm_modal`). A control painted by hand needs two things egui gives its own widgets for free: `response.widget_info(…)` so it has a name in the accessibility tree, and `widgets::focus_ring` so Tab is visible.
 - Commands: the `Action` enum in `ui/app.rs`, run through `MercuryApp::run`. A new command added there shows up in the palette; add it to `SHORTCUTS` too only if it deserves a key.
 - Background work: `MercuryApp::spawn` returns an `Event`; never block the UI thread on I/O or the network.
 - Errors: `Result<T, String>` carrying the real cause; show them with `self.notify(msg, is_error)`.
