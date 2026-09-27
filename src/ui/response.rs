@@ -236,7 +236,7 @@ impl MercuryApp {
                     (ResponseTab::Headers, "Headers", response.headers.len()),
                     (ResponseTab::Cookies, "Cookies", response.cookies.len()),
                 ] {
-                    if tab_button(ui, text, count, self.response_tab == tab) {
+                    if tab_button(ui, text, count, self.response_tab == tab, false) {
                         picked = Some(tab);
                     }
                 }
@@ -362,28 +362,44 @@ impl MercuryApp {
                             // formatting can push a body over the limit;
                             // skip highlighting then
                             let highlight = !self.raw_view && text.len() <= MAX_INLINE_SIZE;
-                            // Extend, not wrap: a wrapped line restarts at
-                            // column 0 and destroys the JSON indentation
+                            // Extend only pays off once the text has real
+                            // lines to keep: wrapping formatted JSON restarts
+                            // every line at column 0 and destroys the indent.
+                            // Everything else arrives as the server sent it —
+                            // minified HTML is one line thousands of pixels
+                            // wide, and Extend turns reading it into a
+                            // horizontal scroll through the whole document.
+                            let formatted = !self.raw_view
+                                && matches!(kind, ResponseType::Json | ResponseType::Xml);
+                            let width = if formatted {
+                                f32::INFINITY
+                            } else {
+                                ui.available_width()
+                            };
                             let code = |ui: &mut Ui, job| {
                                 ui.add(
                                     egui::Label::new(job)
                                         // you often want one field's value,
                                         // not the whole body
                                         .selectable(true)
-                                        .wrap_mode(egui::TextWrapMode::Extend),
+                                        .wrap_mode(if formatted {
+                                            egui::TextWrapMode::Extend
+                                        } else {
+                                            egui::TextWrapMode::Wrap
+                                        }),
                                 );
                             };
                             match kind {
                                 ResponseType::Json if highlight => {
-                                    code(ui, json_job(text, f32::INFINITY));
+                                    code(ui, json_job(text, width));
                                 }
                                 ResponseType::Xml | ResponseType::Html if highlight => {
-                                    code(ui, xml_job(text, f32::INFINITY));
+                                    code(ui, xml_job(text, width));
                                 }
                                 _ => {
                                     ui.add(
                                         egui::TextEdit::multiline(&mut text.as_str())
-                                            .desired_width(f32::INFINITY)
+                                            .desired_width(width)
                                             .frame(false)
                                             .font(mono(Text::SMALL)),
                                     );

@@ -23,18 +23,12 @@ impl MercuryApp {
         });
     }
 
-    /// Variables used anywhere in the request that the selected env lacks.
-    fn undefined_vars(&self) -> BTreeSet<String> {
-        [&self.url, &self.headers_text, &self.body_text]
-            .into_iter()
-            .flat_map(|t| vars::extract(t))
-            .filter(|v| !self.env_vars.contains_key(v))
-            .collect()
-    }
-
     fn url_bar(&mut self, ui: &mut Ui) {
         let t = theme();
-        let undefined = self.undefined_vars();
+        let undefined: BTreeSet<String> = vars::extract(&self.url)
+            .into_iter()
+            .filter(|v| !self.env_vars.contains_key(v))
+            .collect();
         let focused = ui.memory(|m| m.has_focus(egui::Id::new("url_bar")));
         let border = match (focused, undefined.is_empty()) {
             (true, _) => t.accent,
@@ -170,13 +164,27 @@ impl MercuryApp {
     fn request_tabs(&mut self, ui: &mut Ui) {
         let auth_mode = kv::auth_mode(&self.headers_text);
         let body_kind = kv::body_kind(&self.headers_text);
+        // an undefined variable is worth flagging on the tab that holds it:
+        // outlining the URL bar for a `{{token}}` that lives in the headers
+        // sends the user looking in the wrong place
+        let missing = |text: &str| {
+            vars::extract(text)
+                .iter()
+                .any(|v| !self.env_vars.contains_key(v))
+        };
         let tabs = [
-            (Tab::Body, "Body", 0),
-            (Tab::Params, "Params", kv::count_enabled(&self.query_params)),
+            (Tab::Body, "Body", 0, missing(&self.body_text)),
+            (
+                Tab::Params,
+                "Params",
+                kv::count_enabled(&self.query_params),
+                false,
+            ),
             (
                 Tab::Headers,
                 "Headers",
                 kv::count_enabled(&kv::parse_lines(&self.headers_text, ":")),
+                missing(&self.headers_text),
             ),
             (
                 Tab::Auth,
@@ -185,6 +193,7 @@ impl MercuryApp {
                     _ => auth_mode.label(),
                 },
                 0,
+                false,
             ),
         ];
 
@@ -196,8 +205,8 @@ impl MercuryApp {
             ui,
             |ui| {
                 ui.spacing_mut().item_spacing.x = Space::XS;
-                for (tab, text, count) in tabs {
-                    if tab_button(ui, text, count, self.tab == tab) {
+                for (tab, text, count, warn) in tabs {
+                    if tab_button(ui, text, count, self.tab == tab, warn) {
                         picked = Some(tab);
                     }
                 }

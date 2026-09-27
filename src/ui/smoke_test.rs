@@ -242,14 +242,31 @@ fn open_send_edit_and_save() {
     harness.run_steps(2);
     assert!(matches!(harness.state().dialog, Some(Dialog::Shortcuts)));
 
-    // a 4xx is not a success: the notification must not read as one
+    // The response pane puts the status at the top, so a toast repeating it
+    // is noise on every send — but only while the pane is actually visible.
     harness.state_mut().url = format!("{server}/status/404");
+    harness.state_mut().send_request();
+    wait_for_response(&mut harness);
+    assert_eq!(
+        harness.state().response.as_ref().map(|r| r.status),
+        Some(404),
+        "the failing status has to reach the pane, which is now the only signal"
+    );
+    assert!(
+        harness.state().toast.is_none(),
+        "the status badge is on screen; a toast repeating it is noise"
+    );
+
+    // ...with history covering the pane, the toast is the only signal left
+    harness.state_mut().show_history = true;
     harness.state_mut().send_request();
     wait_for_response(&mut harness);
     assert!(
         harness.state().toast.as_ref().is_some_and(|t| t.is_error),
-        "a failing status must not be announced as a success"
+        "a failing status behind the history panel must still be announced, and not as a success"
     );
+    harness.state_mut().show_history = false;
+    harness.run_steps(2);
 
     // a response that lands after the user opened another request belongs to
     // neither of them on screen, so it goes to history only
