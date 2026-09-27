@@ -199,6 +199,7 @@ cargo build --release
 | `⌘ H` | Toggle history |
 | `⌘ R` | Toggle raw response |
 | `⌘ D` | Toggle light / dark |
+| `⌘ F` | Find in response |
 | `⌘ ⇧ C` | Copy as cURL |
 | `⌘ ⇧ F` | Focus mode |
 | `?` | Keyboard shortcuts |

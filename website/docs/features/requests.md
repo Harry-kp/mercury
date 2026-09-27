@@ -93,7 +93,7 @@ Below that are three tabs:
 - **Headers** lists every response header.
 - **Cookies** appears with a count when the response sets cookies, and lists them as `name=value`.
 
-On the Body tab, the **Pretty / Raw** switch chooses between the formatted body and the exact bytes (`⌘ R`), and the copy icon copies the whole body. You can also select part of the body and copy that. For images, other binary content and bodies too large to show, the panel offers a **Save response…** button instead. In the top row, the download icon saves the body to a file and the clock icon opens the [history list](/docs/features/history).
+On the Body tab, the **Pretty / Raw** switch chooses between the formatted body and the exact bytes (`⌘ R`), and the copy icon copies the whole body. `⌘ F` opens a find bar over the body: every match is highlighted, the bar counts them, `⏎` steps to the next and `Esc` closes it. You can also select part of the body and copy that. For images, other binary content and bodies too large to show, the panel offers a **Save response…** button instead. In the top row, the download icon saves the body to a file and the clock icon opens the [history list](/docs/features/history).
 
 How the body is displayed depends on its type:
 
@@ -101,8 +101,8 @@ How the body is displayed depends on its type:
 |----------|---------|
 | JSON | Pretty-printed and highlighted |
 | XML (including SVG) | Indented and highlighted |
-| HTML | Highlighted |
-| Other text | Plain text |
+| HTML | Highlighted, wrapped to the panel |
+| Other text | Plain text, wrapped to the panel |
 | Empty or `204` | "The server returned an empty response" |
 | Image, PDF, audio, video, archive, octet-stream | Content type and size, with **Save** |
 | Text over 100 KB | Content type and size, with **Save** |

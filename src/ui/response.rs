@@ -354,58 +354,72 @@ impl MercuryApp {
                     _ => body.clone(),
                 });
                 let text = if self.raw_view { body } else { &*formatted };
+                let hits = self
+                    .find
+                    .as_deref()
+                    .map(|q| widgets::find_all(text, q))
+                    .unwrap_or_default();
+                let scroll_to = find_bar(ui, &mut self.find, &mut self.find_at, text, &hits);
                 widgets::code_frame().show(ui, |ui| {
-                    ScrollArea::both()
+                    let mut area = ScrollArea::both()
                         .id_salt("response_body")
-                        .auto_shrink([false, false])
-                        .show(ui, |ui| {
-                            // formatting can push a body over the limit;
-                            // skip highlighting then
-                            let highlight = !self.raw_view && text.len() <= MAX_INLINE_SIZE;
-                            // Extend only pays off once the text has real
-                            // lines to keep: wrapping formatted JSON restarts
-                            // every line at column 0 and destroys the indent.
-                            // Everything else arrives as the server sent it —
-                            // minified HTML is one line thousands of pixels
-                            // wide, and Extend turns reading it into a
-                            // horizontal scroll through the whole document.
-                            let formatted = !self.raw_view
-                                && matches!(kind, ResponseType::Json | ResponseType::Xml);
-                            let width = if formatted {
-                                f32::INFINITY
-                            } else {
-                                ui.available_width()
-                            };
-                            let code = |ui: &mut Ui, job| {
-                                ui.add(
-                                    egui::Label::new(job)
-                                        // you often want one field's value,
-                                        // not the whole body
-                                        .selectable(true)
-                                        .wrap_mode(if formatted {
-                                            egui::TextWrapMode::Extend
-                                        } else {
-                                            egui::TextWrapMode::Wrap
-                                        }),
-                                );
-                            };
-                            match kind {
-                                ResponseType::Json if highlight => {
-                                    code(ui, json_job(text, width));
-                                }
-                                ResponseType::Xml | ResponseType::Html if highlight => {
-                                    code(ui, xml_job(text, width));
-                                }
-                                _ => {
-                                    ui.add(
-                                        egui::TextEdit::multiline(&mut text.as_str())
-                                            .desired_width(width)
-                                            .frame(false)
-                                            .font(mono(Text::SMALL)),
-                                    );
-                                }
+                        .auto_shrink([false, false]);
+                    if let Some(offset) = scroll_to {
+                        area = area.vertical_scroll_offset(offset);
+                    }
+                    area.show(ui, |ui| {
+                        // formatting can push a body over the limit;
+                        // skip highlighting then
+                        let highlight = !self.raw_view && text.len() <= MAX_INLINE_SIZE;
+                        // Extend only pays off once the text has real
+                        // lines to keep: wrapping formatted JSON restarts
+                        // every line at column 0 and destroys the indent.
+                        // Everything else arrives as the server sent it —
+                        // minified HTML is one line thousands of pixels
+                        // wide, and Extend turns reading it into a
+                        // horizontal scroll through the whole document.
+                        let formatted = !self.raw_view
+                            && matches!(kind, ResponseType::Json | ResponseType::Xml);
+                        let width = if formatted {
+                            f32::INFINITY
+                        } else {
+                            ui.available_width()
+                        };
+                        let code = |ui: &mut Ui, mut job: egui::text::LayoutJob| {
+                            widgets::highlight_ranges(
+                                &mut job,
+                                &hits,
+                                theme().tint(theme().warning, 0.45),
+                            );
+                            ui.add(
+                                egui::Label::new(job)
+                                    // you often want one field's value,
+                                    // not the whole body
+                                    .selectable(true)
+                                    .wrap_mode(if formatted {
+                                        egui::TextWrapMode::Extend
+                                    } else {
+                                        egui::TextWrapMode::Wrap
+                                    }),
+                            );
+                        };
+                        match kind {
+                            ResponseType::Json if highlight => {
+                                code(ui, json_job(text, width));
                             }
-                        });
+                            ResponseType::Xml | ResponseType::Html if highlight => {
+                                code(ui, xml_job(text, width));
+                            }
+                            _ => {
+                                ui.add(
+                                    egui::TextEdit::multiline(&mut text.as_str())
+                                        .desired_width(width)
+                                        .frame(false)
+                                        .font(mono(Text::SMALL)),
+                                );
+                            }
+                        }
+                    });
                 });
             }
         }
@@ -444,4 +458,90 @@ fn save_button(ui: &mut Ui, save: &mut bool) {
             *save = true;
         }
     });
+}
+
+/// The find bar, shown only once ⌘F has opened it. Returns the scroll offset
+/// to jump to when the current match moved.
+///
+/// Takes its two fields rather than `&mut self`: the body text it searches is
+/// itself borrowed out of the app.
+fn find_bar(
+    ui: &mut Ui,
+    find: &mut Option<String>,
+    find_at: &mut usize,
+    text: &str,
+    hits: &[std::ops::Range<usize>],
+) -> Option<f32> {
+    let mut query = find.take()?;
+    let t = theme();
+    let (mut at, mut jump, mut close) = (*find_at, false, false);
+
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = Space::SM;
+        let field = ui.add(
+            egui::TextEdit::singleline(&mut query)
+                .hint_text(widgets::muted("Find in response"))
+                .desired_width(Layout::FIND_FIELD_WIDTH)
+                .id(egui::Id::new("response_find"))
+                .font(mono(Text::SMALL)),
+        );
+        // a single-line TextEdit reports Enter by losing focus
+        if field.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+            at += 1;
+            jump = true;
+            field.request_focus();
+        }
+        if field.changed() {
+            at = 0;
+            jump = true;
+        }
+        let (label, color) = match (query.is_empty(), hits.is_empty()) {
+            (true, _) => (String::new(), t.text_faint),
+            (false, true) => ("No matches".to_string(), t.warning),
+            (false, false) => (
+                format!("{} of {}", at % hits.len() + 1, hits.len()),
+                t.text_faint,
+            ),
+        };
+        ui.label(widgets::faint(label).color(color));
+        ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
+            close = widgets::icon_button(ui, Icon::Close, "Close find (Esc)").clicked();
+        });
+    });
+    ui.add_space(Space::MD);
+    *find_at = at;
+    if close {
+        return None;
+    }
+    *find = Some(query);
+    // ponytail: the offset is the match's line times the row height, which
+    // is exact while the body does not wrap (formatted JSON, the common
+    // case) and approximate when it does. Measure the galley if that ever
+    // starts to matter.
+    let hit = (jump && !hits.is_empty()).then(|| hits[at % hits.len()].clone())?;
+    let row = ui.fonts_mut(|f| f.row_height(&mono(Text::SMALL)));
+    Some(line_of(text, hit.start) as f32 * row)
+}
+
+/// The 0-based line that byte `at` falls on. Counting lines is not the same
+/// as counting newlines: `"a\nb\n".lines()` yields two, but a match just past
+/// that second newline sits on line *two*, and scrolling to line one puts it
+/// off the top of the view.
+fn line_of(text: &str, at: usize) -> usize {
+    text[..at].matches('\n').count()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::line_of;
+
+    #[test]
+    fn line_of_counts_from_zero_past_every_newline() {
+        let text = "a\nb\nX\n";
+        assert_eq!(line_of(text, 0), 0);
+        assert_eq!(line_of(text, 1), 0, "still on the first line");
+        assert_eq!(line_of(text, 2), 1, "just past the first newline");
+        assert_eq!(line_of(text, 4), 2, "X is on the third line");
+        assert_eq!(line_of(text, text.len()), 3);
+    }
 }

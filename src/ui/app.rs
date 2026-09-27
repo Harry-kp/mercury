@@ -46,6 +46,7 @@ pub enum Action {
     CopyCurl,
     FormatBody,
     FocusMode,
+    FindInResponse,
     ToggleTheme,
     ImportPostman,
     ImportInsomnia,
@@ -104,6 +105,13 @@ pub const SHORTCUTS: &[Shortcut] = &[
         Key::D,
         false,
         Action::ToggleTheme,
+    ),
+    cmd(
+        "⌘ F",
+        "Find in response",
+        Key::F,
+        false,
+        Action::FindInResponse,
     ),
     cmd("⌘ ⇧ C", "Copy as cURL", Key::C, true, Action::CopyCurl),
     cmd("⌘ ⇧ F", "Focus mode", Key::F, true, Action::FocusMode),
@@ -235,6 +243,10 @@ pub struct MercuryApp {
     pub request_error: Option<String>,
     pub formatted_body: Option<String>,
     pub raw_view: bool,
+    /// What to find in the response body, and which match is current. Empty
+    /// while the find bar is closed.
+    pub find: Option<String>,
+    pub find_at: usize,
     pub response_tab: ResponseTab,
     pub in_flight: Option<u64>,
     /// The form as it was when the in-flight request left, so history records
@@ -301,6 +313,8 @@ impl MercuryApp {
             request_error: None,
             formatted_body: None,
             raw_view: false,
+            find: None,
+            find_at: 0,
             response_tab: ResponseTab::Body,
             in_flight: None,
             sent: None,
@@ -1059,6 +1073,11 @@ impl MercuryApp {
             }
             Action::History => self.show_history = !self.show_history,
             Action::ToggleRaw => self.raw_view = !self.raw_view,
+            Action::FindInResponse => {
+                self.response_tab = ResponseTab::Body;
+                self.find.get_or_insert_with(String::new);
+                self.focus("response_find");
+            }
             Action::CopyCurl => self.copy_as_curl(),
             Action::FormatBody => {
                 self.body_text = http::format_json(&self.body_text);
@@ -1102,7 +1121,11 @@ impl MercuryApp {
         });
 
         if escape && self.dialog.is_none() {
-            if self.in_flight.is_some() {
+            // innermost first: the find bar is the thing the user is looking
+            // at when they press it
+            if self.find.is_some() {
+                self.find = None;
+            } else if self.in_flight.is_some() {
                 self.cancel_request();
             } else {
                 self.search.clear();

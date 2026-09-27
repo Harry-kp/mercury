@@ -31,6 +31,7 @@ const COMMANDS: &[(Action, &str, Icon)] = &[
     (Action::NextEnv, "Next environment", Icon::Layers),
     (Action::History, "Toggle history", Icon::Clock),
     (Action::ToggleRaw, "Toggle raw response", Icon::File),
+    (Action::FindInResponse, "Find in response", Icon::Search),
     (Action::FocusMode, "Toggle focus mode", Icon::PanelLeft),
     (Action::ToggleTheme, "Toggle light / dark", Icon::Sun),
     (Action::Help, "Keyboard shortcuts", Icon::Keyboard),
