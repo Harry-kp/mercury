@@ -21,7 +21,7 @@ Mercury is a native Rust + egui API client. Requests are plain JSON files in a f
 
 ## Single sources of truth (grep before writing a helper)
 - Parse header/param/auth text only through `kv.rs`; variables only through `vars.rs`.
-- `headers_text` is the truth for headers AND auth; the Auth tab only reads and writes the `Authorization` line.
+- `headers_text` is the truth for headers, auth AND body type: the Auth tab is a view over the `Authorization` line, the body type picker a view over `Content-Type`. Both go through `kv::{header_value, set_header}`.
 - Timestamps: `storage::now()`. Truncating user text: `widgets::truncate` (never `&s[..n]`: it panics on UTF-8).
 - Colors, spacing, radii, type sizes: `theme.rs`. Read a color with `theme()`, never a literal — both palettes must stay in sync.
 - Icons: `icon.rs`. No emoji anywhere: they render differently on every OS and can't be recolored.

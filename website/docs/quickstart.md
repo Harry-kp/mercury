@@ -22,7 +22,7 @@ This page walks through sending, saving and organizing requests. It assumes Merc
 
 You don't need a workspace to send a request.
 
-1. Click the URL bar (or press `⌘ L`) and type `https://httpbin.org/get`.
+1. Click the URL bar (or press `⌘ L`) and type `httpbin.org/get`. A URL without a scheme gets one: `http` for `localhost`, `https` for anything else.
 2. Press `⌘ Enter`, or click **Send**.
 
 The response panel shows the status, response time and size, followed by the body. JSON is pretty-printed and highlighted. While a request is running, press `Esc` or click the stop button to cancel it.

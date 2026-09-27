@@ -38,10 +38,11 @@
 
 ## Why Mercury?
 
-- **Native, not Electron.** Rust + egui draw directly on the GPU. It's a single ~8 MB binary with no runtime and no splash screen.
+- **Native, not Electron.** Rust + egui draw directly on the GPU. It's a single ~9 MB binary with no runtime and no splash screen.
 - **Your requests are files.** Each request is a small JSON file in a folder you choose, so you can grep it, diff it, commit it, or edit it in VS Code. Mercury picks up outside edits live.
 - **Local only.** No account, no cloud, no telemetry. Your secrets stay on your disk.
 - **Keyboard first.** `⌘K` opens a command palette over every request and command; press `?` for the full shortcut list.
+- **It just sends.** JSON and form bodies set their own `Content-Type`, gzip comes back decoded, and `localhost:3000/api` works without typing a scheme.
 - **Light or dark.** Mercury follows your system theme, or `⌘D` pins one. Vector icons and bundled fonts mean it looks the same on macOS, Windows and Linux.
 
 ---

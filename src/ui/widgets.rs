@@ -281,6 +281,14 @@ pub fn json_job(text: &str, wrap_width: f32) -> LayoutJob {
     job
 }
 
+/// Body text with no syntax to highlight, laid out in the same mono font.
+pub fn plain_job(text: &str, wrap_width: f32) -> LayoutJob {
+    let mut job = LayoutJob::default();
+    job.wrap.max_width = wrap_width;
+    push(&mut job, text, theme().text);
+    job
+}
+
 /// Highlight XML/HTML tags; declarations and comments are muted.
 pub fn xml_job(text: &str, wrap_width: f32) -> LayoutJob {
     let t = theme();
