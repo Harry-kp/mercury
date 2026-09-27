@@ -253,7 +253,7 @@ impl MercuryApp {
 
     fn folder_menu(&mut self, ui: &mut Ui, name: &str, path: &Path) {
         if menu_item(ui, Some(Icon::Plus), "New request", "") {
-            self.open_dialog(Dialog::NewRequest(path.to_path_buf()), "");
+            self.open_dialog(Dialog::NewRequest(path.to_path_buf(), false), "");
         }
         if menu_item(ui, Some(Icon::Folder), "New folder", "") {
             self.open_dialog(Dialog::NewFolder(path.to_path_buf()), "");

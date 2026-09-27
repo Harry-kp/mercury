@@ -155,7 +155,10 @@ pub enum ResponseTab {
 
 #[derive(Clone, Debug)]
 pub enum Dialog {
-    NewRequest(PathBuf),
+    /// The `bool` is true when this is ⌘S on an unsaved request rather than
+    /// ⌘N: the same input, but "Save request" / "Save" instead of "Create",
+    /// because the words have to match the action the user invoked.
+    NewRequest(PathBuf, bool),
     NewFolder(PathBuf),
     Rename(PathBuf),
     Delete(PathBuf),
@@ -389,6 +392,39 @@ impl MercuryApp {
         self.spawn(|| rfd::FileDialog::new().pick_folder().map(Event::OpenFolder));
     }
 
+    /// Open an imported collection and land the user inside it.
+    pub fn finish_import(&mut self, folder: PathBuf, count: import::ImportCount) {
+        self.open_workspace(folder.clone(), None);
+        // otherwise the editor still holds whatever was open before the
+        // import — usually a scratch request from a folder that is no longer
+        // even open — and the collection the user just imported is nowhere
+        // to be seen.
+        if let Some(first) = workspace::all_requests(&folder)
+            .into_iter()
+            .find_map(|i| match i {
+                CollectionItem::Request { path, .. } => Some(path),
+                CollectionItem::Folder { .. } => None,
+            })
+        {
+            self.open_file(&first);
+            self.expand_to(&first);
+        }
+        let summary = plural_import(count.requests, count.envs);
+        // an import that silently drops a body or an auth scheme produces
+        // requests that fail for no visible reason
+        if count.skipped.is_empty() {
+            self.notify(summary, false);
+        } else {
+            self.notify(
+                format!(
+                    "{summary}. Mercury could not carry over: {}",
+                    count.skipped.join("; ")
+                ),
+                true,
+            );
+        }
+    }
+
     pub fn open_workspace(&mut self, path: PathBuf, env: Option<&str>) {
         if !path.is_dir() {
             self.notify(format!("Workspace not found: {}", path.display()), true);
@@ -607,7 +643,7 @@ impl MercuryApp {
                 self.notify("Saved", false);
             }
         } else if let Some(root) = self.target_folder() {
-            self.open_dialog(Dialog::NewRequest(root), "");
+            self.open_dialog(Dialog::NewRequest(root, true), "");
         } else {
             self.pick_folder();
             self.notify("Open a folder first to save requests", false);
@@ -640,6 +676,8 @@ impl MercuryApp {
             self.focus("url_bar");
             return;
         }
+        // otherwise last send's "404 Not Found" sits over this send's result
+        self.toast = None;
         let request = RequestFile {
             method: self.method,
             url: vars::substitute(&self.url, &self.env_vars),
@@ -696,7 +734,15 @@ impl MercuryApp {
                 if self.sent_file.take() == self.current_file {
                     self.response = Some(response);
                     self.request_error = None;
-                    self.notify(summary, failed);
+                    // the pane puts the status badge at the top of the
+                    // response; a toast saying "200 OK" next to it is noise on
+                    // every single send. Speak up only when history is
+                    // covering the pane and the badge cannot be seen.
+                    if self.show_history {
+                        self.notify(summary, failed);
+                    } else {
+                        self.toast = None;
+                    }
                 } else {
                     // the user opened a different request while this was in
                     // flight; showing its response here would attribute it to
@@ -791,13 +837,7 @@ impl MercuryApp {
                 }
                 Event::Response(..) => {} // cancelled
                 Event::OpenFolder(path) => self.open_workspace(path, None),
-                Event::Imported(Ok((folder, (requests, envs)))) => {
-                    self.open_workspace(folder, None);
-                    self.notify(
-                        format!("Imported {requests} requests, {envs} environments"),
-                        false,
-                    );
-                }
+                Event::Imported(Ok((folder, count))) => self.finish_import(folder, count),
                 Event::Imported(Err(e)) => self.notify(e, true),
                 Event::FilesChanged => files_changed = true,
                 Event::Toast(text, is_error) => self.notify(text, is_error),
@@ -889,13 +929,26 @@ impl MercuryApp {
             return;
         };
         let titles = match &dialog {
-            Dialog::NewRequest(parent) => self.in_folder(parent, "New request"),
+            Dialog::NewRequest(parent, saving) => self.in_folder(
+                parent,
+                if *saving {
+                    "Save request"
+                } else {
+                    "New request"
+                },
+            ),
             Dialog::NewFolder(parent) => self.in_folder(parent, "New folder"),
             _ => String::new(),
         };
         let text = &mut self.dialog_text;
         let action = match &dialog {
-            Dialog::NewRequest(_) => input_modal(ctx, &titles, "Request name", "Create", text),
+            Dialog::NewRequest(_, saving) => input_modal(
+                ctx,
+                &titles,
+                "Request name",
+                if *saving { "Save" } else { "Create" },
+                text,
+            ),
             Dialog::NewFolder(_) => input_modal(ctx, &titles, "Folder name", "Create", text),
             Dialog::Rename(_) => input_modal(ctx, "Rename", "New name", "Rename", text),
             Dialog::Delete(path) => {
@@ -930,7 +983,7 @@ impl MercuryApp {
 
     fn confirm_dialog(&mut self, dialog: Dialog, name: &str) -> Result<&'static str, String> {
         match dialog {
-            Dialog::NewRequest(parent) => {
+            Dialog::NewRequest(parent, _) => {
                 let path = workspace::create_request(&parent, name, &self.file_content())?;
                 // it's saved now, so it no longer belongs in Recent
                 let url = self.url.clone();
@@ -1334,6 +1387,17 @@ fn chip(
     );
     response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, enabled, &text));
     response.on_hover_cursor(egui::CursorIcon::PointingHand)
+}
+
+/// "1 request, 1 environment" — an import that says "1 environments" reads
+/// like a bug in the thing that just read your collection.
+fn plural_import(requests: usize, envs: usize) -> String {
+    let s = |n: usize| if n == 1 { "" } else { "s" };
+    format!(
+        "Imported {requests} request{}, {envs} environment{}",
+        s(requests),
+        s(envs)
+    )
 }
 
 fn shortcuts_modal(ctx: &egui::Context) -> ModalAction {

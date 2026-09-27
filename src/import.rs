@@ -1,7 +1,7 @@
 //! Import Postman (v2.1 JSON) and Insomnia (JSON/YAML) exports into a
 //! workspace folder as Mercury request files + `.env.<name>` files.
 
-use crate::kv::url_encode;
+use crate::kv::{self, url_encode, KeyValue};
 use crate::model::{HttpMethod, RequestFile};
 use serde::Deserialize;
 use serde_json::Value;
@@ -10,7 +10,14 @@ use std::fs;
 use std::path::Path;
 
 /// (requests written, env files written)
-pub type ImportCount = (usize, usize);
+/// What an import produced, and what it could not bring across.
+#[derive(Debug)]
+pub struct ImportCount {
+    pub requests: usize,
+    pub envs: usize,
+    /// One line per request whose auth or body Mercury cannot express.
+    pub skipped: Vec<String>,
+}
 
 // ---------------------------------------------------------------------------
 // Shared writers
@@ -135,6 +142,8 @@ struct PostmanCollection {
     info: PostmanInfo,
     item: Vec<PostmanItem>,
     #[serde(default)]
+    auth: Option<PostmanAuth>,
+    #[serde(default)]
     variable: Vec<PostmanVariable>,
 }
 
@@ -150,6 +159,9 @@ struct PostmanItem {
     item: Vec<PostmanItem>,
     #[serde(default)]
     request: Option<PostmanRequest>,
+    /// A folder can carry auth for everything under it.
+    #[serde(default)]
+    auth: Option<PostmanAuth>,
 }
 
 #[derive(Deserialize)]
@@ -160,6 +172,8 @@ struct PostmanRequest {
     url: PostmanUrl,
     #[serde(default)]
     body: Option<PostmanBody>,
+    #[serde(default)]
+    auth: Option<PostmanAuth>,
 }
 
 #[derive(Deserialize)]
@@ -182,16 +196,115 @@ enum PostmanUrl {
 
 #[derive(Deserialize)]
 struct PostmanKeyValue {
+    #[serde(default)]
     key: String,
-    value: String,
+    /// Postman leaves `value` out entirely for a valueless param or header
+    /// (`?archived`), and writes `null` for a cleared one. Both are ordinary
+    /// exports, and requiring a string here failed the whole import.
+    #[serde(default)]
+    value: Option<Value>,
     #[serde(default)]
     disabled: bool,
+}
+
+impl PostmanKeyValue {
+    fn value(&self) -> String {
+        self.value
+            .as_ref()
+            .map_or_else(String::new, value_to_string)
+    }
 }
 
 #[derive(Deserialize)]
 struct PostmanBody {
     #[serde(default)]
+    mode: Option<String>,
+    #[serde(default)]
     raw: Option<String>,
+    #[serde(default)]
+    urlencoded: Vec<PostmanKeyValue>,
+}
+
+/// A Postman body in Mercury's terms, plus the `Content-Type` it implies when
+/// the request did not set one. The modes that come back `None` are the ones
+/// Mercury has nowhere to put — `formdata` and `file` need an attached file a
+/// request file cannot reference — so the import can say what it could not
+/// bring across, instead of writing an empty body under a `Content-Type` that
+/// promises one.
+fn postman_body(body: &PostmanBody) -> Option<(String, Option<&'static str>)> {
+    match body.mode.as_deref() {
+        Some("urlencoded") => {
+            let rows: Vec<KeyValue> = body
+                .urlencoded
+                .iter()
+                .filter(|r| !r.disabled)
+                .map(|r| KeyValue::new(r.key.clone(), r.value()))
+                .collect();
+            Some((
+                kv::build_form(&rows),
+                Some("application/x-www-form-urlencoded"),
+            ))
+        }
+        Some("formdata") | Some("file") | Some("graphql") => None,
+        // "raw", or a body with no mode at all
+        _ => Some((body.raw.clone().unwrap_or_default(), None)),
+    }
+}
+
+#[derive(Deserialize)]
+struct PostmanAuth {
+    #[serde(rename = "type")]
+    kind: String,
+    #[serde(flatten)]
+    params: BTreeMap<String, Value>,
+}
+
+impl PostmanAuth {
+    /// The auth parameters are a list of `{key, value}` under a field named
+    /// after the type: `{"type": "bearer", "bearer": [{"key": "token", …}]}`.
+    fn param(&self, name: &str) -> String {
+        self.params
+            .get(&self.kind)
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .find(|e| e.get("key").and_then(Value::as_str) == Some(name))
+            .and_then(|e| e.get("value"))
+            .map_or_else(String::new, value_to_string)
+    }
+}
+
+/// Postman's auth as a header, or as a query parameter for an API key that
+/// goes in the URL. `None` means Mercury cannot express it — OAuth 2, AWS
+/// signatures, NTLM and the rest need a token exchange a request file cannot
+/// describe, so the import reports them rather than dropping them quietly.
+fn postman_auth(auth: &PostmanAuth) -> Option<Auth> {
+    match auth.kind.as_str() {
+        "noauth" => Some(Auth::None),
+        "bearer" => Some(Auth::Header(
+            "Authorization".into(),
+            format!("Bearer {}", auth.param("token")),
+        )),
+        "basic" => Some(Auth::Header(
+            "Authorization".into(),
+            kv::basic_auth(&auth.param("username"), &auth.param("password")),
+        )),
+        "apikey" => {
+            let (key, value) = (auth.param("key"), auth.param("value"));
+            if auth.param("in") == "query" {
+                Some(Auth::Query(key, value))
+            } else {
+                Some(Auth::Header(key, value))
+            }
+        }
+        _ => None,
+    }
+}
+
+enum Auth {
+    None,
+    Header(String, String),
+    Query(String, String),
 }
 
 #[derive(Deserialize)]
@@ -221,7 +334,7 @@ fn postman_url(url: &PostmanUrl) -> String {
             let query: Vec<String> = query
                 .iter()
                 .filter(|q| !q.disabled)
-                .map(|q| format!("{}={}", url_encode(&q.key), url_encode(&q.value)))
+                .map(|q| format!("{}={}", url_encode(&q.key), url_encode(&q.value())))
                 .collect();
             let query = if query.is_empty() {
                 String::new()
@@ -236,27 +349,56 @@ fn postman_url(url: &PostmanUrl) -> String {
     }
 }
 
-fn postman_item(item: &PostmanItem, dir: &Path) -> Result<usize, String> {
+fn postman_item(
+    item: &PostmanItem,
+    dir: &Path,
+    inherited: Option<&PostmanAuth>,
+    skipped: &mut Vec<String>,
+) -> Result<usize, String> {
+    // innermost auth wins: request, then folder, then collection
+    let auth = item.auth.as_ref().or(inherited);
     if let Some(req) = &item.request {
-        let headers = req
+        let auth = req.auth.as_ref().or(auth);
+        let mut headers: BTreeMap<String, String> = req
             .header
             .iter()
             .filter(|h| !h.disabled)
-            .map(|h| (h.key.clone(), h.value.clone()))
+            .map(|h| (h.key.clone(), h.value()))
             .collect();
-        let body = req
-            .body
-            .as_ref()
-            .and_then(|b| b.raw.clone())
-            .unwrap_or_default();
-        write_request(
-            dir,
-            &item.name,
-            &req.method,
-            postman_url(&req.url),
-            headers,
-            body,
-        )?;
+        let mut url = postman_url(&req.url);
+        match auth.map(postman_auth) {
+            Some(Some(Auth::Header(name, value))) => {
+                headers.insert(name, value);
+            }
+            Some(Some(Auth::Query(key, value))) => {
+                let params = [KeyValue::new(key, value)];
+                url = kv::build_url(
+                    &url,
+                    &[kv::parse_query_params(&url), params.to_vec()].concat(),
+                );
+            }
+            Some(Some(Auth::None)) | None => {}
+            Some(None) => skipped.push(format!(
+                "{}: {} auth",
+                item.name,
+                auth.map_or("", |a| a.kind.as_str())
+            )),
+        }
+        let body = match req.body.as_ref().map(postman_body) {
+            Some(Some((body, content_type))) => {
+                if let Some(ct) = content_type {
+                    headers.entry("Content-Type".into()).or_insert(ct.into());
+                }
+                body
+            }
+            Some(None) => {
+                let mode = req.body.as_ref().and_then(|b| b.mode.clone());
+                skipped.push(format!("{}: {} body", item.name, mode.unwrap_or_default()));
+                String::new()
+            }
+            None => String::new(),
+        };
+        write_request(dir, &item.name, &req.method, url, headers, body)?;
         return Ok(1);
     }
     if item.item.is_empty() {
@@ -266,7 +408,7 @@ fn postman_item(item: &PostmanItem, dir: &Path) -> Result<usize, String> {
     create_dir(&folder)?;
     item.item
         .iter()
-        .map(|child| postman_item(child, &folder))
+        .map(|child| postman_item(child, &folder, auth, skipped))
         .sum()
 }
 
@@ -280,12 +422,17 @@ pub fn import_postman(path: &Path, out: &Path) -> Result<ImportCount, String> {
         write_env(out, &collection.info.name, vars)?;
         envs = 1;
     }
+    let mut skipped = Vec::new();
     let requests = collection
         .item
         .iter()
-        .map(|item| postman_item(item, out))
+        .map(|item| postman_item(item, out, collection.auth.as_ref(), &mut skipped))
         .sum::<Result<usize, String>>()?;
-    Ok((requests, envs))
+    Ok(ImportCount {
+        requests,
+        envs,
+        skipped,
+    })
 }
 
 // ---------------------------------------------------------------------------
@@ -398,7 +545,11 @@ pub fn import_insomnia(path: &Path, out: &Path) -> Result<ImportCount, String> {
             _ => {}
         }
     }
-    Ok((requests, envs))
+    Ok(ImportCount {
+        requests,
+        envs,
+        skipped: Vec::new(),
+    })
 }
 
 #[cfg(test)]
@@ -445,7 +596,8 @@ mod tests {
     #[test]
     fn postman_writes_tree_env_and_requests() {
         let (dir, result) = import(import_postman, POSTMAN);
-        assert_eq!(result.unwrap(), (3, 1));
+        let count = result.unwrap();
+        assert_eq!((count.requests, count.envs), (3, 1));
 
         let login = RequestFile::from_json(&read_out(&dir, "auth/login.json")).unwrap();
         assert_eq!(login.method, HttpMethod::POST);
@@ -458,6 +610,83 @@ mod tests {
         let env = read_out(&dir, ".env.comprehensive-api");
         assert!(env.contains("host=api.test.com"));
         assert!(env.contains("1_bad-key=\"has space\""));
+    }
+
+    /// The shapes a real Postman export contains that a minimal fixture does
+    /// not: a query param written with no `value` at all, collection- and
+    /// request-level auth, and a body that is not `raw`. Missing any of them
+    /// used to fail the whole import or drop the request's credentials.
+    const POSTMAN_REAL: &str = r#"{
+        "info": {"name": "Acme"},
+        "auth": {"type": "bearer", "bearer": [{"key": "token", "value": "{{token}}"}]},
+        "item": [
+            {"name": "Login", "request": {
+                "method": "POST",
+                "header": [],
+                "body": {"mode": "urlencoded", "urlencoded": [
+                    {"key": "grant_type", "value": "password"},
+                    {"key": "scope"},
+                    {"key": "skip", "value": "x", "disabled": true}
+                ]},
+                "url": {"raw": "https://acme.test/token"}
+            }},
+            {"name": "List", "request": {
+                "method": "GET",
+                "auth": {"type": "apikey", "apikey": [
+                    {"key": "key", "value": "X-Api-Key"},
+                    {"key": "value", "value": "k-123"},
+                    {"key": "in", "value": "header"}
+                ]},
+                "url": {"host": ["acme.test"], "path": ["users"],
+                        "query": [{"key": "page", "value": "1"}, {"key": "archived"}]}
+            }},
+            {"name": "Upload", "request": {
+                "method": "POST",
+                "auth": {"type": "oauth2", "oauth2": []},
+                "body": {"mode": "formdata", "formdata": [{"key": "file", "type": "file"}]},
+                "url": {"raw": "https://acme.test/files"}
+            }}
+        ]
+    }"#;
+
+    #[test]
+    fn postman_carries_auth_and_non_raw_bodies() {
+        let (dir, result) = import(import_postman, POSTMAN_REAL);
+        let count = result.expect("a valueless query param must not fail the import");
+        assert_eq!(count.requests, 3);
+
+        // a urlencoded body becomes Mercury's Form body, with the header that
+        // makes the body type picker agree
+        let login = RequestFile::from_json(&read_out(&dir, "login.json")).unwrap();
+        assert_eq!(login.body, "grant_type=password&scope=");
+        assert_eq!(
+            login.headers.get("Content-Type").map(String::as_str),
+            Some("application/x-www-form-urlencoded")
+        );
+        // collection-level auth reaches a request that declares none
+        assert_eq!(
+            login.headers.get("Authorization").map(String::as_str),
+            Some("Bearer {{token}}")
+        );
+
+        // request-level auth wins over the collection's, and a valueless
+        // param survives as a bare flag
+        let list = RequestFile::from_json(&read_out(&dir, "list.json")).unwrap();
+        assert_eq!(
+            list.headers.get("X-Api-Key").map(String::as_str),
+            Some("k-123")
+        );
+        assert!(!list.headers.contains_key("Authorization"));
+        assert!(list.url.ends_with("?page=1&archived="), "got {}", list.url);
+
+        // what Mercury cannot express is reported, not dropped in silence
+        assert_eq!(
+            count.skipped,
+            vec![
+                "Upload: oauth2 auth".to_string(),
+                "Upload: formdata body".to_string()
+            ]
+        );
     }
 
     #[test]
@@ -507,7 +736,8 @@ resources:
     #[test]
     fn insomnia_yaml_sanitizes_names_and_groups_requests() {
         let (dir, result) = import(import_insomnia, INSOMNIA_YAML);
-        assert_eq!(result.unwrap(), (2, 1));
+        let count = result.unwrap();
+        assert_eq!((count.requests, count.envs), (2, 1));
 
         // a malicious name can't escape the output folder
         let req =
@@ -524,7 +754,8 @@ resources:
     fn insomnia_json_and_invalid() {
         let json =
             r#"{"resources": [{"_type": "request", "name": "T", "method": "GET", "url": "u"}]}"#;
-        assert_eq!(import(import_insomnia, json).1.unwrap(), (1, 0));
+        let count = import(import_insomnia, json).1.unwrap();
+        assert_eq!((count.requests, count.envs), (1, 0));
         let err = import(import_insomnia, "NOT JSON OR YAML: [")
             .1
             .unwrap_err();

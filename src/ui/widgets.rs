@@ -805,7 +805,9 @@ pub fn menu_item(ui: &mut Ui, what: Option<Icon>, text: &str, trailing: &str) ->
 }
 
 /// Underlined tab with an optional count pill.
-pub fn tab_button(ui: &mut Ui, text: &str, count: usize, active: bool) -> bool {
+/// `warn` colors the count badge as a warning: the tab holds something the
+/// user needs to look at, which is the only honest place to say so.
+pub fn tab_button(ui: &mut Ui, text: &str, count: usize, active: bool, warn: bool) -> bool {
     let t = theme();
     let color = if active { t.text } else { t.text_muted };
     let font = if active {
@@ -820,7 +822,11 @@ pub fn tab_button(ui: &mut Ui, text: &str, count: usize, active: bool) -> bool {
             f.layout_no_wrap(
                 c,
                 semibold(Text::MICRO),
-                if active { t.accent } else { t.text_faint },
+                match (warn, active) {
+                    (true, _) => t.warning,
+                    (false, true) => t.accent,
+                    (false, false) => t.text_faint,
+                },
             )
         })
     });
