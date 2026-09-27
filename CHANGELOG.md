@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- On a first launch, the URL bar has focus — you can just type.
+- A body with no `Content-Type` now says so under the editor, with one click to set JSON, Form or Text. The picker alone was in the corner of the tab row, which is not where anyone looks while typing a body.
 - **A body type next to the Body tab** — JSON, Form, Text or none — which writes the `Content-Type` header for you. A JSON body used to be sent with no `Content-Type` at all, so a first POST failed against most APIs. Picking **Form** edits `a=1&b=2` as a table and percent-encodes the values, which is what an OAuth token request needs.
 - Mercury reopens the request file you had open when you quit, instead of restoring its contents as an "Untitled" unsaved request.
 - **A light theme.** Mercury follows your system appearance and `⌘ D` overrides it. The choice is remembered.

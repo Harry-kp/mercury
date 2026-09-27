@@ -30,6 +30,8 @@ The body type sits at the right of the tab row and writes the `Content-Type` hea
 | **Text** | `text/plain` | Plain |
 | **No type** | none | Plain |
 
+If you type a body and leave the type as **No type**, Mercury says so under the editor — most APIs reject a body without a `Content-Type`, and the error they send back rarely says that.
+
 The header stays the source of truth, so editing `Content-Type` by hand in the Headers tab changes the body type too. A content type Mercury doesn't recognise (`application/xml`, say) shows the plain editor and is left alone unless you pick a different type. The Params and Headers tabs show how many entries are enabled as a small count next to the name. The Auth tab is labeled with the current auth type.
 
 ### Body

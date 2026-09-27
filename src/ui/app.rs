@@ -322,13 +322,7 @@ impl MercuryApp {
             client: http::client(),
         };
 
-        let restored = storage::load_state();
-        if restored.is_none() {
-            // nothing to come back to, so the first thing anyone wants is to
-            // type a URL
-            app.focus("url_bar");
-        }
-        if let Some(state) = restored {
+        if let Some(state) = storage::load_state() {
             app.load_request(
                 Request {
                     method: state.method,
