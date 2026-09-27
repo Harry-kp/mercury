@@ -1392,17 +1392,11 @@ fn chip(
 /// "1 request, 1 environment" — an import that says "1 environments" reads
 /// like a bug in the thing that just read your collection.
 fn plural_import(requests: usize, envs: usize) -> String {
-    let plural = |n: usize, word: &str| {
-        if n == 1 {
-            format!("{n} {word}")
-        } else {
-            format!("{n} {word}s")
-        }
-    };
+    let s = |n: usize| if n == 1 { "" } else { "s" };
     format!(
-        "Imported {}, {}",
-        plural(requests, "request"),
-        plural(envs, "environment")
+        "Imported {requests} request{}, {envs} environment{}",
+        s(requests),
+        s(envs)
     )
 }
 

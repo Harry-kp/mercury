@@ -11,7 +11,7 @@ use std::path::Path;
 
 /// (requests written, env files written)
 /// What an import produced, and what it could not bring across.
-#[derive(Debug, Default, PartialEq, Eq)]
+#[derive(Debug)]
 pub struct ImportCount {
     pub requests: usize,
     pub envs: usize,
@@ -223,23 +223,14 @@ struct PostmanBody {
     raw: Option<String>,
     #[serde(default)]
     urlencoded: Vec<PostmanKeyValue>,
-    #[serde(default)]
-    graphql: Option<PostmanGraphql>,
-}
-
-#[derive(Deserialize)]
-struct PostmanGraphql {
-    #[serde(default)]
-    query: String,
-    #[serde(default)]
-    variables: Option<Value>,
 }
 
 /// A Postman body in Mercury's terms, plus the `Content-Type` it implies when
-/// the request did not set one. `formdata` and `file` need an attached file,
-/// which a request file cannot reference — those come back `None` so the
-/// import can say what it could not bring across, instead of writing an empty
-/// body under a `Content-Type` that promises one.
+/// the request did not set one. The modes that come back `None` are the ones
+/// Mercury has nowhere to put — `formdata` and `file` need an attached file a
+/// request file cannot reference — so the import can say what it could not
+/// bring across, instead of writing an empty body under a `Content-Type` that
+/// promises one.
 fn postman_body(body: &PostmanBody) -> Option<(String, Option<&'static str>)> {
     match body.mode.as_deref() {
         Some("urlencoded") => {
@@ -254,18 +245,7 @@ fn postman_body(body: &PostmanBody) -> Option<(String, Option<&'static str>)> {
                 Some("application/x-www-form-urlencoded"),
             ))
         }
-        Some("graphql") => {
-            let g = body.graphql.as_ref()?;
-            let payload = serde_json::json!({
-                "query": g.query,
-                "variables": g.variables.clone().unwrap_or(Value::Object(Default::default())),
-            });
-            Some((
-                serde_json::to_string_pretty(&payload).ok()?,
-                Some("application/json"),
-            ))
-        }
-        Some("formdata") | Some("file") => None,
+        Some("formdata") | Some("file") | Some("graphql") => None,
         // "raw", or a body with no mode at all
         _ => Some((body.raw.clone().unwrap_or_default(), None)),
     }
@@ -369,22 +349,11 @@ fn postman_url(url: &PostmanUrl) -> String {
     }
 }
 
-/// Auth and bodies Mercury cannot express, named so the import can say what
-/// it left behind instead of writing a request that quietly fails.
-#[derive(Default)]
-struct Skipped(Vec<String>);
-
-impl Skipped {
-    fn note(&mut self, request: &str, what: &str) {
-        self.0.push(format!("{request}: {what}"));
-    }
-}
-
 fn postman_item(
     item: &PostmanItem,
     dir: &Path,
     inherited: Option<&PostmanAuth>,
-    skipped: &mut Skipped,
+    skipped: &mut Vec<String>,
 ) -> Result<usize, String> {
     // innermost auth wins: request, then folder, then collection
     let auth = item.auth.as_ref().or(inherited);
@@ -409,7 +378,11 @@ fn postman_item(
                 );
             }
             Some(Some(Auth::None)) | None => {}
-            Some(None) => skipped.note(&item.name, &format!("{} auth", auth_kind(auth))),
+            Some(None) => skipped.push(format!(
+                "{}: {} auth",
+                item.name,
+                auth.map_or("", |a| a.kind.as_str())
+            )),
         }
         let body = match req.body.as_ref().map(postman_body) {
             Some(Some((body, content_type))) => {
@@ -420,7 +393,7 @@ fn postman_item(
             }
             Some(None) => {
                 let mode = req.body.as_ref().and_then(|b| b.mode.clone());
-                skipped.note(&item.name, &format!("{} body", mode.unwrap_or_default()));
+                skipped.push(format!("{}: {} body", item.name, mode.unwrap_or_default()));
                 String::new()
             }
             None => String::new(),
@@ -439,10 +412,6 @@ fn postman_item(
         .sum()
 }
 
-fn auth_kind(auth: Option<&PostmanAuth>) -> &str {
-    auth.map_or("", |a| a.kind.as_str())
-}
-
 pub fn import_postman(path: &Path, out: &Path) -> Result<ImportCount, String> {
     let collection: PostmanCollection =
         serde_json::from_str(&read(path)?).map_err(|e| format!("Postman import failed: {e}"))?;
@@ -453,7 +422,7 @@ pub fn import_postman(path: &Path, out: &Path) -> Result<ImportCount, String> {
         write_env(out, &collection.info.name, vars)?;
         envs = 1;
     }
-    let mut skipped = Skipped::default();
+    let mut skipped = Vec::new();
     let requests = collection
         .item
         .iter()
@@ -462,7 +431,7 @@ pub fn import_postman(path: &Path, out: &Path) -> Result<ImportCount, String> {
     Ok(ImportCount {
         requests,
         envs,
-        skipped: skipped.0,
+        skipped,
     })
 }
 

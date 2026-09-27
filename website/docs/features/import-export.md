@@ -31,7 +31,6 @@ Export the collection from Postman as **Collection v2.1** (JSON).
 | Headers | Headers (disabled ones are skipped) |
 | Raw body | Body |
 | URL-encoded body | A [Form body](/docs/features/requests#body), with the matching `Content-Type` |
-| GraphQL body | A JSON body of `{"query": …, "variables": …}` |
 | Bearer / Basic / API key auth | The `Authorization` (or API key) header, or a query parameter |
 | URL | The raw URL. Without one, the URL is rebuilt from its parts, skipping disabled query params. |
 
@@ -39,7 +38,7 @@ Auth set on the collection or a folder applies to every request under it, and a 
 
 Postman `{{variables}}` stay as they are in URLs, headers and bodies, so they work with the generated `.env` file. Scripts and tests aren't imported.
 
-What Mercury can't express is **named in the notification** rather than dropped quietly: OAuth 2 and other token-exchange auth, and `form-data` or binary bodies, which need a file a request file cannot point at. Anything listed there needs finishing by hand on the [Auth tab](/docs/features/auth) or the Body tab.
+What Mercury can't express is **named in the notification** rather than dropped quietly: OAuth 2 and other token-exchange auth, `form-data` and binary bodies, which need a file a request file cannot point at, and GraphQL bodies. Anything listed there needs finishing by hand on the [Auth tab](/docs/features/auth) or the Body tab.
 
 Example: importing a collection named "My API":
 
