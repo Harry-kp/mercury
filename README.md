@@ -33,7 +33,11 @@
 </p>
 
 <p align="center">
-  <img src="website/static/img/screenshot.png" alt="Mercury Screenshot" width="100%" style="border-radius: 8px; border: 1px solid #333;">
+  <img src="assets/media/demo.gif" alt="Mercury: open a collection, send a request, find anything in the response" width="100%">
+</p>
+
+<p align="center">
+  <sub><a href="assets/media/demo.mp4">Watch in higher quality (MP4, 32s)</a></sub>
 </p>
 
 ## Why Mercury?
