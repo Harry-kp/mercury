@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-09-29
+
+### Fixed
+- **0.3.0 shipped without a macOS `.app`.** `cargo-bundle` 0.12 moved the macOS manifest keys into their own table and rejects unknown ones, so the bundle job failed after every other artifact had already published — and the `.app` is what the Homebrew cask installs. The key has moved and `cargo-bundle` is pinned, so a release no longer depends on what was published upstream that morning.
+
 ## [0.3.0] - 2026-09-29
 
 ### Added
