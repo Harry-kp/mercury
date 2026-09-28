@@ -297,7 +297,10 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
       
       - name: Install cargo-bundle
-        run: cargo install cargo-bundle
+        # Pinned: an unpinned `cargo install` let cargo-bundle 0.12 land
+        # mid-release and fail the v0.3.0 tag on a renamed manifest key.
+        # A release must build the same way tomorrow as it did today.
+        run: cargo install cargo-bundle --version 0.12.0 --locked
       
       - name: Build .app bundle
         run: |

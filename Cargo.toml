@@ -51,4 +51,8 @@ Mercury is a fast, minimal API client for developers who value simplicity.
 Built with Rust for native performance. No bloat, no subscriptions, no nonsense.
 """
 copyright = "Copyright (c) 2024 Harshit Chaudhary. MIT License."
-osx_minimum_system_version = "12.0"
+
+# cargo-bundle 0.10 moved the macOS keys into their own table and rejects
+# unknown fields, so the old flat `osx_minimum_system_version` fails the build.
+[package.metadata.bundle.osx]
+minimum_system_version = "12.0"
