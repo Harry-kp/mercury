@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-09-29
+
 ### Added
 - **Find in response (`⌘ F`).** Every match in the body is highlighted, the bar counts them, `⏎` steps to the next and `Esc` closes it. A 28 KB response previously had to be read by scrolling.
 - A body with no `Content-Type` now says so under the editor, with one click to set JSON, Form or Text. The picker alone was in the corner of the tab row, which is not where anyone looks while typing a body.
