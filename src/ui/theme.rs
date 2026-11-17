@@ -287,6 +287,9 @@ impl Layout {
     }
 
     pub const TOPBAR_HEIGHT: f32 = 46.0;
+    /// Room for the window buttons on macOS, where the top bar is drawn in
+    /// the title bar area (see `main`).
+    pub const WINDOW_BUTTONS: f32 = if cfg!(target_os = "macos") { 72.0 } else { 0.0 };
     pub const STATUS_BAR_HEIGHT: f32 = 28.0;
     pub const ROW_HEIGHT: f32 = 26.0;
     pub const CONTROL_HEIGHT: f32 = 30.0;

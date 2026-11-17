@@ -17,7 +17,7 @@ use crate::model::{
     RequestFile, ThemeMode,
 };
 use crate::{curl, storage, vars, workspace};
-use eframe::egui::{self, Align, Key, Margin, Stroke, Vec2};
+use eframe::egui::{self, Align, Key, Margin, Sense, Stroke, Vec2};
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -1380,8 +1380,25 @@ impl MercuryApp {
                     ui.max_rect().bottom() - 0.5,
                     Stroke::new(1.0_f32, theme().border),
                 );
+                // The top bar is the title bar on macOS: its empty space
+                // drags the window and a double-click zooms it. Registered
+                // before the controls, so they still get their own clicks.
+                let title = ui.interact(
+                    ui.max_rect(),
+                    egui::Id::new("title_bar"),
+                    // not FOCUSABLE: a window-drag area is not a Tab stop
+                    Sense::CLICK | Sense::DRAG,
+                );
+                if title.drag_started_by(egui::PointerButton::Primary) {
+                    ctx.send_viewport_cmd(egui::ViewportCommand::StartDrag);
+                }
+                if title.double_clicked() {
+                    let zoomed = ctx.input(|i| i.viewport().maximized.unwrap_or(false));
+                    ctx.send_viewport_cmd(egui::ViewportCommand::Maximized(!zoomed));
+                }
                 ui.horizontal_centered(|ui| {
                     ui.spacing_mut().item_spacing.x = Space::SM;
+                    ui.add_space(Layout::WINDOW_BUTTONS);
                     self.workspace_menu(ui);
                     self.breadcrumb(ui);
 

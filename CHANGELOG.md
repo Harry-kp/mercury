@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - History entries record the **environment** they were sent with, and the response panel shows it, as **from .env.dev** once you've switched. Reopening an entry opens the **file** it was sent from instead of a detached copy. Older history entries load as before.
 
 ### Changed
+- **On macOS the top bar is the title bar.** The grey system title bar is gone; the window buttons sit in Mercury's own top bar, which drags the window and zooms it on double-click.
 - **A new look: Graphite Violet.** The neutrals follow the app icon's graphite instead of blue-grey, and the violet accent stays. Syntax colours are calmer (lavender keys, light strings, pink numbers) and the light theme follows the same direction. The layout is flatter: the request editor and the response share one surface, only the URL bar keeps a border, code sits on an inset fill without an outline, and the open request in the sidebar is marked with an accent bar.
 - With nothing typed, `⌘ K` lists the requests you opened most recently, then the commands. It used to list every request first, which pushed the commands out of reach in a real workspace.
 - **Focus mode** is now called **Hide / show sidebar**, which is what it does (same `⌘ ⇧ F`).
