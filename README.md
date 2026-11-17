@@ -149,11 +149,22 @@ TOKEN="dev token"
 
 ## Why Mercury
 
-- **Native, not Electron.** Rust + egui draw directly on the GPU. One ~9 MB binary, no runtime, no splash screen.
+- **Native, not Electron.** Rust + egui draw directly on the GPU. One ~8 MB binary, no runtime, no splash screen: open in a third of a second, idle at under 100 MB.
 - **Local only.** No account, no cloud, no telemetry. Your secrets stay on your disk.
 - **Keyboard first.** `⌘ K` opens a palette over every request and command, `⌘ F` finds anything in a response, `?` lists the rest.
 - **No setup tax.** Type `localhost:3000/api`, pick JSON or Form, hit send. Mercury fills in the scheme, the `Content-Type` and the decoding so the first request works.
 - **Light or dark.** Follows your system theme, or `⌘ D` pins one. Vector icons and bundled fonts, so it looks the same on every OS.
+
+### How it compares
+
+| App | Launch to window (warm) | First launch | Idle memory (all processes) | Size on disk |
+|---|---|---|---|---|
+| **Mercury** 0.3.1 | **0.3 s** | **0.7 s** | **88 MB** | **22 MB** |
+| Postman 12.37 | 0.4 s ¹ | 2.9 s | 753 MB | 471 MB |
+| Bruno 4.3 | 1.9 s | 4.4 s | 555 MB | 501 MB |
+| Insomnia 13.4 | 2.4 s | 7.2 s | 828 MB | 1.2 GB |
+
+Measured on an M-series MacBook (macOS 15), each app freshly installed, nothing open in it, median of three warm launches. Memory is every process the app starts (Electron apps run several), 5 seconds after the window appears. ¹ Postman's first window is a loading screen; its UI arrives later. Reproduce with `swift scripts/bench-launch.swift /Applications/*.app`.
 
 ### What's in it
 

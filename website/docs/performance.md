@@ -14,6 +14,17 @@ Mercury aims to stay responsive, and it does this with a few design choices rath
 - **egui, immediate mode.** The whole UI is redrawn each frame and rendered on the GPU through OpenGL (`glow`). No DOM or layout engine sits between the input and the pixels.
 - **Background work stays off the UI thread.** Requests, file dialogs and imports run on background threads, so the UI keeps drawing while they run.
 
+## Compared with other clients
+
+| App | Launch to window (warm) | First launch | Idle memory (all processes) | Size on disk |
+|---|---|---|---|---|
+| **Mercury** 0.3.1 | **0.3 s** | **0.7 s** | **88 MB** | **22 MB** |
+| Postman 12.37 | 0.4 s ¹ | 2.9 s | 753 MB | 471 MB |
+| Bruno 4.3 | 1.9 s | 4.4 s | 555 MB | 501 MB |
+| Insomnia 13.4 | 2.4 s | 7.2 s | 828 MB | 1.2 GB |
+
+Measured on an M-series MacBook (macOS 15), each app freshly installed, nothing open in it, median of three warm launches. Memory is every process the app starts (Electron apps run several), 5 seconds after the window appears. ¹ Postman's first window is a loading screen; its UI arrives later. Reproduce with `swift scripts/bench-launch.swift /Applications/*.app`.
+
 ## Response size limits
 
 One constant in `src/http.rs` limits how much of a response Mercury handles:
