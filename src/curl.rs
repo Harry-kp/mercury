@@ -74,6 +74,7 @@ pub fn parse(cmd: &str) -> Result<CurlRequest, String> {
     });
     let tokens: Vec<String> = tokens.collect();
     let mut data: Vec<String> = Vec::new();
+    let mut form: Vec<String> = Vec::new();
     let mut get = false;
     let mut args = tokens.iter();
     while let Some(token) = args.next() {
@@ -109,10 +110,17 @@ pub fn parse(cmd: &str) -> Result<CurlRequest, String> {
                     });
                 }
             }
+            // Mercury's Multipart body is these lines as they are; drop
+            // curl's `;type=…` / `;filename=…` modifiers on a file
             "-F" | "--form" | "--form-string" => {
-                return Err("Multipart forms (-F) aren't supported yet: \
-                    Mercury sends text bodies only"
-                    .into());
+                if let Some(field) = args.next() {
+                    let file = token != "--form-string" && field.contains("=@");
+                    form.push(if file {
+                        field.split(';').next().unwrap_or(field).to_string()
+                    } else {
+                        field.clone()
+                    });
+                }
             }
             "-u" | "--user" => {
                 if let Some(creds) = args.next() {
@@ -147,6 +155,20 @@ pub fn parse(cmd: &str) -> Result<CurlRequest, String> {
     if req.url.is_empty() {
         return Err("Invalid cURL command: no URL found".into());
     }
+    if !form.is_empty() {
+        req.body = Some(form.join("\n"));
+        if !req
+            .headers
+            .iter()
+            .any(|(k, _)| k.eq_ignore_ascii_case("content-type"))
+        {
+            req.headers
+                .push(("Content-Type".into(), "multipart/form-data".into()));
+        }
+        if req.method == HttpMethod::GET {
+            req.method = HttpMethod::POST;
+        }
+    }
     // curl joins repeated data with `&`; -G sends it as the query string
     if !data.is_empty() {
         let data = data.join("&");
@@ -178,10 +200,23 @@ pub fn generate(
     body: &str,
 ) -> String {
     let mut curl = format!("curl -X {} {}", method.as_str(), shell_quote(url));
+    let multipart = headers
+        .iter()
+        .any(|(k, v)| k.eq_ignore_ascii_case("content-type") && v.contains("multipart/form-data"));
     for (k, v) in headers {
-        curl.push_str(&format!(" \\\n  -H {}", shell_quote(&format!("{k}: {v}"))));
+        // curl writes its own, with the boundary
+        if !(multipart && k.eq_ignore_ascii_case("content-type")) {
+            curl.push_str(&format!(" \\\n  -H {}", shell_quote(&format!("{k}: {v}"))));
+        }
     }
-    if !body.is_empty() {
+    if multipart {
+        for row in crate::kv::parse_lines(body, "=") {
+            if row.enabled && !row.key.is_empty() {
+                let field = format!("{}={}", row.key, row.value);
+                curl.push_str(&format!(" \\\n  -F {}", shell_quote(&field)));
+            }
+        }
+    } else if !body.is_empty() {
         curl.push_str(&format!(" \\\n  -d {}", shell_quote(body)));
     }
     curl
@@ -273,13 +308,27 @@ mod tests {
         // bash's $'…' quoting (Chrome uses it when the body has a quote or newline)
         let r = parse(r#"curl https://a.com --data-raw $'{\"a\":\"it\'s\n\"}'"#).unwrap();
         assert_eq!(r.body.as_deref(), Some("{\"a\":\"it's\n\"}"));
-        // multipart isn't supported: say so, rather than take a field as the URL
         assert!(
             parse("curl -é https://a.com").is_ok(),
             "no panic on odd flags"
         );
-        let err = parse("curl -F file=@a.png https://a.com").unwrap_err();
-        assert!(err.contains("-F"), "{err}");
+        // -F is a Multipart body: one line per field, curl's ;type= dropped
+        let r =
+            parse("curl -F name=Ada -F 'avatar=@/tmp/a.png;type=image/png' https://a.com").unwrap();
+        assert_eq!(r.method, HttpMethod::POST);
+        assert_eq!(r.body.as_deref(), Some("name=Ada\navatar=@/tmp/a.png"));
+        assert!(r
+            .headers
+            .contains(&("Content-Type".into(), "multipart/form-data".into())));
+        // and back: Copy as cURL writes -F, and lets curl set the boundary
+        let headers = BTreeMap::from([("Content-Type".into(), "multipart/form-data".into())]);
+        let cmd = generate(
+            HttpMethod::POST,
+            "https://a.com",
+            &headers,
+            "name=Ada\n# off=1",
+        );
+        assert!(cmd.contains("-F 'name=Ada'") && !cmd.contains("off") && !cmd.contains("-H"));
     }
 
     #[test]

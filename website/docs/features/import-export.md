@@ -31,6 +31,7 @@ Export the collection from Postman as **Collection v2.1** (JSON).
 | Headers | Headers (disabled ones are skipped) |
 | Raw body | Body |
 | URL-encoded body | A [Form body](/docs/features/requests#body), with the matching `Content-Type` |
+| Form-data body | A [Multipart body](/docs/features/requests#body). A file field without a path arrives switched off, to be picked |
 | Bearer / Basic / API key auth | The `Authorization` (or API key) header, or a query parameter |
 | URL | The raw URL. Without one, the URL is rebuilt from its parts, skipping disabled query params. |
 
@@ -38,7 +39,7 @@ Auth set on the collection or a folder applies to every request under it, and a 
 
 Postman `{{variables}}` stay as they are in URLs, headers and bodies, so they work with the generated `.env` file. Scripts and tests aren't imported.
 
-What Mercury can't express is **named in the notification** rather than dropped quietly: OAuth 2 and other token-exchange auth, `form-data` and binary bodies, which need a file a request file cannot point at, and GraphQL bodies. Anything listed there needs finishing by hand on the [Auth tab](/docs/features/auth) or the Body tab.
+What Mercury can't express is **named in the notification** rather than dropped quietly: OAuth 2 and other token-exchange auth, binary-file bodies, and GraphQL bodies. Anything listed there needs finishing by hand on the [Auth tab](/docs/features/auth) or the Body tab.
 
 Example: importing a collection named "My API":
 
@@ -99,7 +100,7 @@ curl -X POST https://api.example.com/users \
 | `-b`, `--cookie` | `Cookie` header |
 | `-I`, `--head` | `HEAD` |
 | `-G`, `--get` | `GET`, with any `-d` data appended to the URL as the query string |
-| `-F`, `--form` | Not supported: multipart bodies can't be sent yet, so the paste is refused with a message |
+| `-F`, `--form`, `--form-string` | A [Multipart body](/docs/features/requests#body), one field per `-F` (`name=@path` is a file; curl's `;type=` is dropped). Changes a `GET` to `POST`. Copy as cURL writes Multipart bodies back as `-F`. |
 | `-o`, `-x`, `-c`, `-m`, `-w`, `-e`, `--output`, `--proxy`, `--cookie-jar`, `--connect-timeout`, `--max-time`, `--write-out`, `--cacert`, `--cert`, `--key`, `--referer` | Ignored, along with their argument |
 | Other flags (`-s`, `-L`, `-k`, `-v`, `--compressed`, ...) | Ignored |
 

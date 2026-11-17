@@ -206,6 +206,12 @@ struct PostmanKeyValue {
     value: Option<Value>,
     #[serde(default)]
     disabled: bool,
+    /// `formdata` rows: "text" or "file"
+    #[serde(default, rename = "type")]
+    kind: Option<String>,
+    /// `formdata` file rows: a path, or a list of paths
+    #[serde(default)]
+    src: Option<Value>,
 }
 
 impl PostmanKeyValue {
@@ -224,12 +230,14 @@ struct PostmanBody {
     raw: Option<String>,
     #[serde(default)]
     urlencoded: Vec<PostmanKeyValue>,
+    #[serde(default)]
+    formdata: Vec<PostmanKeyValue>,
 }
 
 /// A Postman body in Mercury's terms, plus the `Content-Type` it implies when
 /// the request did not set one. The modes that come back `None` are the ones
-/// Mercury has nowhere to put — `formdata` and `file` need an attached file a
-/// request file cannot reference — so the import can say what it could not
+/// Mercury has nowhere to put — a raw `file` body, GraphQL — so the import
+/// can say what it could not
 /// bring across, instead of writing an empty body under a `Content-Type` that
 /// promises one.
 fn postman_body(body: &PostmanBody) -> Option<(String, Option<&'static str>)> {
@@ -246,7 +254,33 @@ fn postman_body(body: &PostmanBody) -> Option<(String, Option<&'static str>)> {
                 Some("application/x-www-form-urlencoded"),
             ))
         }
-        Some("formdata") | Some("file") | Some("graphql") => None,
+        // Mercury's Multipart body: `name=value` lines, `name=@path` files.
+        // A file row with no path comes in switched off, to be picked.
+        Some("formdata") => {
+            let lines: Vec<String> = body
+                .formdata
+                .iter()
+                .filter(|r| !r.disabled && !r.key.is_empty())
+                .map(|r| match r.kind.as_deref() {
+                    Some("file") => {
+                        let src = match &r.src {
+                            Some(Value::Array(a)) => a.first().map(value_to_string),
+                            Some(v) => Some(value_to_string(v)),
+                            None => None,
+                        }
+                        .unwrap_or_default();
+                        if src.is_empty() {
+                            format!("# {}=@", r.key)
+                        } else {
+                            format!("{}=@{src}", r.key)
+                        }
+                    }
+                    _ => format!("{}={}", r.key, r.value()),
+                })
+                .collect();
+            Some((lines.join("\n"), Some("multipart/form-data")))
+        }
+        Some("file") | Some("graphql") => None,
         // "raw", or a body with no mode at all
         _ => Some((body.raw.clone().unwrap_or_default(), None)),
     }
@@ -681,12 +715,14 @@ mod tests {
         assert!(list.url.ends_with("?page=1&archived="), "got {}", list.url);
 
         // what Mercury cannot express is reported, not dropped in silence
+        assert_eq!(count.skipped, vec!["Upload: oauth2 auth".to_string()]);
+        // a formdata body becomes a Multipart one; a file row with no path
+        // arrives switched off
+        let upload = RequestFile::from_json(&read_out(&dir, "upload.json")).unwrap();
+        assert_eq!(upload.body, "# file=@");
         assert_eq!(
-            count.skipped,
-            vec![
-                "Upload: oauth2 auth".to_string(),
-                "Upload: formdata body".to_string()
-            ]
+            upload.headers.get("Content-Type").map(String::as_str),
+            Some("multipart/form-data")
         );
     }
 

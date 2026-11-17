@@ -778,6 +778,25 @@ fn open_send_edit_and_save() {
     harness.state_mut().open_history_entry(failed.timestamp);
     assert!(harness.state().request_error.is_some());
 
+    // a Multipart body goes out with the boundary curl would add (the bare
+    // `multipart/form-data` the editor stores isn't enough for a server)
+    harness.state_mut().load_request(
+        crate::model::Request {
+            method: crate::model::HttpMethod::POST,
+            url: format!("{server}/upload"),
+            headers: "Content-Type: multipart/form-data".into(),
+            body: "note=hi".into(),
+        },
+        None,
+    );
+    harness.state_mut().send_request();
+    wait_for_response(&mut harness);
+    let echoed = harness.state().response.as_ref().unwrap().body.clone();
+    assert!(
+        echoed.contains("multipart/form-data; boundary=mercury-"),
+        "{echoed}"
+    );
+
     // a header switched off in the editor survives save + reopen (the file
     // used to keep only enabled headers, so unchecking one deleted it)
     harness.state_mut().open_file(&file);

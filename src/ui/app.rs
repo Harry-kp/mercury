@@ -206,6 +206,8 @@ pub enum Undo {
 enum Event {
     Response(u64, Result<HttpResponse, String>),
     OpenFolder(PathBuf),
+    /// A file picked for a Multipart body.
+    AttachFile(PathBuf),
     Imported(Result<(PathBuf, ImportCount), String>),
     FilesChanged,
     Toast(String, bool),
@@ -494,6 +496,16 @@ impl MercuryApp {
                 .set_title(title)
                 .pick_folder()
                 .map(Event::OpenFolder)
+        });
+    }
+
+    /// Pick a file for a Multipart body; it arrives as a new `name=@path` line.
+    pub fn attach_file(&self) {
+        self.spawn(|| {
+            rfd::FileDialog::new()
+                .set_title("Attach a file")
+                .pick_file()
+                .map(Event::AttachFile)
         });
     }
 
@@ -1085,6 +1097,14 @@ impl MercuryApp {
                 }
                 Event::Response(..) => {} // cancelled
                 Event::OpenFolder(path) => self.open_workspace(path, None),
+                Event::AttachFile(path) => {
+                    let name = path.file_stem().unwrap_or_default().to_string_lossy();
+                    let line = format!("{name}=@{}", path.display());
+                    if !self.body_text.trim().is_empty() {
+                        self.body_text.push('\n');
+                    }
+                    self.body_text.push_str(&line);
+                }
                 Event::Imported(Ok((folder, count))) => self.finish_import(folder, count),
                 Event::Imported(Err(e)) => self.notify(e, true),
                 Event::FilesChanged => files_changed = true,

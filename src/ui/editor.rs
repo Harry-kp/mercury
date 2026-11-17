@@ -404,6 +404,37 @@ impl MercuryApp {
             return;
         }
 
+        if kind == BodyKind::Multipart {
+            // the body is already one `name=value` line per field
+            if !self.form_bulk_edit {
+                self.form_text = self.body_text.clone();
+            }
+            let changed = key_value_editor(
+                ui,
+                &mut self.form_text,
+                "=",
+                &mut self.form_bulk_edit,
+                "name=Ada\navatar=@/path/to/avatar.png",
+            );
+            if changed {
+                self.body_text = kv::format_lines(&kv::parse_lines(&self.form_text, "="), "=");
+            }
+            ui.add_space(Space::MD);
+            let t = theme();
+            ui.horizontal_wrapped(|ui| {
+                ui.spacing_mut().item_spacing.x = Space::SM;
+                ui.label(widgets::faint(
+                    "A value starting with @ is a file, sent as an upload.",
+                ));
+                if widgets::link(ui, muted("Attach file…").color(t.accent)).clicked() {
+                    self.attach_file();
+                }
+            });
+            let text = self.body_text.clone();
+            self.variable_chips(ui, &text);
+            return;
+        }
+
         let json = kind == BodyKind::Json;
         let mut layouter = |ui: &Ui, text: &dyn egui::TextBuffer, wrap_width: f32| {
             let job = if json {

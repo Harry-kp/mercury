@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Multipart bodies and file uploads.** Pick **Multipart** as the body type: a table of fields where a value starting with `@` is a file (**Attach file…** picks one). Pasted `curl -F` commands and Postman form-data bodies now import as Multipart, and Copy as cURL writes them back as `-F`.
 - **Failed sends are in History**, marked **Failed**: timeouts, refused connections and bad URLs used to leave no trace, though they're the attempts you most want to look at again. Opening one shows the error with **Retry**. Older history files load as before.
 - `{{variables}}` in the URL bar are coloured by whether the selected environment defines them, as in Bruno and Postman.
 - **Send a sample request** under **Try this**, before you've sent anything: one click opens a new request to a free public JSON API and sends it, so a first run shows a real response without needing an API of your own (Bruno ships a sample collection for the same reason).
@@ -48,7 +49,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The **Try this** tips only appear on the first run, not under every unsent request in a workspace, and the environment menu says **No environment** like the chip, not **None**.
 - The **⌘ ⏎ to send** hint in the empty response panel was left-aligned under a centred title.
 - **About one history entry in eight wouldn't open** once it had been written to disk: its timestamp, which identifies it, was read back from the file a hair off. Timestamps now survive the file exactly.
-- **Pasted cURL commands that came out wrong:** repeated `-d` kept only the last one (curl joins them with `&`); `--data-urlencode` was ignored; `-XPOST` and other values glued to their flag were ignored; `-G` sent the data as a POST body instead of the query string; bash's `$'…'` quoting (Chrome's Copy as cURL for bodies with quotes or newlines) kept the `$` and the backslashes; and `-F` took the form field as the URL. `-F` now says multipart isn't supported.
+- **Pasted cURL commands that came out wrong:** repeated `-d` kept only the last one (curl joins them with `&`); `--data-urlencode` was ignored; `-XPOST` and other values glued to their flag were ignored; `-G` sent the data as a POST body instead of the query string; bash's `$'…'` quoting (Chrome's Copy as cURL for bodies with quotes or newlines) kept the `$` and the backslashes; and `-F` took the form field as the URL (it now imports as a Multipart body).
 - `.env` files with `export KEY=value` lines or a byte-order mark (some Windows editors add one) lost those variables.
 - **Security:** updated the TLS stack (`rustls` 0.23.46, `rustls-webpki` 0.103.17, `webpki-root-certs` 1.0.12) for six advisories, including a ServerHello downgrade (RUSTSEC-2026-0349) and acceptance of distrusted intermediates (RUSTSEC-2026-0382).
 - **The Pretty view re-sorted JSON keys and rewrote numbers.** It re-serialised the body, so keys came out alphabetical, integers too large for 64 bits turned into floats, `1.10` became `1.1`, and duplicate keys disappeared. **Format body** did the same to the request you were about to send. Both now only re-indent: the text is exactly what was sent.
