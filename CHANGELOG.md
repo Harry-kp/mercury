@@ -19,6 +19,7 @@ The first published build of the 0.4 line: everything below, and everything list
 - Postman's `{{$guid}}`, `{{$timestamp}}`, `{{$isoTimestamp}}` and `{{$randomInt}}` work, with a fresh value at every send.
 
 ### Fixed
+- **Security:** new files (requests, environments, duplicates, imports) are created atomically and never through a symlink. A folder from someone else with a dangling link such as `.env.staging -> ~/.zshenv` could make Mercury create the file it pointed to.
 - **Security:** an environment file that is a symlink is ignored. A folder from someone else could link `.env.dev` to `~/.aws/credentials`, whose `key = value` lines read as variables a request could send, or to a file that editing the environment would overwrite.
 - **A URL with an undefined variable is no longer sent.** It failed as something else ("invalid international domain name"), or reached the server as `%7B%7BUSER_ID%7D%7D`. The response panel now says which variable is missing and where to define it, and the message goes away when you switch environment.
 - **Importing into an open workspace could overwrite your files.** A request or `.env` with the same name as one in the collection was replaced without a word. Imports now go into their own folder in the workspace, and a taken name gets a suffix instead.
