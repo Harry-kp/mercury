@@ -50,7 +50,7 @@ brew install --cask harry-kp/tap/mercury
 
 Launch from **Applications**, or run `mercury`. Universal build — Apple Silicon and Intel.
 
-> The first launch says Apple could not verify Mercury is free of malware. Click **Done**, then **System Settings → Privacy & Security → Open Anyway** (once). Or run `xattr -dr com.apple.quarantine /Applications/Mercury.app`. Mercury is unsigned because a Developer ID costs $99/year.
+> Mercury is unsigned because a Developer ID costs $99/year. The Homebrew cask clears macOS's download quarantine so it opens straight away. Downloaded by hand, the first launch says Apple could not verify Mercury is free of malware: click **Done**, then **System Settings → Privacy & Security → Open Anyway** (once), or run `xattr -dr com.apple.quarantine /Applications/Mercury.app`.
 
 <details>
 <summary><strong>Windows, Linux, or without Homebrew</strong></summary>

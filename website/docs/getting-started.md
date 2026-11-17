@@ -119,7 +119,8 @@ If Mercury exits immediately with an error mentioning a missing `.so` file, that
 
 Mercury is not signed with an Apple Developer ID or submitted to Microsoft, because
 both cost money a free tool doesn't have. Your operating system will say so the
-first time you open it. Nothing is wrong with the download.
+first time you open it. Nothing is wrong with the download. (The Homebrew cask clears
+macOS's download quarantine on install, so a Homebrew install opens without asking.)
 
 **macOS: "Apple could not verify Mercury.app is free of malware"** (older macOS: "the developer cannot be verified")
 
