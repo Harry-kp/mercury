@@ -691,16 +691,40 @@ impl MercuryApp {
     pub fn start_import(&self, importer: &'static Importer) {
         let workspace = self.workspace.clone();
         self.spawn(move || {
-            let file = rfd::FileDialog::new()
+            let files = rfd::FileDialog::new()
                 .add_filter(format!("{} export", importer.name), importer.extensions)
-                .set_title(format!("Select {} export", importer.name))
-                .pick_file()?;
+                .set_title(format!(
+                    "Select {} exports (collection and environments)",
+                    importer.name
+                ))
+                .pick_files()?;
             let folder = workspace.or_else(|| {
                 rfd::FileDialog::new()
                     .set_title("Choose where to save the imported collection")
                     .pick_folder()
             })?;
-            let result = (importer.run)(&file, &folder).map(|count| (folder, count));
+            // a collection and its environments are separate exports: take them together
+            let mut total: Option<import::ImportCount> = None;
+            let mut errors = Vec::new();
+            for file in &files {
+                match (importer.run)(file, &folder) {
+                    Ok(count) => total = Some(import::merge(total, count)),
+                    Err(e) => errors.push(match files.len() {
+                        1 => e,
+                        _ => format!(
+                            "{}: {e}",
+                            file.file_name().unwrap_or_default().to_string_lossy()
+                        ),
+                    }),
+                }
+            }
+            let result = match total {
+                Some(mut count) => {
+                    count.skipped.extend(errors);
+                    Ok((folder, count))
+                }
+                None => Err(errors.join("\n")),
+            };
             Some(Event::Imported(result))
         });
     }

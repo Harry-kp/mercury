@@ -23,6 +23,22 @@ pub struct ImportCount {
     pub env: Option<String>,
 }
 
+/// Several exports picked at once, reported as one import: the requests'
+/// folder wins over an environment-only file's, and the first environment is selected.
+pub fn merge(total: Option<ImportCount>, next: ImportCount) -> ImportCount {
+    let Some(mut total) = total else {
+        return next;
+    };
+    if total.requests == 0 {
+        total.folder = next.folder;
+    }
+    total.requests += next.requests;
+    total.envs += next.envs;
+    total.skipped.extend(next.skipped);
+    total.env = total.env.or(next.env);
+    total
+}
+
 // ---------------------------------------------------------------------------
 // Shared writers
 // ---------------------------------------------------------------------------
@@ -1023,6 +1039,27 @@ fn insomnia_v5(doc: &Value, out: &Path) -> Result<ImportCount, String> {
 mod tests {
     use super::*;
     use tempfile::TempDir;
+
+    #[test]
+    fn a_collection_and_its_environment_picked_together_import_as_one() {
+        let env = ImportCount {
+            envs: 1,
+            folder: "/ws".into(),
+            env: Some(".env.staging".into()),
+            ..Default::default()
+        };
+        let collection = ImportCount {
+            requests: 3,
+            folder: "/ws/acme".into(),
+            skipped: vec!["x".into()],
+            ..Default::default()
+        };
+        let both = merge(Some(merge(None, env)), collection);
+        assert_eq!((both.requests, both.envs), (3, 1));
+        assert_eq!(both.folder, std::path::Path::new("/ws/acme"));
+        assert_eq!(both.env.as_deref(), Some(".env.staging"));
+        assert_eq!(both.skipped, ["x"]);
+    }
 
     fn import(
         f: fn(&Path, &Path) -> Result<ImportCount, String>,
