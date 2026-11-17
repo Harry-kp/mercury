@@ -58,9 +58,11 @@ impl MercuryApp {
         let t = theme();
         let expanded = self.recent_expanded;
         let count = self.recent.len();
-        let header = widgets::row(ui, "recent_header", "Recent", false, |ui| {
+        // "Unsaved", not "Recent": these are requests that were sent but never
+        // saved. Every send, saved or not, is in History.
+        let header = widgets::row(ui, "recent_header", "Unsaved", false, |ui| {
             chevron(ui, expanded);
-            ui.label(widgets::section_label("Recent"));
+            ui.label(widgets::section_label("Unsaved"));
             ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
                 ui.add_space(20.0);
                 ui.label(faint(count.to_string()));
@@ -70,7 +72,7 @@ impl MercuryApp {
             self.recent_expanded = !expanded;
         }
         // clearing 50 unsaved requests one × at a time is not a workflow
-        if widgets::row_action(ui, &header, Icon::Trash, "Clear recent").clicked() {
+        if widgets::row_action(ui, &header, Icon::Trash, "Clear unsaved").clicked() {
             self.clear_recent();
             return;
         }
@@ -81,7 +83,7 @@ impl MercuryApp {
         ui.add_space(Space::XS);
         let mut remove = None;
         let mut open = None;
-        // Recent sits above the collection, so it must never grow tall enough
+        // Unsaved sits above the collection, so it must never grow tall enough
         // to push the tree off the bottom of the sidebar.
         ScrollArea::vertical()
             .id_salt("recent_scroll")
@@ -96,7 +98,7 @@ impl MercuryApp {
                         ui.label(method_text(request.method));
                         ui.add(egui::Label::new(muted(&request.url).color(t.text)).truncate());
                     });
-                    if widgets::row_action(ui, &row, Icon::Close, "Remove from recent").clicked() {
+                    if widgets::row_action(ui, &row, Icon::Close, "Remove").clicked() {
                         remove = Some(idx);
                     }
                     if row.on_hover_text(&request.url).clicked() {
@@ -117,7 +119,7 @@ impl MercuryApp {
         let open = self.workspace.is_some();
         let mut new_folder = false;
         let mut new_request = false;
-        panel_header(ui, "Collection", |ui| {
+        panel_header(ui, "Requests", |ui| {
             if open {
                 new_request = icon_button(ui, Icon::Plus, "New request (⌘ N)").clicked();
                 new_folder = icon_button(ui, Icon::Folder, "New folder").clicked();
@@ -196,17 +198,26 @@ impl MercuryApp {
                     let selected = self.selected_folder.as_ref() == Some(path);
                     let response =
                         widgets::row(ui, ("folder", path.as_path()), name, selected, |ui| {
+                            reserve_action(ui);
                             ui.add_space(indent);
                             chevron(ui, expanded);
                             widgets::glyph(ui, Icon::Folder, 13.0, t.text_muted);
-                            ui.label(if selected {
-                                strong(name.clone())
-                            } else {
-                                label(name.clone())
-                            });
+                            ui.add(
+                                egui::Label::new(if selected {
+                                    strong(name.clone())
+                                } else {
+                                    label(name.clone())
+                                })
+                                .truncate(),
+                            );
                         });
+                    if let Some(more) = more_action(ui, &response, selected) {
+                        widgets::popup_menu(ui, &more, Layout::MENU_WIDTH, |ui| {
+                            self.folder_menu(ui, name, path)
+                        });
+                    }
                     if response.clicked() {
-                        self.selected_folder = Some(path.clone());
+                        self.select_folder(&path.clone());
                         // while filtering every folder is shown open, so a
                         // click here would flip a state the user can't see
                         if !search.is_empty() {
@@ -230,17 +241,26 @@ impl MercuryApp {
                     let shown = name.strip_suffix(".json").unwrap_or(name);
                     let response =
                         widgets::row(ui, ("request", path.as_path()), shown, current, |ui| {
+                            reserve_action(ui);
                             ui.add_space(indent + 11.0 + Space::SM);
                             if let Some(m) = method {
                                 ui.label(method_text(*m));
                             }
                             let text = shown.to_string();
-                            ui.label(if current {
-                                strong(text).color(t.accent)
-                            } else {
-                                label(text)
-                            });
+                            ui.add(
+                                egui::Label::new(if current {
+                                    strong(text).color(t.accent)
+                                } else {
+                                    label(text)
+                                })
+                                .truncate(),
+                            );
                         });
+                    if let Some(more) = more_action(ui, &response, current) {
+                        widgets::popup_menu(ui, &more, Layout::MENU_WIDTH, |ui| {
+                            self.request_menu(ui, name, path)
+                        });
+                    }
                     if response.clicked() {
                         self.open_file(path);
                     }
@@ -251,6 +271,8 @@ impl MercuryApp {
     }
 
     fn folder_menu(&mut self, ui: &mut Ui, name: &str, path: &Path) {
+        // a context menu is as wide as the space it opens in otherwise
+        ui.set_max_width(Layout::MENU_WIDTH);
         if menu_item(ui, Some(Icon::Plus), "New request", "") {
             self.open_dialog(Dialog::NewRequest(path.to_path_buf(), false), "");
         }
@@ -262,11 +284,9 @@ impl MercuryApp {
     }
 
     fn request_menu(&mut self, ui: &mut Ui, name: &str, path: &Path) {
-        if menu_item(ui, Some(Icon::Copy), "Duplicate", "") {
-            match workspace::duplicate(path) {
-                Ok(_) => self.rebuild_tree(),
-                Err(e) => self.notify(e, true),
-            }
+        ui.set_max_width(Layout::MENU_WIDTH);
+        if menu_item(ui, Some(Icon::File), "Duplicate", "") {
+            self.duplicate(path);
         }
         self.common_menu(ui, name, path);
     }
@@ -283,6 +303,21 @@ impl MercuryApp {
             ui.ctx().copy_text(path.display().to_string());
         }
     }
+}
+
+/// Keeps a row's text clear of the "…" painted over its right end.
+fn reserve_action(ui: &mut Ui) {
+    ui.set_max_width((ui.available_width() - 26.0).max(40.0));
+}
+
+/// The row's "…" (the same menu as right-click, which nothing on screen
+/// advertised). Shown on hover, on the open/selected row, and while its own
+/// menu is open, so moving the pointer into the menu doesn't close it.
+fn more_action(ui: &mut Ui, row: &egui::Response, active: bool) -> Option<egui::Response> {
+    let id = row.id.with("More actions");
+    let open = egui::Popup::is_id_open(ui.ctx(), id.with("popup"));
+    (active || open || ui.rect_contains_pointer(row.rect))
+        .then(|| widgets::row_action(ui, row, Icon::Ellipsis, "More actions"))
 }
 
 fn chevron(ui: &mut Ui, expanded: bool) {

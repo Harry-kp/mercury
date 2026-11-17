@@ -19,6 +19,10 @@ const COMMANDS: &[(Action, &str, Icon)] = &[
     (Action::New, "New request", Icon::Plus),
     (Action::Save, "Save request", Icon::Download),
     (Action::NewFolder, "New folder", Icon::Folder),
+    (Action::RenameRequest, "Rename request…", Icon::Pencil),
+    (Action::DuplicateRequest, "Duplicate request", Icon::File),
+    (Action::RevertFile, "Revert to saved", Icon::Clock),
+    (Action::DeleteRequest, "Delete request…", Icon::Trash),
     (Action::OpenFolder, "Open folder…", Icon::Folder),
     (Action::ImportPostman, "Import from Postman…", Icon::Package),
     (

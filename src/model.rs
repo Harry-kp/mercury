@@ -92,7 +92,7 @@ pub struct Request {
     pub body: String,
 }
 
-/// An unsaved request the user sent (sidebar "Recent").
+/// An unsaved request the user sent (sidebar "Unsaved"; stored as recent).
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct RecentRequest {
     pub request: Request,
@@ -105,6 +105,14 @@ pub struct HistoryEntry {
     pub timestamp: f64,
     pub request: Request,
     pub response: HttpResponse,
+    /// The environment file it was sent with, e.g. ".env.prod". `None` in
+    /// entries written before 0.4 and for sends with no environment.
+    #[serde(default)]
+    pub env: Option<String>,
+    /// The request file it was sent from, so reopening the entry lands on
+    /// that file instead of a detached copy. `None` for unsaved requests.
+    #[serde(default)]
+    pub file: Option<String>,
 }
 
 /// What the history list needs in memory; full entries load on click.
@@ -115,6 +123,7 @@ pub struct HistorySummary {
     pub url: String,
     pub status: u16,
     pub duration_ms: u128,
+    pub env: Option<String>,
 }
 
 impl From<&HistoryEntry> for HistorySummary {
@@ -125,6 +134,7 @@ impl From<&HistoryEntry> for HistorySummary {
             url: entry.request.url.clone(),
             status: entry.response.status,
             duration_ms: entry.response.duration_ms,
+            env: entry.env.clone(),
         }
     }
 }

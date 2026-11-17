@@ -13,10 +13,10 @@ This page walks through sending, saving and organizing requests. It assumes Merc
 | Area | What it shows |
 |------|---------------|
 | **Top bar** | The workspace menu, the breadcrumb (`workspace / folder / METHOD name`), the environment picker, the theme toggle and the `⋯` menu |
-| **Sidebar** (left) | A filter box, **Recent** unsaved requests and the workspace folder tree |
+| **Sidebar** (left) | A filter box, **Unsaved** requests you've sent and the workspace folder tree |
 | **Editor** (center) | Method, URL bar, and the **Body**, **Params**, **Headers** and **Auth** tabs |
 | **Response** (right) | Status, time and size, then the **Body**, **Headers** and **Cookies** tabs — or the history list |
-| **Status bar** | The workspace path, and links to the command palette (`⌘ K`) and the shortcut list |
+| **Status bar** | Whether the open request is saved, and a link to the command palette (`⌘ K`) |
 
 ## 1. Send a request
 
@@ -27,7 +27,7 @@ You don't need a workspace to send a request.
 
 The response panel shows the status, response time and size, followed by the body. JSON is pretty-printed and highlighted. While a request is running, press `Esc` or click the stop button to cancel it.
 
-Requests you send without saving appear under **Recent** in the sidebar. Click one to load it again.
+Requests you send without saving appear under **Unsaved** in the sidebar. Click one to load it again, or click **Save…** next to the breadcrumb to keep it.
 
 :::tip
 You can paste a cURL command into the URL bar. Mercury fills in the method, URL, headers and body from it. See [Import & Export](/docs/features/import-export#import-from-curl).
@@ -89,7 +89,7 @@ my-api/
 └── health.json
 ```
 
-Right-click a folder for **New Request**, **New Folder**, **Rename**, **Delete** and **Copy Path**. See [Collections](/docs/features/collections).
+Hover a folder and click `⋯` (or right-click it) for **New Request**, **New Folder**, **Rename**, **Delete** and **Copy Path**. See [Collections](/docs/features/collections).
 
 ## 6. Find anything with `⌘ K`
 

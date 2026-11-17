@@ -91,9 +91,9 @@ fn open_send_edit_and_save() {
     // Tab order — as an anonymous box. The text *inside* a row is not
     // enough: it is the row itself that takes focus and the click.
     for (role, name) in [
-        (accesskit::Role::Button, "users"),   // a sidebar tree row
-        (accesskit::Role::ComboBox, "GET"),   // the method picker
-        (accesskit::Role::Link, "Shortcuts"), // a status-bar link
+        (accesskit::Role::Button, "users"),  // a sidebar tree row
+        (accesskit::Role::ComboBox, "GET"),  // the method picker
+        (accesskit::Role::Link, "Commands"), // a status-bar link
         (accesskit::Role::Button, "Send"),
     ] {
         harness.get_by_role_and_label(role, name);
@@ -244,6 +244,18 @@ fn open_send_edit_and_save() {
     harness.key_press_modifiers(Modifiers::COMMAND, Key::N);
     harness.run_steps(2);
     assert!(harness.state().current_file.is_none());
+    // an unsaved request has a visible Save…, and it lands next to the
+    // request that was open, not in whichever folder was clicked last
+    harness.event(egui::Event::Text("example.com".into()));
+    harness.run_steps(2);
+    harness
+        .get_by_role_and_label(accesskit::Role::Link, "Save…")
+        .click();
+    harness.run_steps(2);
+    assert!(
+        matches!(&harness.state().dialog, Some(Dialog::NewRequest(dir, true)) if *dir == ws.join("users")),
+        "Save… must offer the open request's folder"
+    );
     harness.state_mut().dialog = None;
     harness.remove_cursor();
     harness.event(egui::Event::Key {
@@ -430,8 +442,66 @@ fn open_send_edit_and_save() {
         entries,
         "Undo must bring the cleared history back"
     );
-    harness.key_press_modifiers(Modifiers::COMMAND, Key::H);
+    // a history entry knows its environment, and reopens on its file
+    let sent = harness
+        .state()
+        .history
+        .iter()
+        .rev()
+        .find(|h| h.url.starts_with("{{BASE}}/users"))
+        .cloned()
+        .expect("a send from list-users");
+    assert_eq!(sent.env.as_deref(), Some(".env.dev"));
+    harness
+        .state_mut()
+        .open_file(&ws.join("billing/invoices/get-invoice.json"));
+    harness.run_steps(2); // history is still open from the Clear step
+    harness
+        .query_all_by_role_and_label(accesskit::Role::Button, &sent.url)
+        .next()
+        .expect("history row")
+        .click();
+    harness.run_steps(3);
+    assert_eq!(
+        harness.state().current_file.as_deref(),
+        Some(file.as_path()),
+        "a history entry must reopen the file it was sent from"
+    );
+    assert_eq!(harness.state().response_env.as_deref(), Some(".env.dev"));
+
+    // Revert to saved undoes edits autosave has already written
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::L);
     harness.run_steps(2);
+    harness.key_press(Key::End);
+    harness.event(egui::Event::Text("&oops=1".into()));
+    for _ in 0..400 {
+        harness.step();
+    }
+    assert!(std::fs::read_to_string(&file).unwrap().contains("oops"));
+    harness
+        .get_by_role_and_label(accesskit::Role::Button, "Request actions")
+        .click();
+    harness.run_steps(2);
+    harness
+        .get_by_role_and_label(accesskit::Role::Button, "Revert to saved")
+        .click();
+    harness.run_steps(2);
+    assert!(!std::fs::read_to_string(&file).unwrap().contains("oops"));
+
+    // the tree row's "…" is a visible door to the right-click menu
+    let more = harness
+        .query_all_by_role_and_label(accesskit::Role::Button, "More actions")
+        .last()
+        .expect("the open request's row shows its actions");
+    more.click();
+    harness.run_steps(2);
+    harness
+        .get_by_role_and_label(accesskit::Role::Button, "Duplicate")
+        .click();
+    harness.run_steps(2);
+    let copy = ws.join("users/list-users_copy1.json");
+    assert!(copy.is_file(), "Duplicate from the row menu");
+    std::fs::remove_file(copy).unwrap();
 
     // At the minimum window size, tab-row controls wrap instead of being
     // painted on top of the tabs.

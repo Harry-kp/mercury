@@ -137,6 +137,8 @@ mod tests {
                 content_type: "application/json".into(),
                 response_type: ResponseType::Json,
             },
+            env: Some(".env.dev".into()),
+            file: None,
         }
     }
 
@@ -160,6 +162,9 @@ mod tests {
         let entries: Vec<HistoryEntry> = serde_json::from_str(old).unwrap();
         assert_eq!(entries[0].response.response_type, ResponseType::Empty);
         assert!(entries[0].response.cookies.is_empty());
+        // 0.4 added which environment and file a send came from
+        assert_eq!(entries[0].env, None);
+        assert_eq!(entries[0].file, None);
     }
 
     #[test]

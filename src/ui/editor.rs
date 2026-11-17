@@ -107,6 +107,7 @@ impl MercuryApp {
     /// them is reachable only through a shortcut.
     fn request_actions(&mut self, ui: &mut Ui) {
         let trigger = icon_button(ui, Icon::Ellipsis, "Request actions");
+        let saved = self.current_file.is_some();
         let mut picked = None;
         popup_menu(ui, &trigger, Layout::MENU_WIDTH, |ui| {
             if menu_item(ui, Some(Icon::Terminal), "Copy as cURL", "⌘ ⇧ C") {
@@ -114,6 +115,15 @@ impl MercuryApp {
             }
             if menu_item(ui, Some(Icon::Sparkle), "Format body", "") {
                 picked = Some(Action::FormatBody);
+            }
+            if saved {
+                widgets::divider(ui);
+                if menu_item(ui, Some(Icon::File), "Duplicate request", "") {
+                    picked = Some(Action::DuplicateRequest);
+                }
+                if menu_item(ui, Some(Icon::Clock), "Revert to saved", "") {
+                    picked = Some(Action::RevertFile);
+                }
             }
         });
         if let Some(action) = picked {

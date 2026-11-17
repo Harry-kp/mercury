@@ -190,6 +190,9 @@ impl MercuryApp {
                                 |ui| {
                                     ui.spacing_mut().item_spacing.x = Space::MD;
                                     ui.label(faint(relative_time(entry.timestamp, now)));
+                                    if let Some(env) = &entry.env {
+                                        ui.label(faint(env).color(t.env(env)));
+                                    }
                                     ui.label(faint(format!("{} ms", entry.duration_ms)));
                                     ui.label(
                                         muted(entry.status.to_string())
@@ -213,6 +216,7 @@ impl MercuryApp {
         let Some(response) = self.response.clone() else {
             return;
         };
+        let t = theme();
         let kind = response.response_type;
         let is_text = matches!(
             kind,
@@ -226,6 +230,22 @@ impl MercuryApp {
             status_badge(ui, response.status, &response.status_text);
             response_time(ui, response.duration_ms);
             ui.label(faint(format_bytes(response.size_bytes)));
+            // which environment answered: after a switch, the response on
+            // screen is from the old one, and nothing used to say so
+            if let Some(env) = &self.response_env {
+                let stale = self.env_name() != Some(env.as_str());
+                let text = if stale {
+                    format!("from {env}")
+                } else {
+                    env.clone()
+                };
+                let color = if stale { t.warning } else { t.env(env) };
+                ui.label(faint(text).color(color)).on_hover_text(if stale {
+                    "Sent with another environment than the one selected now"
+                } else {
+                    "The environment this was sent with"
+                });
+            }
             ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
                 ui.spacing_mut().item_spacing.x = Space::XXS;
                 self.history_button(ui);

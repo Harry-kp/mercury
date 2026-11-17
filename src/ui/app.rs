@@ -52,6 +52,10 @@ pub enum Action {
     ImportInsomnia,
     Docs,
     Help,
+    RenameRequest,
+    DuplicateRequest,
+    DeleteRequest,
+    RevertFile,
 }
 
 /// One keyboard shortcut. `SHORTCUTS` is the single list: the in-app help
@@ -225,6 +229,9 @@ pub struct MercuryApp {
     pub tree: Vec<CollectionItem>,
     pub expanded: HashSet<PathBuf>,
     pub selected_folder: Option<PathBuf>,
+    /// Where a new or saved request lands: the folder of the request opened
+    /// last, or the folder clicked last, whichever came later.
+    last_folder: Option<PathBuf>,
     pub search: String,
     /// Filtering needs the whole tree in memory; see `sidebar::load_subtree`.
     pub tree_fully_loaded: bool,
@@ -268,6 +275,13 @@ pub struct MercuryApp {
     /// The file that was open when it left. If the user navigates to another
     /// request meanwhile, the response belongs to neither of them on screen.
     sent_file: Option<PathBuf>,
+    /// The environment it left with, recorded in history.
+    sent_env: Option<String>,
+    /// The environment the response on screen came from.
+    pub response_env: Option<String>,
+    /// The open file as it was when opened: "Revert to saved" goes back to
+    /// it, since autosave has already written every edit since.
+    opened_content: Option<String>,
     request_counter: u64,
 
     // History and recent
@@ -332,6 +346,10 @@ impl MercuryApp {
             in_flight: None,
             sent: None,
             sent_file: None,
+            sent_env: None,
+            response_env: None,
+            opened_content: None,
+            last_folder: None,
             request_counter: 0,
             history: Vec::new(),
             history_loaded: false,
@@ -657,6 +675,7 @@ impl MercuryApp {
         self.current_file = file;
         self.saved_content = self.current_file.as_ref().map(|_| self.file_content());
         self.response = None;
+        self.response_env = None;
         self.request_error = None;
         self.formatted_body = None;
         self.response_tab = ResponseTab::Body;
@@ -668,15 +687,19 @@ impl MercuryApp {
             .map_err(|e| e.to_string())
             .and_then(|c| RequestFile::from_json(&c));
         match loaded {
-            Ok(file) => self.load_request(
-                Request {
-                    method: file.method,
-                    url: file.url,
-                    headers: kv::map_to_headers(&file.headers),
-                    body: file.body,
-                },
-                Some(path.to_path_buf()),
-            ),
+            Ok(file) => {
+                self.load_request(
+                    Request {
+                        method: file.method,
+                        url: file.url,
+                        headers: kv::map_to_headers(&file.headers),
+                        body: file.body,
+                    },
+                    Some(path.to_path_buf()),
+                );
+                self.opened_content = self.saved_content.clone();
+                self.last_folder = path.parent().map(Path::to_path_buf);
+            }
             // the file name and the reason; the absolute path just wraps the
             // notification onto three lines
             Err(e) => {
@@ -715,14 +738,13 @@ impl MercuryApp {
         self.autosave();
         self.load_request(Request::default(), None);
         self.focus("url_bar");
-        self.notify("New request", false);
     }
 
     fn save(&mut self) {
+        // an existing file: write now; the status bar says "Saved", a toast
+        // on top of that was noise on every ⌘S
         if self.current_file.is_some() {
-            if self.save_file() {
-                self.notify("Saved", false);
-            }
+            self.save_file();
         } else if let Some(root) = self.target_folder() {
             self.open_dialog(Dialog::NewRequest(root, true), "");
         } else {
@@ -731,13 +753,56 @@ impl MercuryApp {
         }
     }
 
-    /// Where "new request" / "new folder" land: the selected collection, else
-    /// the workspace root.
+    /// Where "new request" / "new folder" / "save" land: the folder of the
+    /// request opened last or the folder clicked last, else the root. It was
+    /// the folder *clicked* last, which could be minutes and requests ago.
     fn target_folder(&self) -> Option<PathBuf> {
-        self.selected_folder
+        self.last_folder
             .clone()
-            .filter(|p| p.is_dir())
+            .filter(|p| p.is_dir() && self.workspace.as_ref().is_some_and(|w| p.starts_with(w)))
             .or_else(|| self.workspace.clone())
+    }
+
+    pub fn select_folder(&mut self, path: &Path) {
+        self.selected_folder = Some(path.to_path_buf());
+        self.last_folder = Some(path.to_path_buf());
+    }
+
+    /// Back to the file as it was when it was opened.
+    fn revert_file(&mut self) {
+        let (Some(path), Some(content)) = (self.current_file.clone(), self.opened_content.clone())
+        else {
+            return;
+        };
+        let Ok(file) = RequestFile::from_json(&content) else {
+            return;
+        };
+        let response = self.response.take();
+        self.load_request(
+            Request {
+                method: file.method,
+                url: file.url,
+                headers: kv::map_to_headers(&file.headers),
+                body: file.body,
+            },
+            Some(path),
+        );
+        self.response = response;
+        self.saved_content = None; // differs from disk until written
+        if self.save_file() {
+            self.notify("Reverted to the version you opened", false);
+        }
+    }
+
+    pub fn duplicate(&mut self, path: &Path) {
+        match workspace::duplicate(path) {
+            Ok(copy) => {
+                self.rebuild_tree();
+                let name = copy.file_stem().unwrap_or_default().to_string_lossy();
+                self.notify(format!("Duplicated as '{name}'"), false);
+            }
+            Err(e) => self.notify(e, true),
+        }
     }
 
     fn focus(&self, id: &str) {
@@ -770,6 +835,7 @@ impl MercuryApp {
         self.in_flight = Some(id);
         self.sent = Some(self.form_request());
         self.sent_file = self.current_file.clone();
+        self.sent_env = self.env_name().map(str::to_string);
         let client = self.client.clone();
         self.spawn(move || Some(Event::Response(id, http::execute(&client, &request))));
     }
@@ -792,6 +858,11 @@ impl MercuryApp {
                     timestamp: storage::now(),
                     request: request.clone(),
                     response: response.clone(),
+                    env: self.sent_env.clone(),
+                    file: self
+                        .sent_file
+                        .as_ref()
+                        .map(|p| p.to_string_lossy().into_owned()),
                 };
                 self.history.push(HistorySummary::from(&entry));
                 let excess = self.history.len().saturating_sub(storage::MAX_HISTORY);
@@ -814,6 +885,7 @@ impl MercuryApp {
                 let failed = response.status >= 400;
                 if self.sent_file.take() == self.current_file {
                     self.response = Some(response);
+                    self.response_env = self.sent_env.take();
                     self.request_error = None;
                     // the pane puts the status badge at the top of the
                     // response; a toast saying "200 OK" next to it is noise on
@@ -858,9 +930,20 @@ impl MercuryApp {
     pub fn open_history_entry(&mut self, timestamp: f64) {
         match storage::load_history_entry(timestamp) {
             Some(entry) => {
-                self.autosave();
-                self.load_request(entry.request, None);
+                // back on the file it was sent from, if it still exists,
+                // instead of a detached "Untitled" copy
+                match entry.file.map(PathBuf::from).filter(|f| f.is_file()) {
+                    Some(file) => {
+                        self.open_file(&file);
+                        self.expand_to(&file);
+                    }
+                    None => {
+                        self.autosave();
+                        self.load_request(entry.request, None);
+                    }
+                }
                 self.response = Some(entry.response);
+                self.response_env = entry.env;
                 self.show_history = false;
             }
             None => self.notify("History entry no longer exists", true),
@@ -878,7 +961,7 @@ impl MercuryApp {
     pub fn clear_recent(&mut self) {
         let old = std::mem::take(&mut self.recent);
         storage::save_recent(&self.recent);
-        let what = plural(old.len(), "recent request", "recent requests");
+        let what = plural(old.len(), "unsaved request", "unsaved requests");
         self.notify_undo(format!("Cleared {what}"), Undo::Recent(old));
     }
 
@@ -1176,6 +1259,24 @@ impl MercuryApp {
             }
             Action::ImportPostman => self.start_import(&POSTMAN),
             Action::ImportInsomnia => self.start_import(&INSOMNIA),
+            Action::RenameRequest
+            | Action::DuplicateRequest
+            | Action::DeleteRequest
+            | Action::RevertFile => {
+                let Some(file) = self.current_file.clone() else {
+                    self.notify("Open a saved request first", false);
+                    return;
+                };
+                match action {
+                    Action::RenameRequest => {
+                        let name = file.file_name().unwrap_or_default().to_string_lossy();
+                        self.open_dialog(Dialog::Rename(file.clone()), &name);
+                    }
+                    Action::DuplicateRequest => self.duplicate(&file),
+                    Action::DeleteRequest => self.ask_delete(&file),
+                    _ => self.revert_file(),
+                }
+            }
             Action::Docs => {
                 let _ = open::that(DOCS_URL);
             }
@@ -1264,7 +1365,11 @@ impl MercuryApp {
         } else {
             "Open folder".to_string()
         };
-        let chip = chip(ui, Icon::Folder, &name, t.text, open);
+        let mut chip = chip(ui, Icon::Folder, &name, t.text, open);
+        if let Some(path) = &self.workspace {
+            // the full path used to sit in the status bar, truncated
+            chip = chip.on_hover_text(path.display().to_string());
+        }
         popup_menu(ui, &chip, Layout::MENU_WIDTH, |ui| {
             if menu_item(ui, Some(Icon::Folder), "Open folder…", "⌘ O") {
                 self.pick_folder();
@@ -1290,20 +1395,28 @@ impl MercuryApp {
     }
 
     /// folder / folder / METHOD request •
-    fn breadcrumb(&self, ui: &mut egui::Ui) {
+    fn breadcrumb(&mut self, ui: &mut egui::Ui) {
         let t = theme();
-        let Some(root) = &self.workspace else {
-            return;
-        };
         let sep = |ui: &mut egui::Ui| {
             ui.label(muted("/").color(t.text_faint));
         };
-        let Some(file) = &self.current_file else {
-            sep(ui);
-            ui.label(muted("Untitled"));
-            if !self.url.is_empty() {
-                ui.label(faint("unsaved"));
+        if self.current_file.is_none() {
+            if self.workspace.is_some() {
+                sep(ui);
+                ui.label(muted("Untitled"));
             }
+            // the only way to keep a request used to be ⌘S, which nothing on
+            // screen mentioned once the first-run tips were gone
+            if !self.url.trim().is_empty()
+                && widgets::link(ui, muted("Save…").color(t.accent))
+                    .on_hover_text("Save this request as a file (⌘ S)")
+                    .clicked()
+            {
+                self.run(Action::Save);
+            }
+            return;
+        }
+        let (Some(root), Some(file)) = (&self.workspace, &self.current_file) else {
             return;
         };
         if let Some(folder) = file.strip_prefix(root).ok().and_then(Path::parent) {
@@ -1396,26 +1509,18 @@ impl MercuryApp {
                 );
                 ui.horizontal_centered(|ui| {
                     ui.spacing_mut().item_spacing.x = Space::SM;
-                    match &self.workspace {
-                        Some(path) => {
-                            widgets::glyph(ui, Icon::Folder, 12.0, t.text_faint);
-                            ui.label(faint(widgets::workspace_label(path, 56)))
-                                .on_hover_text(path.display().to_string());
-                        }
-                        None => {
-                            ui.label(faint("No workspace — requests are files in a folder"));
-                        }
+                    // status, not a second copy of the folder chip: is the
+                    // open file on disk yet?
+                    if self.workspace.is_none() {
+                        ui.label(faint("No folder open — requests are files in a folder"));
+                    } else if self.has_unsaved_changes() {
+                        ui.label(faint("Unsaved changes · saves automatically"));
+                    } else if self.current_file.is_some() {
+                        ui.label(faint("Saved"));
                     }
 
                     ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
                         ui.spacing_mut().item_spacing.x = Space::SM;
-                        if widgets::link(ui, faint("Shortcuts"))
-                            .on_hover_text("Press ?")
-                            .clicked()
-                        {
-                            self.dialog = Some(Dialog::Shortcuts);
-                        }
-                        ui.add_space(Space::MD);
                         if widgets::link(ui, faint("Commands"))
                             .on_hover_text("Press ⌘K")
                             .clicked()

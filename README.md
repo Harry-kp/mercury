@@ -163,7 +163,7 @@ TOKEN="dev token"
 - **cURL** — paste a `curl …` command into the URL bar to import it; `⌘ ⇧ C` copies the request back out.
 - **Import** — Postman v2.1 and Insomnia (JSON or YAML), with their variables, auth and bodies.
 - **Responses** — pretty-printed and highlighted JSON, XML and HTML; headers and cookies; `⌘ F` to search; save images, binaries or large bodies to a file.
-- **History** — your last 50 requests from the past 7 days, with full responses. **Recent** keeps unsaved requests you've sent.
+- **History** — your last 50 requests from the past 7 days, with full responses. **Unsaved** in the sidebar keeps requests you've sent without saving. Each history entry records its environment and reopens on its file.
 - **Cookies** — kept for the session, so login flows just work.
 
 ---

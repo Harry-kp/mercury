@@ -7,7 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Revert to saved** (URL-bar `⋯`, `⌘ K`) puts the open file back the way it was when you opened it. Autosave writes every edit within seconds, so this was the missing undo.
+- **Rename, Duplicate and Delete for the open request in `⌘ K`**, and a `⋯` on sidebar rows (hover, or the open request) with the same menu as right-click, which nothing on screen advertised.
+- **Save…** next to the breadcrumb for a request that isn't a file yet. `⌘ S` was the only way, and it was mentioned only in the first-run tips.
+- History entries record the **environment** they were sent with, and the response panel shows it, as **from .env.dev** once you've switched. Reopening an entry opens the **file** it was sent from instead of a detached copy. Older history entries load as before.
+
 ### Changed
+- The sidebar's **Recent** section is now **Unsaved**: it lists requests you sent without saving. Every send is in History.
+- New and saved requests land in the folder of the request you opened last (or the folder you clicked last, whichever came later). It used to be whichever folder was clicked last, however long ago.
+- The status bar shows whether the open request is saved instead of repeating the workspace path (now the folder chip's tooltip). `⌘ S` on a saved file no longer adds a "Saved" notification, and `⌘ N` no longer announces "New request".
+- The sidebar header reads **Requests**, and sidebar menus are menu-width instead of stretching across the editor.
 - **A request opens on the tab that holds its content.** Requests with a body (and POST, PUT, PATCH) open on Body, everything else on Params. The tab used to be a single global value, so every GET opened on an empty Body editor, or on whatever the previous request had shown.
 - **The auth type is picked inside the Auth tab**, from a None / Basic / Bearer / Custom row. The Auth tab no longer renames itself to "Bearer" or "Basic", and the unlabeled ⏷ next to the tabs is gone.
 - **Undefined variables are named under the URL bar** ("`{{USER_ID}}` isn't defined in .env.dev"). Before, the URL bar turned amber and said why only on hover, and Send went ahead with the literal text.

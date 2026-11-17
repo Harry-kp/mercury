@@ -34,7 +34,7 @@ Press `⌘ O`, choose **Open folder…** from the workspace menu, or click **Ope
 - Each request shows its method. If a `.json` file isn't a valid request, it's listed without a method and shows an error when you open it.
 - Mercury reads a folder the first time you expand it. Clicking a folder expands or collapses it.
 
-Unsaved requests you've sent appear above the tree under **Recent** (up to 50). Click one to load it, or click × to remove it. When you save a request, it's removed from Recent.
+Unsaved requests you've sent appear above the tree under **Unsaved** (up to 50). Click one to load it, or click × to remove it. The trash icon clears the list, with **Undo** in the notification. When you save a request, it's removed from the list.
 
 ## Searching
 
@@ -44,7 +44,7 @@ To jump straight to a request without touching the tree, press `⌘ K` and type 
 
 ## Creating, renaming and deleting
 
-Right-click a **folder**:
+Hover a **folder** and click `⋯`, or right-click it. Clicking a folder also makes it where the next new or saved request goes.
 
 | Action | What it does |
 |--------|--------------|

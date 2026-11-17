@@ -74,9 +74,10 @@ The Auth tab edits the `Authorization` header. See [Authentication](/docs/featur
 
 ## Saving
 
-- `⌘ S` saves the open request. If the request isn't saved yet, Mercury asks for a name and creates `<name>.json` in the selected collection, or in the workspace root if you haven't clicked one. If no workspace is open, it asks you to open a folder first.
+- `⌘ S`, or **Save…** next to the breadcrumb, saves the request. If it isn't saved yet, Mercury asks for a name and creates `<name>.json` in the folder of the request you opened last (or the folder you clicked last, whichever came later), else in the workspace root. If no workspace is open, it asks you to open a folder first.
 - Right-click a folder and choose **New Request** to save the current editor contents into that folder.
-- Once a request has a file, Mercury saves it automatically every 5 seconds while there are unsaved changes, when you switch to another request, and when you quit. A dot after the name in the breadcrumb means there are unsaved changes.
+- Once a request has a file, Mercury saves it automatically every 5 seconds while there are unsaved changes, when you switch to another request, and when you quit. A dot after the name in the breadcrumb, and **Unsaved changes** in the status bar, mean the latest edits aren't on disk yet; the status bar says **Saved** once they are.
+- **Revert to saved** (in the `⋯` at the end of the URL bar, or `⌘ K`) puts the file back the way it was when you opened it, undoing edits that autosave has already written.
 - `⌘ N` starts a new, empty, unsaved request.
 
 If a response arrives after you have opened a different request, it is recorded in [history](/docs/features/history) rather than shown under the request you are now looking at.
@@ -134,7 +135,7 @@ Mercury uses one HTTP client for the whole session, and that client has a cookie
 
 ## Sidebar actions
 
-Right-click a request in the sidebar:
+Hover a request in the sidebar and click `⋯` (it stays visible on the open request), or right-click it:
 
 | Action | What it does |
 |--------|--------------|

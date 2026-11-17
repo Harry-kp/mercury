@@ -34,25 +34,6 @@ pub fn truncate(s: &str, max_chars: usize) -> String {
     }
 }
 
-/// A workspace path as the status bar shows it: rooted at `~`, and trimmed
-/// from the *front*, because the tail is the part that identifies a folder.
-pub fn workspace_label(path: &std::path::Path, max_chars: usize) -> String {
-    let text = path.display().to_string();
-    let text = match dirs::home_dir().map(|h| h.display().to_string()) {
-        Some(home) => text
-            .strip_prefix(&home)
-            .map_or(text.clone(), |r| format!("~{r}")),
-        None => text,
-    };
-    let count = text.chars().count();
-    if count <= max_chars {
-        return text;
-    }
-    let mut out = String::from("…");
-    out.extend(text.chars().skip(count - max_chars.saturating_sub(1)));
-    out
-}
-
 pub fn format_bytes(bytes: usize) -> String {
     const KB: f64 = 1024.0;
     let b = bytes as f64;
@@ -1604,14 +1585,6 @@ mod tests {
         assert_eq!(truncate("short", 10), "short");
         assert_eq!(truncate("héllo wörld", 5), "héll…");
         assert_eq!(truncate("日本語のURL", 3), "日本…");
-    }
-
-    #[test]
-    fn workspace_label_keeps_the_tail() {
-        use std::path::Path;
-        assert_eq!(workspace_label(Path::new("/a/b"), 10), "/a/b");
-        assert_eq!(workspace_label(Path::new("/srv/work/api"), 9), "…work/api");
-        assert_eq!(workspace_label(Path::new("/日本語のURL"), 3), "…RL");
     }
 
     #[test]

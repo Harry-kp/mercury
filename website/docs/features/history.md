@@ -18,12 +18,13 @@ Each entry shows:
 - when it was sent ("Just now", "5 min ago", "Yesterday", ...)
 - the status code
 - the response time
+- the environment it was sent with
 
 Newest entries are at the top. The **Search history...** box filters entries by URL.
 
 ## Restoring an entry
 
-Click an entry to load its method, URL, headers and body into the editor and show the stored response. The list then closes. The restored request isn't linked to a file, so press `⌘ S` to save it as a new request.
+Click an entry to show the stored response. If it was sent from a request file that still exists, that file opens; otherwise the method, URL, headers and body are loaded as an unsaved request, which `⌘ S` saves. The response is labelled with the environment it came from, and with **from .env.dev** (say) once a different environment is selected. The list then closes.
 
 Bodies of images and binary responses aren't stored in history. A restored binary response shows its type and size, but you can't save its contents.
 
