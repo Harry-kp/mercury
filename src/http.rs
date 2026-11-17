@@ -247,11 +247,66 @@ fn detect_response_type(content_type: &str, body: &[u8], status: u16) -> Respons
 }
 
 /// Pretty-print JSON; returns the input unchanged if it isn't valid JSON.
+/// Indent valid JSON exactly as written: only whitespace between tokens
+/// changes. Parsing into a `serde_json::Value` and printing it back sorted
+/// keys, rewrote numbers and dropped duplicate keys, so the "Pretty" view
+/// (and Format body) didn't show what was actually sent.
 pub fn format_json(body: &str) -> String {
-    serde_json::from_str::<serde_json::Value>(body)
-        .ok()
-        .and_then(|v| serde_json::to_string_pretty(&v).ok())
-        .unwrap_or_else(|| body.to_string())
+    if serde_json::from_str::<serde::de::IgnoredAny>(body).is_err() {
+        return body.to_string();
+    }
+    let mut out = String::with_capacity(body.len() * 2);
+    let mut depth = 0usize;
+    let (mut in_string, mut escaped) = (false, false);
+    let mut chars = body.trim().chars().peekable();
+    let newline = |out: &mut String, depth: usize| {
+        out.push('\n');
+        out.push_str(&"  ".repeat(depth));
+    };
+    while let Some(c) = chars.next() {
+        if in_string {
+            out.push(c);
+            match (escaped, c) {
+                (true, _) => escaped = false,
+                (false, '\\') => escaped = true,
+                (false, '"') => in_string = false,
+                _ => {}
+            }
+            continue;
+        }
+        match c {
+            '"' => {
+                in_string = true;
+                out.push(c);
+            }
+            '{' | '[' => {
+                while chars.peek().is_some_and(|c| c.is_whitespace()) {
+                    chars.next();
+                }
+                out.push(c);
+                // an empty container stays on one line: `{}` / `[]`
+                if chars.peek() == Some(&if c == '{' { '}' } else { ']' }) {
+                    out.extend(chars.next());
+                } else {
+                    depth += 1;
+                    newline(&mut out, depth);
+                }
+            }
+            '}' | ']' => {
+                depth = depth.saturating_sub(1);
+                newline(&mut out, depth);
+                out.push(c);
+            }
+            ',' => {
+                out.push(',');
+                newline(&mut out, depth);
+            }
+            ':' => out.push_str(": "),
+            c if c.is_whitespace() => {}
+            c => out.push(c),
+        }
+    }
+    out
 }
 
 /// Indent XML one level per open tag. Naive by design: good enough to read.
@@ -490,6 +545,30 @@ mod tests {
         assert_eq!(format_json("{\"a\":1}"), "{\n  \"a\": 1\n}");
         assert_eq!(format_json("not json"), "not json");
         assert_eq!(format_xml("<r><i>t</i></r>"), "<r>\n  <i>t\n  </i>\n</r>");
+    }
+
+    /// Pretty view has to show what the server sent. Going through
+    /// `serde_json::Value` sorted every object's keys, turned integers past
+    /// u64 into floats, rewrote `1.10` as `1.1`, and dropped duplicate keys.
+    #[test]
+    fn pretty_json_keeps_the_server_s_order_and_numbers() {
+        assert_eq!(
+            format_json(r#"{"id":1,"name":"Ada","active":true}"#),
+            "{\n  \"id\": 1,\n  \"name\": \"Ada\",\n  \"active\": true\n}"
+        );
+        let numbers = format_json(r#"{"big":123456789012345678901234,"price":1.10,"exp":1e3}"#);
+        assert!(
+            numbers.contains("123456789012345678901234")
+                && numbers.contains("1.10")
+                && numbers.contains("1e3"),
+            "{numbers}"
+        );
+        assert_eq!(format_json(r#"{"a":1,"a":2}"#).matches("\"a\"").count(), 2);
+        assert_eq!(
+            format_json(r#"{"x":[],"y":{},"s":"a, {b}: [c] \"q\""}"#),
+            "{\n  \"x\": [],\n  \"y\": {},\n  \"s\": \"a, {b}: [c] \\\"q\\\"\"\n}"
+        );
+        assert_eq!(format_json("[1,  2]"), "[\n  1,\n  2\n]");
     }
 
     #[test]

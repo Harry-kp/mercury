@@ -29,6 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The body type reads **Body type: none / JSON / Form / Text**.
 
 ### Fixed
+- **The Pretty view re-sorted JSON keys and rewrote numbers.** It re-serialised the body, so keys came out alphabetical, integers too large for 64 bits turned into floats, `1.10` became `1.1`, and duplicate keys disappeared. **Format body** did the same to the request you were about to send. Both now only re-indent: the text is exactly what was sent.
 - **`⌘ ⇧ C` copied the selected text instead of the request** whenever any text was selected: the selection answered the same copy event after Mercury and won the clipboard. `⌘ ⇧ C` now always copies the request as cURL; plain `⌘ C` still copies a selection.
 - Clicking a sidebar row selected its name as text. Only text you would copy is selectable now: the response body, response headers and cookies, and error messages.
 - An unsaved GET restored on relaunch opened on the Body tab instead of Params.
