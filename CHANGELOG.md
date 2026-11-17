@@ -17,6 +17,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **The `⋯` beside Send is gone.** Copy as cURL and Revert to saved are on the open request's `⋯` in the sidebar (and in `⌘ K`); Format is in the Body tab, where it already was.
 - The install instructions include `brew trust --cask harry-kp/tap/mercury`: Homebrew 7 refuses casks from untrusted taps, so the one-line install failed.
 
+### Fixed
+- **A multi-line cURL pasted into the URL bar imports.** The one-line field turned its line breaks into spaces first, so a command continued with `\` came in with a URL of `" "`.
+- A pasted cURL with `-d` and no `Content-Type` gets `application/x-www-form-urlencoded`, which is what curl sends; short flags sharing one dash (`-sX POST`, `-sI`) are read as curl reads them.
+- Editing a param in the table keeps a `#fragment` at the end of the URL; the new query went after it and was never sent.
+- `localhost:3000/go?to=https://…` and `[::1]:8080` get `http://` like any other scheme-less local URL.
+- A line break typed or pasted into the Token field no longer splits the `Authorization` header and sends half a token.
+- **Format** on a body that isn't valid JSON says where it fails, instead of doing nothing.
+- A double-click on **Send** no longer cancels the request it just sent (the second click landed on Stop).
+- The Auth tab's **Sent as** line cuts a long token short instead of running past the panel and pushing its copy button out of sight.
+
 ## [0.4.3] - 2026-11-17
 
 The first published build of the 0.4 line: everything below, and everything listed under 0.4.0.
