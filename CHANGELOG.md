@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Send a sample request** under **Try this**, before you've sent anything: one click opens a new request to a free public JSON API and sends it, so a first run shows a real response without needing an API of your own (Bruno ships a sample collection for the same reason).
 - **Revert to saved** (URL-bar `⋯`, `⌘ K`) puts the open file back the way it was when you opened it. Autosave writes every edit within seconds, so this was the missing undo.
 - **Rename, Duplicate and Delete for the open request in `⌘ K`**, and a `⋯` on sidebar rows (hover, or the open request) with the same menu as right-click, which nothing on screen advertised.
 - **Save…** next to the breadcrumb for a request that isn't a file yet. `⌘ S` was the only way, and it was mentioned only in the first-run tips.
@@ -37,6 +38,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The body type reads **Body type: none / JSON / Form / Text**.
 
 ### Fixed
+- The **⌘ ⏎ to send** hint in the empty response panel was left-aligned under a centred title.
 - **About one history entry in eight wouldn't open** once it had been written to disk: its timestamp, which identifies it, was read back from the file a hair off. Timestamps now survive the file exactly.
 - **Pasted cURL commands that came out wrong:** repeated `-d` kept only the last one (curl joins them with `&`); `--data-urlencode` was ignored; `-XPOST` and other values glued to their flag were ignored; `-G` sent the data as a POST body instead of the query string; bash's `$'…'` quoting (Chrome's Copy as cURL for bodies with quotes or newlines) kept the `$` and the backslashes; and `-F` took the form field as the URL. `-F` now says multipart isn't supported.
 - `.env` files with `export KEY=value` lines or a byte-order mark (some Windows editors add one) lost those variables.

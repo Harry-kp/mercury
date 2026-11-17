@@ -738,6 +738,22 @@ fn open_send_edit_and_save() {
     );
     drop(many);
 
+    // first run: one click gives a working request without an API of your
+    // own, opened as a new request so no saved file is touched
+    let mut first = Harness::builder()
+        .with_size(egui::vec2(1200.0, 800.0))
+        .build_state(
+            |ctx, app: &mut MercuryApp| app.frame(ctx),
+            MercuryApp::new(&egui::Context::default()),
+        );
+    first.state_mut().response = None;
+    first.run_steps(2);
+    first.get_by_label("Send a sample request").click();
+    first.run_steps(2);
+    assert!(first.state().url.ends_with("typicode.com/users"));
+    assert_eq!(first.state().current_file, None);
+    drop(first);
+
     // quitting and relaunching reopens the request that was open, instead of
     // orphaning it into an "Untitled" unsaved request
     harness.state_mut().open_file(&file);

@@ -104,16 +104,50 @@ impl MercuryApp {
             ui.add_space(Space::SM);
             ui.label(muted("The response lands here."));
             ui.add_space(Space::XXL);
+            // a horizontal row claims the full width, so centre it by hand
+            // with last frame's width
+            let id = ui.id().with("send_hint");
+            let width: f32 = ui.data(|d| d.get_temp(id)).unwrap_or(0.0);
             ui.horizontal(|ui| {
+                ui.add_space(((ui.available_width() - width) / 2.0).max(0.0));
+                let start = ui.cursor().min.x;
                 ui.spacing_mut().item_spacing.x = Space::SM;
                 key_combo(ui, "⌘ ⏎");
                 ui.label(faint("to send"));
+                let used = ui.min_rect().right() - start;
+                ui.data_mut(|d| d.insert_temp(id, used));
             });
         });
 
         ui.add_space(Space::HUGE);
         ui.label(widgets::section_label("Try this"));
         ui.add_space(Space::MD);
+        // Something that works before the user has an API of their own
+        // (Bruno ships a sample collection for the same reason). Opens as a
+        // new request, so it never touches a saved file.
+        let sample = ui
+            .horizontal_wrapped(|ui| {
+                ui.spacing_mut().item_spacing.x = Space::MD;
+                widgets::glyph(ui, Icon::Play, 11.0, t.accent);
+                let link = widgets::link(ui, muted("Send a sample request").color(t.accent));
+                ui.label(faint(SAMPLE_HOST));
+                link
+            })
+            .inner;
+        if sample.clicked() {
+            self.autosave();
+            self.load_request(
+                crate::model::Request {
+                    method: crate::model::HttpMethod::GET,
+                    url: format!("https://{SAMPLE_HOST}/users"),
+                    headers: String::new(),
+                    body: String::new(),
+                },
+                None,
+            );
+            self.send_request();
+        }
+        ui.add_space(Space::SM);
         for tip in [
             "Paste a cURL command into the URL bar",
             "Use {{VARIABLE}} anywhere, defined in a .env file",
@@ -467,6 +501,9 @@ impl MercuryApp {
         }
     }
 }
+
+/// A free, long-lived public JSON API, for the first-run sample request.
+const SAMPLE_HOST: &str = "jsonplaceholder.typicode.com";
 
 fn content_kind(content_type: &str) -> (Icon, &'static str) {
     let ct = content_type.to_lowercase();

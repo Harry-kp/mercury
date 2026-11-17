@@ -25,6 +25,8 @@ You don't need a workspace to send a request.
 1. Click the URL bar (or press `⌘ L`) and type `httpbin.org/get`. A URL without a scheme gets one: `http` for `localhost`, `https` for anything else.
 2. Press `⌘ Enter`, or click **Send**.
 
+Or, before you've sent anything, click **Send a sample request** under **Try this** in the response panel. It opens a new request to a free public JSON API (`jsonplaceholder.typicode.com/users`) and sends it.
+
 The response panel shows the status, response time and size, followed by the body. JSON is pretty-printed and highlighted. While a request is running, press `Esc` or click the stop button to cancel it.
 
 Requests you send without saving appear under **Unsaved** in the sidebar. Click one to load it again, or click **Save…** next to the breadcrumb to keep it.
