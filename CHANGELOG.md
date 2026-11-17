@@ -29,6 +29,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The body type reads **Body type: none / JSON / Form / Text**.
 
 ### Fixed
+- **`⌘ ⇧ C` (Copy as cURL) did nothing outside the tests.** The window layer turns any `⌘ C`, with or without `⇧`, into a copy event and never reports the key, so the shortcut never fired. It listens for that event now.
+- **`⌘ F` could crash Mercury under VoiceOver or another accessibility tool.** It put focus on the find field a frame before the field existed, and the accessibility layer rejects a focused element that isn't on screen. Focus requests from shortcuts and the palette now wait for the next frame, and `⌘ F` does nothing when there's no response to search.
+- `⌘ K` found nothing for two-word searches such as "list ord": the space had to match a character in the name. Each word now matches on its own.
+- Switching the auth type and back (Bearer → Basic → Bearer) threw away the token you had entered. Each type's value is kept while the request is open.
+- The Basic auth Username and Password fields had no name for screen readers.
+- A blank name in the New request / New folder / Rename dialog did nothing when confirmed; it now says "Type a name first". A name like `../x` is reported as a path rather than "cannot start with a dot".
+- On wide windows the response panel now starts wider (up to 720 px instead of 480 px).
 - **Every text field reached screen readers as just "text field"**, and header and param checkboxes had no name. Fields are named ("URL", "Filter requests", "Request body", "Key 2"…) and checkboxes say which row they enable. The folder and environment chips draw a focus ring, and Tab now walks the top bar in the order it is drawn.
 - At the minimum window size the request and response tab rows were drawn on top of their own controls ("Auth" over the body type; "Cookies" under copy and Pretty/Raw). The controls now move to a second line when there's no room.
 - **Pasting a cURL into a saved request overwrote the file.** The cURL replaced the method, headers and body, autosave wrote that over the request file within seconds, and `⌘ Z` only brought back the URL. A cURL pasted over a saved request now opens as a new unsaved request. Typing `curl …` by hand no longer re-parses on every keystroke.

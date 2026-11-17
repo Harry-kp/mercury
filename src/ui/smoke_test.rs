@@ -3,6 +3,7 @@
 //! Copy a block from here to reproduce a UI bug before fixing it.
 
 use super::app::{Dialog, MercuryApp, Tab};
+use crate::kv;
 use eframe::egui::{self, accesskit, Key, Modifiers};
 use egui_kittest::{kittest::Queryable, Harness};
 use std::io::{Read, Write};
@@ -209,6 +210,18 @@ fn open_send_edit_and_save() {
         "the Find button opens the find bar"
     );
     harness.state_mut().find = None;
+    // ⌘F used to put focus on the find field a frame before it existed, so
+    // the accessibility tree named a focused node that wasn't in it, which
+    // is what the platform adapters (and kittest) panic on. Typing must
+    // land in the field.
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::F);
+    harness.run_steps(2);
+    harness.event(egui::Event::Text("Bearer".into()));
+    harness.run_steps(2);
+    assert_eq!(harness.state().find.as_deref(), Some("Bearer"));
+    harness.key_press(Key::Escape);
+    harness.run_steps(2);
+    assert!(harness.state().find.is_none(), "Esc closes the find bar");
     // saved requests don't go to Recent
     assert!(harness.state().recent.is_empty());
 
@@ -410,6 +423,30 @@ fn open_send_edit_and_save() {
         .headers_text
         .contains("Authorization: Bearer"));
 
+    // the Basic fields are named for screen readers (they had no hint, so
+    // they had no name), and switching type and back keeps what was typed
+    harness.state_mut().headers_text =
+        kv::set_auth(&harness.state().headers_text, Some("Bearer tok-123"));
+    harness.run_steps(2);
+    harness
+        .get_by_role_and_label(accesskit::Role::RadioButton, "Basic")
+        .click();
+    harness.run_steps(2);
+    harness.get_by_role_and_label(accesskit::Role::TextInput, "Username");
+    harness.get_by_role_and_label(accesskit::Role::TextInput, "Password");
+    harness
+        .get_by_role_and_label(accesskit::Role::RadioButton, "Bearer")
+        .click();
+    harness.run_steps(2);
+    assert!(
+        harness
+            .state()
+            .headers_text
+            .contains("Authorization: Bearer tok-123"),
+        "switching auth type and back lost the token: {}",
+        harness.state().headers_text
+    );
+
     // Copy as cURL has a visible door: the request's "…" menu.
     harness
         .get_by_role_and_label(accesskit::Role::Button, "Request actions")
@@ -423,6 +460,20 @@ fn open_send_edit_and_save() {
         harness.state().toast.as_ref().map(|t| t.text.as_str()),
         Some("Copied as cURL")
     );
+
+    // ⌘⇧C as the real app receives it: egui-winit turns any ⌘C, with or
+    // without ⇧, into Event::Copy and never reports the C key, so a shortcut
+    // waiting for the key never fired outside tests.
+    harness.state_mut().toast = None;
+    harness.event_modifiers(egui::Event::Copy, Modifiers::COMMAND | Modifiers::SHIFT);
+    harness.step(); // (kittest keeps only the last of the frames it runs here,
+                    // so the clipboard write itself isn't visible; the toast is)
+    assert_eq!(
+        harness.state().toast.as_ref().map(|t| t.text.as_str()),
+        Some("Copied as cURL"),
+        "⌘⇧C arrives as Event::Copy and must still copy the request"
+    );
+    harness.run_steps(2);
     for _ in 0..400 {
         harness.step(); // well past the autosave interval
     }

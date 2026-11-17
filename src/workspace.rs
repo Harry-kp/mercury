@@ -98,11 +98,12 @@ fn safe_name(name: &str) -> Result<&str, String> {
     if name.is_empty() {
         return Err("Name cannot be empty".into());
     }
-    if name.starts_with('.') {
-        return Err("Name cannot start with a dot".into());
-    }
+    // the path check comes first: "../x" is a path, not a dot-file
     if name.contains(['/', '\\']) || name.contains("..") {
         return Err("Name cannot contain a path".into());
+    }
+    if name.starts_with('.') {
+        return Err("Name cannot start with a dot".into());
     }
     Ok(name)
 }
@@ -216,6 +217,17 @@ pub fn watch(
 
 #[cfg(test)]
 mod tests {
+    /// `../x` is a path; saying "cannot start with a dot" points at the
+    /// wrong rule.
+    #[test]
+    fn a_path_is_reported_as_a_path() {
+        assert_eq!(safe_name("../x").unwrap_err(), "Name cannot contain a path");
+        assert_eq!(
+            safe_name(".env").unwrap_err(),
+            "Name cannot start with a dot"
+        );
+    }
+
     #[test]
     fn count_contents_sees_nested_requests_and_other_files() {
         let dir = tempfile::TempDir::new().unwrap();

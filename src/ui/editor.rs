@@ -483,15 +483,27 @@ impl MercuryApp {
     }
 
     /// Switching auth type rewrites the Authorization header.
+    /// Switching type keeps what was typed for the old one, so clicking
+    /// Basic to look and back to Bearer doesn't throw the token away.
     fn set_auth_mode(&mut self, from: AuthMode, to: AuthMode) {
         if from == to {
             return;
         }
+        let slot = |m: AuthMode| AuthMode::ALL.iter().position(|x| *x == m).unwrap_or(0);
+        if let Some(old) = kv::auth_value(&self.headers_text) {
+            self.auth_stash[slot(from)] = Some(old.to_string());
+        }
         let value = match to {
             AuthMode::None => None,
-            AuthMode::Basic => Some(kv::basic_auth("", "")),
-            AuthMode::Bearer => Some("Bearer ".to_string()),
-            AuthMode::Custom => Some(String::new()),
+            _ => Some(
+                self.auth_stash[slot(to)]
+                    .clone()
+                    .unwrap_or_else(|| match to {
+                        AuthMode::Basic => kv::basic_auth("", ""),
+                        AuthMode::Bearer => "Bearer ".to_string(),
+                        _ => String::new(),
+                    }),
+            ),
         };
         self.headers_text = kv::set_auth(&self.headers_text, value.as_deref());
     }
@@ -506,7 +518,10 @@ impl MercuryApp {
                 ui.label(section_label(label));
                 ui.add_space(Space::SM);
                 let changed = if rows == 1 {
-                    widgets::text_input(ui, id, text, hint, 0.0).changed()
+                    let field = widgets::text_input(ui, id, text, hint, 0.0);
+                    // named by its label: the hint is empty for these
+                    widgets::name(&field, label);
+                    field.changed()
                 } else {
                     widgets::field_frame()
                         .show(ui, |ui| {

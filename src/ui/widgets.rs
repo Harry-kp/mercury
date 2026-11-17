@@ -1553,16 +1553,28 @@ pub fn input_modal(
         if !entered && ui.memory(|m| m.focused().is_none()) {
             field.request_focus();
         }
+        // a blank name can't be confirmed; say so instead of doing nothing
+        let blank_id = egui::Id::new("modal_input_blank");
+        if !text.trim().is_empty() {
+            ui.data_mut(|d| d.remove::<bool>(blank_id));
+        } else if ui.data(|d| d.get_temp::<bool>(blank_id)).unwrap_or(false) {
+            ui.add_space(Space::SM);
+            ui.label(muted("Type a name first").color(theme().warning));
+        }
         ui.add_space(Space::XL);
         let mut action = modal_buttons(ui, confirm, false);
         if entered {
             action = ModalAction::Confirm;
         }
         if action == ModalAction::Confirm && text.trim().is_empty() {
-            ModalAction::Open
-        } else {
-            action
+            ui.data_mut(|d| d.insert_temp(blank_id, true));
+            field.request_focus();
+            return ModalAction::Open;
         }
+        if action != ModalAction::Open {
+            ui.data_mut(|d| d.remove::<bool>(blank_id));
+        }
+        action
     })
 }
 
@@ -1831,7 +1843,7 @@ mod tests {
     /// it, which erased `lost_focus` and swallowed the confirm.
     #[test]
     fn input_modal_confirms_on_enter() {
-        use egui_kittest::Harness;
+        use egui_kittest::{kittest::Queryable, Harness};
 
         let mut harness = Harness::builder().build_state(
             |ctx, state: &mut (String, ModalAction)| {
@@ -1849,6 +1861,13 @@ mod tests {
             (String::new(), ModalAction::Open),
         );
         harness.run_steps(3);
+        // a blank name says so, instead of Enter silently doing nothing
+        harness.event(egui::Event::Text("   ".into()));
+        harness.key_press(egui::Key::Enter);
+        harness.run_steps(3);
+        assert_eq!(harness.state().1, ModalAction::Open);
+        harness.get_by_label("Type a name first");
+        harness.state_mut().0.clear();
         harness.event(egui::Event::Text("signup".into()));
         harness.run_steps(2);
         assert_eq!(harness.state().0, "signup", "typing must reach the field");

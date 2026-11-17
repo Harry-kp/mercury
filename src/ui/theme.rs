@@ -270,7 +270,9 @@ impl Layout {
     }
 
     pub fn response_default(window: f32) -> f32 {
-        (window * 0.36).clamp(Self::RESPONSE_MIN, 480.0)
+        // the response is what you read: let it grow on wide screens
+        // instead of leaving the request editor most of the window
+        (window * 0.36).clamp(Self::RESPONSE_MIN, 720.0)
     }
 
     pub fn response_max(window: f32) -> f32 {

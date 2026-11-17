@@ -170,9 +170,19 @@ fn request_row(request: &RequestEntry) -> Row {
     }
 }
 
-/// `None` = no match. Higher is better: a match at a word start beats one
-/// mid-word, which beats a scattered subsequence ("nr" finds "New request").
+/// `None` = no match. Every word of the query has to match on its own, so
+/// "list ord" finds "orders/list-orders"; the scores add up.
 fn score(haystack: &str, needle: &str) -> Option<i32> {
+    // an empty query sums to Some(0); any word that misses makes it None
+    needle
+        .split_whitespace()
+        .map(|word| score_word(haystack, word))
+        .sum()
+}
+
+/// Higher is better: a match at a word start beats one mid-word, which beats
+/// a scattered subsequence ("nr" finds "New request").
+fn score_word(haystack: &str, needle: &str) -> Option<i32> {
     if needle.is_empty() {
         return Some(0);
     }
@@ -353,6 +363,20 @@ mod tests {
         assert!(mid > fuzzy, "substrings outrank subsequences");
         assert!(score("New request", "zzz").is_none());
         assert_eq!(score("anything", ""), Some(0));
+    }
+
+    /// "list ord" is two words; the space used to have to match a character
+    /// in the name, so a natural two-word search found nothing.
+    #[test]
+    fn every_word_of_a_query_matches_on_its_own() {
+        assert!(score("orders/list-orders", "list ord").is_some());
+        assert!(score("New request", "req new").is_some());
+        assert!(score("Copy as cURL", "copy  curl").is_some());
+        assert!(score("New request", "new zzz").is_none());
+        assert!(
+            score("orders/list-orders", "list ord") > score("orders/list-orders", "lst rd"),
+            "word starts still outrank scattered letters"
+        );
     }
 
     #[test]
