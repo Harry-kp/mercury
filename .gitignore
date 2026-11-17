@@ -7,3 +7,7 @@
 *.log
 .DS_Store
 .claude/settings.local.json
+
+# film.py working folders (captured frames, rendered frames)
+assets/media/frames/
+assets/media/out/
