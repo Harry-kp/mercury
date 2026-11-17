@@ -230,15 +230,19 @@ impl MercuryApp {
             return;
         }
 
-        let (up, down, enter, escape) = ctx.input_mut(|i| {
+        let (up, down, enter, escape, again) = ctx.input_mut(|i| {
             (
                 i.consume_key(egui::Modifiers::NONE, Key::ArrowUp),
                 i.consume_key(egui::Modifiers::NONE, Key::ArrowDown),
                 i.consume_key(egui::Modifiers::NONE, Key::Enter),
                 i.key_pressed(Key::Escape),
+                i.key_pressed(Key::K) && i.modifiers.command,
             )
         });
-        if escape {
+        // ⌘K again closes it, but not the ⌘K that opened it this frame (it
+        // has no rows yet)
+        let shown = self.palette.as_ref().is_some_and(|p| p.rows_for.is_some());
+        if escape || (again && shown) {
             self.palette = None;
             return;
         }

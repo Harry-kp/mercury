@@ -49,16 +49,14 @@ pub fn parse_lines(text: &str, sep: &str) -> Vec<KeyValue> {
         .collect()
 }
 
-/// Inverse of [`parse_lines`]; drops empty rows.
+/// Inverse of [`parse_lines`]; drops empty rows. The separator stays even
+/// with no value: a bare `X-Empty` line isn't a header, so it was never sent
+/// or saved.
 pub fn format_lines(rows: &[KeyValue], sep: &str) -> String {
     rows.iter()
         .filter(|r| !r.is_empty())
         .map(|r| {
-            let line = if r.value.is_empty() {
-                r.key.clone()
-            } else {
-                format!("{}{}{}", r.key, sep, r.value)
-            };
+            let line = format!("{}{}{}", r.key, sep, r.value);
             if r.enabled {
                 line
             } else {
@@ -434,8 +432,19 @@ mod tests {
 
     #[test]
     fn format_lines_is_inverse_of_parse() {
-        let text = "a=1\n# b=2\nflag";
+        let text = "a=1\n# b=2\nflag=";
         assert_eq!(format_lines(&parse_lines(text, "="), "="), text);
+    }
+
+    /// A header added in the table with no value yet was written as a bare
+    /// `X-Empty` line, which isn't a header: never sent, gone on reload.
+    #[test]
+    fn a_header_with_an_empty_value_is_kept() {
+        let text = format_lines(&[KeyValue::new("X-Empty", "")], ":");
+        assert_eq!(
+            headers_to_map(&text).get("X-Empty").map(String::as_str),
+            Some("")
+        );
     }
 
     #[test]
