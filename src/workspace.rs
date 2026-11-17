@@ -111,7 +111,8 @@ pub fn env_files(root: &Path) -> Vec<String> {
         // the entry's own type: not followed through a link
         .filter(|e| e.file_type().is_ok_and(|t| t.is_file()))
         .map(|e| file_name(&e.path()))
-        .filter(|n| n.starts_with(".env"))
+        // not `.envrc` (direnv) or anything else that merely starts with it
+        .filter(|n| n == ".env" || n.starts_with(".env."))
         .collect();
     names.sort();
     names
@@ -504,6 +505,8 @@ mod tests {
         fs::write(dir.path().join(".env"), "").unwrap();
         fs::create_dir(dir.path().join("sub")).unwrap();
         fs::write(dir.path().join("sub/.env.nested"), "").unwrap();
+        // direnv's script, not an environment
+        fs::write(dir.path().join(".envrc"), "use nix").unwrap();
         assert_eq!(env_files(dir.path()), vec![".env", ".env.prod"]);
     }
 

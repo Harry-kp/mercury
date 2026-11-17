@@ -79,7 +79,8 @@ impl MercuryApp {
                         };
                         crate::vars::for_each_var(text, |name, range| {
                             put(&mut job, &text[at..range.start], t.text);
-                            let c = if env.contains_key(name) {
+                            // `{{$guid}}` needs no definition: not amber
+                            let c = if env.contains_key(name) || vars::dynamic(name).is_some() {
                                 t.accent
                             } else {
                                 t.warning
@@ -109,7 +110,14 @@ impl MercuryApp {
                     });
                     let resolved = vars::substitute(&self.url, &self.env_vars);
                     let url = if let Some(name) = hovered_var {
-                        let tip = match (self.env_vars.get(&name), self.env_name()) {
+                        let source = self.env_name().map(|env| {
+                            if self.env_shared.contains(&name) {
+                                ".env"
+                            } else {
+                                env
+                            }
+                        });
+                        let tip = match (self.env_vars.get(&name), source) {
                             (None, _) if vars::dynamic(&name).is_some() => {
                                 format!("{{{{{name}}}}}: a fresh value at every send")
                             }
@@ -153,9 +161,11 @@ impl MercuryApp {
     /// Undefined variables, said in words under the URL bar. An amber border
     /// explained only on hover sent people to the server's 404 instead.
     fn undefined_line(&self, ui: &mut Ui) {
-        let all = format!("{} {} {}", self.url, self.headers_text, self.body_text);
-        let undefined: BTreeSet<String> = vars::extract(&all)
+        // each text on its own: joined, an unclosed `{{x` in the URL ran
+        // on into the headers and named a variable "x Authorization: …"
+        let undefined: BTreeSet<String> = [&self.url, &self.headers_text, &self.body_text]
             .into_iter()
+            .flat_map(|t| vars::extract(t))
             .filter(|v| !self.env_vars.contains_key(v))
             .collect();
         if undefined.is_empty() {

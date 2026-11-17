@@ -4,6 +4,7 @@ use std::collections::HashMap;
 
 /// Parse dotenv content: `KEY=VALUE` lines, `#` comments, matching quotes
 /// stripped, a shell-style `export ` prefix and a byte-order mark ignored.
+/// A bare `KEY` is empty: it's how the table editor writes a row with no value.
 pub fn parse_env(content: &str) -> HashMap<String, String> {
     content
         .trim_start_matches('\u{feff}')
@@ -13,21 +14,40 @@ pub fn parse_env(content: &str) -> HashMap<String, String> {
             l.strip_prefix("export ").unwrap_or(l)
         })
         .filter(|l| !l.is_empty() && !l.starts_with('#'))
-        .filter_map(|l| l.split_once('='))
+        .map(|l| l.split_once('=').unwrap_or((l, "")))
         .map(|(k, v)| {
             let v = v.trim();
             let quoted = v.len() >= 2
                 && ((v.starts_with('"') && v.ends_with('"'))
                     || (v.starts_with('\'') && v.ends_with('\'')));
             let v = match (quoted, v.starts_with('"')) {
-                // `env_value` writes `"` as `\"` and a newline as `\n`
-                (true, true) => v[1..v.len() - 1].replace("\\n", "\n").replace("\\\"", "\""),
+                (true, true) => unescape(&v[1..v.len() - 1]),
                 (true, false) => v[1..v.len() - 1].to_string(),
                 _ => v.to_string(),
             };
             (k.trim().to_string(), v)
         })
         .collect()
+}
+
+/// Inside double quotes: `\n` is a newline, `\"` a quote and `\\` a
+/// backslash (what `env_value` writes); any other backslash is kept.
+fn unescape(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut chars = s.chars();
+    while let Some(c) = chars.next() {
+        if c != '\\' {
+            out.push(c);
+            continue;
+        }
+        match chars.next() {
+            Some('n') => out.push('\n'),
+            Some(c @ ('"' | '\\')) => out.push(c),
+            Some(c) => out.extend(['\\', c]),
+            None => out.push('\\'),
+        }
+    }
+    out
 }
 
 /// A key as `.env` can hold it. Kept as-is (requests reference them as
@@ -53,8 +73,10 @@ pub fn env_key(key: &str) -> String {
 
 /// A value as `.env` can hold it, so `parse_env` reads back exactly `value`.
 pub fn env_value(value: &str) -> String {
-    if value.contains(['=', '\n', '"', ' ']) {
-        format!("\"{}\"", value.replace('"', "\\\"").replace('\n', "\\n"))
+    // quotes or spaces at either end would be stripped on the way back
+    if value.contains(['=', '\n', '"', '\'', ' ', '\\']) || value.trim() != value {
+        let escaped = value.replace('\\', "\\\\").replace('"', "\\\"");
+        format!("\"{}\"", escaped.replace('\n', "\\n"))
     } else {
         value.to_string()
     }
@@ -69,10 +91,10 @@ pub fn set_env_var(content: &str, key: &str, value: &str) -> String {
     let mut out: Vec<String> = content
         .lines()
         .map(|l| {
-            let t = l.trim();
+            let t = l.trim().trim_start_matches('\u{feff}');
             let bare = t.strip_prefix("export ").unwrap_or(t);
-            match bare.split_once('=') {
-                Some((k, _)) if k.trim() == key && !t.starts_with('#') => {
+            match bare.split_once('=').unwrap_or((bare, "")) {
+                (k, _) if k.trim() == key && !t.starts_with('#') => {
                     found = true;
                     line.clone()
                 }
@@ -212,6 +234,32 @@ mod tests {
         let added = set_env_var(&out, "user id", "42");
         assert_eq!(parse_env(&added)["user_id"], "42");
         assert_eq!(parse_env(&added)["BASE"], "http://x");
+        // a response value is anything: quotes at the ends, escapes as text
+        for value in [
+            "'quoted'",
+            "\"x\"",
+            r"C:\new folder",
+            r#"{"a":"b\nc"}"#,
+            r"trailing\",
+            " padded\t",
+            "",
+        ] {
+            let out = set_env_var("", "V", value);
+            assert_eq!(parse_env(&out)["V"], value, "{out}");
+        }
+        // a BOM before the key, or a bare key, is still that key: replaced,
+        // not added a second time
+        for env in ["\u{feff}TOKEN=old\n", "TOKEN\n"] {
+            let out = set_env_var(env, "TOKEN", "new");
+            assert_eq!(out.matches("TOKEN").count(), 1, "{out}");
+        }
+    }
+
+    /// The table editor writes a row with an empty value as a bare `KEY`
+    /// (no `=`): it has to stay defined, not vanish.
+    #[test]
+    fn a_bare_key_is_an_empty_variable() {
+        assert_eq!(parse_env("A\nB=1")["A"], "");
     }
 
     #[test]
