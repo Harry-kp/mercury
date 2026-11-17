@@ -203,9 +203,7 @@ pub fn generate(
     body: &str,
 ) -> String {
     let mut curl = format!("curl -X {} {}", method.as_str(), shell_quote(url));
-    let multipart = headers
-        .iter()
-        .any(|(k, v)| k.eq_ignore_ascii_case("content-type") && v.contains("multipart/form-data"));
+    let multipart = crate::http::is_multipart(headers);
     for (k, v) in headers {
         // curl writes its own, with the boundary
         if !(multipart && k.eq_ignore_ascii_case("content-type")) {
@@ -215,10 +213,13 @@ pub fn generate(
     if multipart {
         for row in crate::kv::parse_lines(body, "=") {
             if row.enabled && !row.key.is_empty() {
-                // `@@x` is the text `@x`, which only --form-string sends as text
-                let (flag, value) = match row.value.strip_prefix("@@") {
-                    Some(rest) => ("--form-string", format!("@{rest}")),
-                    None => ("-F", row.value),
+                // -F only for real files: curl reads `@path` and `<path` in a
+                // -F value from disk, so every text field is --form-string
+                // (`@@x` is the text `@x`)
+                let (flag, value) = match row.value.strip_prefix('@') {
+                    Some(rest) if rest.starts_with('@') => ("--form-string", rest.to_string()),
+                    Some(_) => ("-F", row.value),
+                    None => ("--form-string", row.value),
                 };
                 let field = format!("{}={value}", row.key);
                 curl.push_str(&format!(" \\\n  {flag} {}", shell_quote(&field)));
@@ -336,7 +337,20 @@ mod tests {
             &headers,
             "name=Ada\n# off=1",
         );
-        assert!(cmd.contains("-F 'name=Ada'") && !cmd.contains("off") && !cmd.contains("-H"));
+        assert!(
+            cmd.contains("--form-string 'name=Ada'") && !cmd.contains("off") && !cmd.contains("-H")
+        );
+        // -F only for a real file: curl would read `<path` in a -F text value
+        let cmd = generate(
+            HttpMethod::POST,
+            "https://a.com",
+            &headers,
+            "a=<x\nf=@/tmp/f",
+        );
+        assert!(
+            cmd.contains("--form-string 'a=<x'") && cmd.contains("-F 'f=@/tmp/f'"),
+            "{cmd}"
+        );
         // --form-string's `@` is text both ways (Mercury writes it `@@`)
         let r = parse("curl --form-string 'a=@x' https://a.com").unwrap();
         assert_eq!(r.body.as_deref(), Some("a=@@x"));

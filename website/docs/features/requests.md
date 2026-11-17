@@ -27,7 +27,7 @@ The body type sits at the right of the tab row and writes the `Content-Type` hea
 |------|--------|--------|
 | **JSON** | `application/json` | Highlighted, with a format button |
 | **Form** | `application/x-www-form-urlencoded` | A table; values are percent-encoded into `a=1&b=2` |
-| **Multipart** | `multipart/form-data` | A table of fields. A value starting with `@` is a file path, sent as an upload (`@@` for text that starts with `@`); **Attach file…** picks one. Variables are filled in field by field, so a variable's value is always text, never a file or an extra field. The boundary is added when the request is sent. |
+| **Multipart** | `multipart/form-data` | A table of fields. A value starting with `@` is a file path, sent as an upload (`@@` for text that starts with `@`); **Attach file…** picks one. Variables are filled in field by field, so a variable's value is always text, never a file or an extra field, and file paths are used exactly as written (no variables). The boundary is added when the request is sent. |
 | **Text** | `text/plain` | Plain |
 | **none** | none | Plain |
 
