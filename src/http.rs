@@ -7,9 +7,6 @@ use std::time::{Duration, Instant};
 pub const TIMEOUT_SECS: u64 = 30;
 /// Bodies larger than this are not downloaded ("Response Too Large").
 pub const MAX_RESPONSE_SIZE: usize = 10 * 1024 * 1024;
-/// Text bodies larger than this are not rendered inline: highlighting
-/// thousands of spans per frame would drop the UI below 60fps.
-pub const MAX_INLINE_SIZE: usize = 100 * 1024;
 
 /// How the response panel renders a body. Serialized by name in history.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -22,7 +19,8 @@ pub enum ResponseType {
     Binary,
     /// Exceeded MAX_RESPONSE_SIZE; body not downloaded.
     TooLarge,
-    /// Text over MAX_INLINE_SIZE; offered as a download instead.
+    /// Written by Mercury < 0.4 for text over 100 KB, which it wouldn't
+    /// show. Kept so old history still loads; it is shown as plain text.
     LargeText,
     Empty,
 }
@@ -42,6 +40,10 @@ pub struct HttpResponse {
     pub size_bytes: usize,
     pub content_type: String,
     pub response_type: ResponseType,
+    /// The pretty-printed body (JSON/XML), made on the request thread so a
+    /// multi-megabyte body doesn't stall the first frame. Not persisted.
+    #[serde(skip)]
+    pub pretty: Option<String>,
 }
 
 /// One client for the whole session so cookies persist across requests.
@@ -125,6 +127,12 @@ pub fn execute(
         _ => (String::from_utf8_lossy(&bytes).into_owned(), None),
     };
 
+    // pretty-print here, on the request thread, not in the first frame
+    let pretty = match response_type {
+        ResponseType::Json => Some(format_json(&body)),
+        ResponseType::Xml => Some(format_xml(&body)),
+        _ => None,
+    };
     Ok(HttpResponse {
         status: status.as_u16(),
         status_text: status.to_string(),
@@ -136,6 +144,7 @@ pub fn execute(
         size_bytes,
         content_type,
         response_type,
+        pretty,
     })
 }
 
@@ -209,10 +218,6 @@ fn detect_response_type(content_type: &str, body: &[u8], status: u16) -> Respons
         || ["zip", "tar", "gzip"].iter().any(|w| ct.contains(w))
     {
         return ResponseType::Binary;
-    }
-    // after Image/Binary so large images stay images
-    if body.len() > MAX_INLINE_SIZE {
-        return ResponseType::LargeText;
     }
     if ct.contains("application/json") || ct.contains("+json") {
         return ResponseType::Json;
@@ -534,12 +539,11 @@ mod tests {
 
     #[test]
     fn size_limits() {
-        let big = vec![b'a'; MAX_INLINE_SIZE + 1];
-        assert_eq!(
-            detect_response_type("application/json", &big, 200),
-            LargeText
-        );
-        assert_eq!(detect_response_type("image/svg+xml", &big, 200), LargeText);
+        // a big body keeps its type: Mercury shows text of any size now
+        // (it used to become `LargeText`, "too large to show", past 100 KB)
+        let big = vec![b'a'; 5 * 1024 * 1024];
+        assert_eq!(detect_response_type("application/json", &big, 200), Json);
+        assert_eq!(detect_response_type("image/svg+xml", &big, 200), Xml);
         assert_eq!(detect_response_type("image/jpeg", &big, 200), Image);
         assert_eq!(
             detect_response_type("application/json", &[b'{'; 100], 200),

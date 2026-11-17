@@ -203,7 +203,7 @@ There's no settings screen. These are fixed:
 | Timeout | 30 seconds |
 | Redirects | Followed (up to 10) |
 | Largest response downloaded | 10 MB |
-| Largest body shown inline | 100 KB (bigger ones offer **Save**) |
+| Largest body shown inline | Any size up to the download limit, syntax-coloured |
 | App data | `~/.mercury/` (session, recent, history). Set `MERCURY_HOME` to use another folder. |
 
 ---

@@ -16,14 +16,13 @@ Mercury aims to stay responsive, and it does this with a few design choices rath
 
 ## Response size limits
 
-Two constants in `src/http.rs` control how much of a response Mercury handles:
+One constant in `src/http.rs` limits how much of a response Mercury handles:
 
 | Limit | Value | What happens |
 |-------|-------|--------------|
 | `MAX_RESPONSE_SIZE` | 10 MB | If the server's `Content-Length` is larger, the body isn't downloaded and the panel shows **Response Too Large**. |
-| `MAX_INLINE_SIZE` | 100 KB | Text bodies larger than this aren't shown in the panel. You get a **Save** link so you can open the body in an editor. |
 
-The inline limit exists because syntax highlighting builds thousands of text spans every frame, and a large highlighted body would drop the UI below 60 fps. For the same reason, a body that grows past 100 KB when pretty-printed is shown without highlighting.
+Any text body under that limit is shown, syntax-coloured, however big it is. Only the lines on screen are laid out each frame, so scrolling a multi-megabyte body costs the same as scrolling a small one (a 6.6 MB JSON body costs about 0.1 ms per frame on an M-series Mac). The body is pretty-printed on the network thread when the response arrives, and **Find** searches it once per query, not once per frame.
 
 Images and binary content (PDF, audio, video, archives, `application/octet-stream`) are never rendered inline. Use **Save** to write them to disk.
 
