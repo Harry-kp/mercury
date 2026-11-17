@@ -255,7 +255,9 @@ fn postman_body(body: &PostmanBody) -> Option<(String, Option<&'static str>)> {
             ))
         }
         // Mercury's Multipart body: `name=value` lines, `name=@path` files.
-        // A file row with no path comes in switched off, to be picked.
+        // File rows come in switched off: a collection from someone else
+        // could point at ~/.ssh/id_rsa and post it anywhere on one Send.
+        // The user ticks the row once they've seen which file it is.
         Some("formdata") => {
             let lines: Vec<String> = body
                 .formdata
@@ -269,11 +271,7 @@ fn postman_body(body: &PostmanBody) -> Option<(String, Option<&'static str>)> {
                             None => None,
                         }
                         .unwrap_or_default();
-                        if src.is_empty() {
-                            format!("# {}=@", r.key)
-                        } else {
-                            format!("{}=@{src}", r.key)
-                        }
+                        format!("# {}=@{src}", r.key)
                     }
                     _ => format!("{}={}", r.key, r.value()),
                 })
@@ -678,7 +676,9 @@ mod tests {
             {"name": "Upload", "request": {
                 "method": "POST",
                 "auth": {"type": "oauth2", "oauth2": []},
-                "body": {"mode": "formdata", "formdata": [{"key": "file", "type": "file"}]},
+                "body": {"mode": "formdata", "formdata": [{"key": "file", "type": "file"},
+                    {"key": "key", "type": "file", "src": "/home/me/.ssh/id_rsa"},
+                    {"key": "note", "value": "hi"}]},
                 "url": {"raw": "https://acme.test/files"}
             }}
         ]
@@ -716,10 +716,13 @@ mod tests {
 
         // what Mercury cannot express is reported, not dropped in silence
         assert_eq!(count.skipped, vec!["Upload: oauth2 auth".to_string()]);
-        // a formdata body becomes a Multipart one; a file row with no path
-        // arrives switched off
+        // a formdata body becomes a Multipart one; file rows arrive switched
+        // off, so an imported collection can't upload a local file unseen
         let upload = RequestFile::from_json(&read_out(&dir, "upload.json")).unwrap();
-        assert_eq!(upload.body, "# file=@");
+        assert_eq!(
+            upload.body,
+            "# file=@\n# key=@/home/me/.ssh/id_rsa\nnote=hi"
+        );
         assert_eq!(
             upload.headers.get("Content-Type").map(String::as_str),
             Some("multipart/form-data")
