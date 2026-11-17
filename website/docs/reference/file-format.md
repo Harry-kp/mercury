@@ -63,6 +63,17 @@ The body is always a string, whatever its content type. A JSON body is stored as
 
 Mercury doesn't add a `Content-Type` header, so include one yourself.
 
+A `multipart/form-data` body is one field per line, `name=value`, with `name=@/path/to/file` for a file. Lines starting with `#` are switched off. The boundary is added when the request is sent:
+
+```json
+{
+  "method": "POST",
+  "url": "https://api.example.com/avatars",
+  "headers": { "Content-Type": "multipart/form-data" },
+  "body": "user_id=42\navatar=@/Users/ada/avatar.png"
+}
+```
+
 ## Variables
 
 `{{NAME}}` (or `{{ NAME }}`) in `url`, header values or `body` is replaced with a value from the selected environment when you send the request. Variables that aren't defined are sent as the literal text. See [Environments](/docs/features/environments).

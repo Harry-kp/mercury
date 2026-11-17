@@ -250,14 +250,18 @@ pub enum BodyKind {
     None,
     Json,
     Form,
+    /// `multipart/form-data`: one `name=value` field per line, `name=@path`
+    /// for a file (see [`crate::http::multipart_body`]).
+    Multipart,
     Text,
 }
 
 impl BodyKind {
-    pub const ALL: [BodyKind; 4] = [
+    pub const ALL: [BodyKind; 5] = [
         BodyKind::None,
         BodyKind::Json,
         BodyKind::Form,
+        BodyKind::Multipart,
         BodyKind::Text,
     ];
 
@@ -266,6 +270,7 @@ impl BodyKind {
             BodyKind::None => "No type",
             BodyKind::Json => "JSON",
             BodyKind::Form => "Form",
+            BodyKind::Multipart => "Multipart",
             BodyKind::Text => "Text",
         }
     }
@@ -275,6 +280,7 @@ impl BodyKind {
             BodyKind::None => Option::None,
             BodyKind::Json => Some("application/json"),
             BodyKind::Form => Some("application/x-www-form-urlencoded"),
+            BodyKind::Multipart => Some("multipart/form-data"),
             BodyKind::Text => Some("text/plain"),
         }
     }
@@ -285,6 +291,7 @@ pub fn body_kind(headers_text: &str) -> BodyKind {
         None => BodyKind::None,
         Some(v) if v.contains("json") => BodyKind::Json,
         Some(v) if v.contains("x-www-form-urlencoded") => BodyKind::Form,
+        Some(v) if v.contains("multipart/form-data") => BodyKind::Multipart,
         Some(_) => BodyKind::Text,
     }
 }

@@ -46,6 +46,53 @@ pub struct HttpResponse {
     pub pretty: Option<String>,
 }
 
+/// Encode a Multipart body: one `name=value` field per line, `name=@path`
+/// for a file read from disk. `#` lines are switched off. Returns the
+/// boundary and the bytes.
+pub fn multipart_body(text: &str) -> Result<(String, Vec<u8>), String> {
+    let boundary = format!(
+        "mercury-{:x}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |d| d.as_nanos())
+    );
+    let quote = |s: &str| s.replace('"', "%22").replace(['\r', '\n'], " ");
+    let mut out = Vec::new();
+    for row in crate::kv::parse_lines(text, "=") {
+        if !row.enabled || row.key.is_empty() {
+            continue;
+        }
+        out.extend(format!("--{boundary}\r\n").as_bytes());
+        let name = quote(&row.key);
+        match row.value.strip_prefix('@') {
+            Some(path) => {
+                let path = std::path::Path::new(path.trim());
+                let bytes = std::fs::read(path)
+                    .map_err(|e| format!("Can't attach {}: {e}", path.display()))?;
+                let file = quote(&path.file_name().unwrap_or_default().to_string_lossy());
+                out.extend(
+                    format!(
+                        "Content-Disposition: form-data; name=\"{name}\"; filename=\"{file}\"\r\n\
+                         Content-Type: application/octet-stream\r\n\r\n"
+                    )
+                    .as_bytes(),
+                );
+                out.extend(bytes);
+            }
+            None => out.extend(
+                format!(
+                    "Content-Disposition: form-data; name=\"{name}\"\r\n\r\n{}",
+                    row.value
+                )
+                .as_bytes(),
+            ),
+        }
+        out.extend(b"\r\n");
+    }
+    out.extend(format!("--{boundary}--\r\n").as_bytes());
+    Ok((boundary, out))
+}
+
 impl HttpResponse {
     /// Stands in for the response of a send that got none, in history.
     /// Status 0 marks it.
@@ -104,10 +151,25 @@ pub fn execute(
     let method = reqwest::Method::from_bytes(request.method.as_str().as_bytes())
         .expect("HttpMethod names are valid HTTP methods");
     let mut builder = client.request(method, with_scheme(&request.url));
+    let multipart = request
+        .headers
+        .iter()
+        .any(|(k, v)| k.eq_ignore_ascii_case("content-type") && v.contains("multipart/form-data"));
     for (key, value) in &request.headers {
-        builder = builder.header(key, value);
+        // the boundary has to be in it, and only the encoder knows it
+        if !(multipart && key.eq_ignore_ascii_case("content-type")) {
+            builder = builder.header(key, value);
+        }
     }
-    if !request.body.is_empty() {
+    if multipart {
+        let (boundary, body) = multipart_body(&request.body)?;
+        builder = builder
+            .header(
+                "Content-Type",
+                format!("multipart/form-data; boundary={boundary}"),
+            )
+            .body(body);
+    } else if !request.body.is_empty() {
         builder = builder.body(request.body.clone());
     }
 
@@ -380,6 +442,29 @@ pub fn format_xml(body: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn multipart_encodes_fields_and_files() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let file = dir.path().join("a.txt");
+        std::fs::write(&file, "hello").unwrap();
+        let body = format!("note=hi\n# off=1\nup=@{}", file.display());
+        let (b, bytes) = multipart_body(&body).unwrap();
+        let text = String::from_utf8(bytes).unwrap();
+        assert_eq!(
+            text,
+            format!(
+                "--{b}\r\nContent-Disposition: form-data; name=\"note\"\r\n\r\nhi\r\n\
+                 --{b}\r\nContent-Disposition: form-data; name=\"up\"; filename=\"a.txt\"\r\n\
+                 Content-Type: application/octet-stream\r\n\r\nhello\r\n--{b}--\r\n"
+            )
+        );
+        let missing = multipart_body("up=@/no/such/file").unwrap_err();
+        assert!(
+            missing.starts_with("Can't attach /no/such/file"),
+            "{missing}"
+        );
+    }
     use ResponseType::*;
 
     use std::io::{Read, Write};
