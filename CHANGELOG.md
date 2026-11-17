@@ -7,9 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.4.1] - 2026-11-17
+## [0.4.2] - 2026-11-17
 
-0.4.0's release was published without installers: a CI output was dropped, so no build ran. 0.4.1 is the same code, built and published. The changes are listed under 0.4.0.
+The first published build of the 0.4 line; the changes are listed under 0.4.0. 0.4.0 went out without installers (a CI output was dropped, so no build ran) and was withdrawn; 0.4.1's Apple Silicon build died on a GitHub runner image that has been retired. Same code, now built and published.
 
 ## [0.4.0] - 2026-11-17
 
