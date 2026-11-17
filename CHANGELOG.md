@@ -27,11 +27,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The sidebar sorts names ignoring case, the way a file manager does: `alpha` no longer comes after `Zeta`.
 - The install instructions include `brew trust --cask harry-kp/tap/mercury`: Homebrew 7 refuses casks from untrusted taps, so the one-line install failed.
 
-### Fixed
-- **Sidebar filter:** a folder that matches by name shows its requests (it showed up empty), `json` no longer matches every request, and a filter that matches nothing says so instead of leaving the sidebar blank.
-- Filtering a folder with a symlink back up the tree no longer loads ~100 nested copies of it and widens the sidebar. Very deep trees stop indenting before their rows run out of room.
-- Clicking a request no longer rescans the whole workspace (re-reading every visible request file).
-
 ## [0.4.3] - 2026-11-17
 
 The first published build of the 0.4 line: everything below, and everything listed under 0.4.0.
