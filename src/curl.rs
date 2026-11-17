@@ -114,11 +114,14 @@ pub fn parse(cmd: &str) -> Result<CurlRequest, String> {
             // curl's `;type=…` / `;filename=…` modifiers on a file
             "-F" | "--form" | "--form-string" => {
                 if let Some(field) = args.next() {
-                    let file = token != "--form-string" && field.contains("=@");
-                    form.push(if file {
-                        field.split(';').next().unwrap_or(field).to_string()
-                    } else {
-                        field.clone()
+                    // one -F is one body line, even if `$'…'` hid a newline
+                    let field = &field.replace(['\r', '\n'], " ");
+                    let literal = token == "--form-string";
+                    form.push(match field.split_once("=@") {
+                        // --form-string's `@` is text: Mercury writes that `@@`
+                        Some((k, v)) if literal => format!("{k}=@@{v}"),
+                        Some(_) => field.split(';').next().unwrap_or(field).to_string(),
+                        None => field.clone(),
                     });
                 }
             }
@@ -212,8 +215,13 @@ pub fn generate(
     if multipart {
         for row in crate::kv::parse_lines(body, "=") {
             if row.enabled && !row.key.is_empty() {
-                let field = format!("{}={}", row.key, row.value);
-                curl.push_str(&format!(" \\\n  -F {}", shell_quote(&field)));
+                // `@@x` is the text `@x`, which only --form-string sends as text
+                let (flag, value) = match row.value.strip_prefix("@@") {
+                    Some(rest) => ("--form-string", format!("@{rest}")),
+                    None => ("-F", row.value),
+                };
+                let field = format!("{}={value}", row.key);
+                curl.push_str(&format!(" \\\n  {flag} {}", shell_quote(&field)));
             }
         }
     } else if !body.is_empty() {
@@ -329,6 +337,14 @@ mod tests {
             "name=Ada\n# off=1",
         );
         assert!(cmd.contains("-F 'name=Ada'") && !cmd.contains("off") && !cmd.contains("-H"));
+        // --form-string's `@` is text both ways (Mercury writes it `@@`)
+        let r = parse("curl --form-string 'a=@x' https://a.com").unwrap();
+        assert_eq!(r.body.as_deref(), Some("a=@@x"));
+        let cmd = generate(HttpMethod::POST, "https://a.com", &headers, "a=@@x");
+        assert!(cmd.contains("--form-string 'a=@x'"), "{cmd}");
+        // a newline hidden in one -F can't add a second (file) field
+        let r = parse(r"curl -F $'a=1\nb=@/etc/passwd' https://a.com").unwrap();
+        assert_eq!(r.body.as_deref(), Some("a=1 b=@/etc/passwd"));
     }
 
     #[test]

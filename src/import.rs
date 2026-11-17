@@ -234,6 +234,25 @@ struct PostmanBody {
     formdata: Vec<PostmanKeyValue>,
 }
 
+/// One imported Multipart field as one body line, never more and never a
+/// live upload: a collection from someone else could otherwise smuggle in an
+/// enabled `name=@~/.ssh/id_rsa` through a newline, an `=` in a key, or a
+/// text value starting with `@` (written `@@`, Mercury's literal `@`). File
+/// fields arrive switched off until the user ticks them. (Variables are
+/// filled in per field at send time: [`crate::http::substitute_multipart`].)
+fn multipart_line(key: &str, value: &str, file: bool) -> String {
+    let flat = |s: &str| s.replace(['\r', '\n'], " ");
+    let key = flat(key).replace('=', "%3D");
+    let value = flat(value);
+    if file {
+        format!("# {key}=@{value}")
+    } else if value.starts_with('@') {
+        format!("{key}=@{value}")
+    } else {
+        format!("{key}={value}")
+    }
+}
+
 /// A Postman body in Mercury's terms, plus the `Content-Type` it implies when
 /// the request did not set one. The modes that come back `None` are the ones
 /// Mercury has nowhere to put — a raw `file` body, GraphQL — so the import
@@ -255,7 +274,9 @@ fn postman_body(body: &PostmanBody) -> Option<(String, Option<&'static str>)> {
             ))
         }
         // Mercury's Multipart body: `name=value` lines, `name=@path` files.
-        // A file row with no path comes in switched off, to be picked.
+        // File rows come in switched off: a collection from someone else
+        // could point at ~/.ssh/id_rsa and post it anywhere on one Send.
+        // The user ticks the row once they've seen which file it is.
         Some("formdata") => {
             let lines: Vec<String> = body
                 .formdata
@@ -269,13 +290,9 @@ fn postman_body(body: &PostmanBody) -> Option<(String, Option<&'static str>)> {
                             None => None,
                         }
                         .unwrap_or_default();
-                        if src.is_empty() {
-                            format!("# {}=@", r.key)
-                        } else {
-                            format!("{}=@{src}", r.key)
-                        }
+                        multipart_line(&r.key, &src, true)
                     }
-                    _ => format!("{}={}", r.key, r.value()),
+                    _ => multipart_line(&r.key, &r.value(), false),
                 })
                 .collect();
             Some((lines.join("\n"), Some("multipart/form-data")))
@@ -678,7 +695,12 @@ mod tests {
             {"name": "Upload", "request": {
                 "method": "POST",
                 "auth": {"type": "oauth2", "oauth2": []},
-                "body": {"mode": "formdata", "formdata": [{"key": "file", "type": "file"}]},
+                "body": {"mode": "formdata", "formdata": [{"key": "file", "type": "file"},
+                    {"key": "key", "type": "file", "src": "/home/me/.ssh/id_rsa"},
+                    {"key": "note", "value": "hi"},
+                    {"key": "a", "value": "x\nb=@/etc/passwd"},
+                    {"key": "c=@/etc/hosts", "value": "1"},
+                    {"key": "d", "value": "@/etc/shadow"}]},
                 "url": {"raw": "https://acme.test/files"}
             }}
         ]
@@ -716,10 +738,22 @@ mod tests {
 
         // what Mercury cannot express is reported, not dropped in silence
         assert_eq!(count.skipped, vec!["Upload: oauth2 auth".to_string()]);
-        // a formdata body becomes a Multipart one; a file row with no path
-        // arrives switched off
+        // a formdata body becomes a Multipart one; file rows arrive switched
+        // off, so an imported collection can't upload a local file unseen
         let upload = RequestFile::from_json(&read_out(&dir, "upload.json")).unwrap();
-        assert_eq!(upload.body, "# file=@");
+        // and nothing in a field can turn into a live upload: no newline
+        // makes a second line, no `=` in a key moves the split, and a text
+        // value that reads as a file is switched off too
+        assert_eq!(
+            upload.body,
+            "# file=@\n# key=@/home/me/.ssh/id_rsa\nnote=hi\na=x b=@/etc/passwd\n\
+             c%3D@/etc/hosts=1\nd=@@/etc/shadow"
+        );
+        let live: Vec<_> = kv::parse_lines(&upload.body, "=")
+            .into_iter()
+            .filter(|r| r.enabled && r.value.starts_with('@') && !r.value.starts_with("@@"))
+            .collect();
+        assert!(live.is_empty(), "{live:?}");
         assert_eq!(
             upload.headers.get("Content-Type").map(String::as_str),
             Some("multipart/form-data")

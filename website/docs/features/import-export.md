@@ -31,7 +31,7 @@ Export the collection from Postman as **Collection v2.1** (JSON).
 | Headers | Headers (disabled ones are skipped) |
 | Raw body | Body |
 | URL-encoded body | A [Form body](/docs/features/requests#body), with the matching `Content-Type` |
-| Form-data body | A [Multipart body](/docs/features/requests#body). A file field without a path arrives switched off, to be picked |
+| Form-data body | A [Multipart body](/docs/features/requests#body). File fields arrive switched off: tick one once you've checked which file it uploads |
 | Bearer / Basic / API key auth | The `Authorization` (or API key) header, or a query parameter |
 | URL | The raw URL. Without one, the URL is rebuilt from its parts, skipping disabled query params. |
 

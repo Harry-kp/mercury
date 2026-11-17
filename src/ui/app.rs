@@ -892,7 +892,7 @@ impl MercuryApp {
             method: self.method,
             url: vars::substitute(&self.url, &self.env_vars),
             headers: kv::headers_to_map(&vars::substitute(&self.headers_text, &self.env_vars)),
-            body: vars::substitute(&self.body_text, &self.env_vars),
+            body: self.substituted_body(),
             ..Default::default()
         };
         self.request_counter += 1;
@@ -1051,13 +1051,23 @@ impl MercuryApp {
         self.notify_undo(format!("Cleared {what}"), Undo::Recent(old));
     }
 
+    /// The body as sent. A Multipart body is filled in field by field, so a
+    /// variable can't add a field or turn text into a file upload.
+    fn substituted_body(&self) -> String {
+        if kv::body_kind(&self.headers_text) == kv::BodyKind::Multipart {
+            http::substitute_multipart(&self.body_text, &self.env_vars)
+        } else {
+            vars::substitute(&self.body_text, &self.env_vars)
+        }
+    }
+
     fn copy_as_curl(&mut self) {
         let sub = |s: &str| vars::substitute(s, &self.env_vars);
         let curl = curl::generate(
             self.method,
             &http::with_scheme(&sub(&self.url)),
             &kv::headers_to_map(&sub(&self.headers_text)),
-            &sub(&self.body_text),
+            &self.substituted_body(),
         );
         self.ctx.copy_text(curl);
         self.notify("Copied as cURL", false);

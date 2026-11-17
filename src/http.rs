@@ -46,9 +46,42 @@ pub struct HttpResponse {
     pub pretty: Option<String>,
 }
 
+/// A Multipart body with `{{variables}}` filled in, field by field: the
+/// lines are split first and whether a field is a file is decided from what
+/// the user wrote, so a variable's value can never add a field or turn text
+/// into an upload (an imported collection ships its own `.env`). A text
+/// value that comes out starting with `@` is escaped as `@@`.
+pub fn substitute_multipart(
+    text: &str,
+    vars: &std::collections::HashMap<String, String>,
+) -> String {
+    let sub = |s: &str| crate::vars::substitute(s, vars).replace(['\r', '\n'], " ");
+    crate::kv::parse_lines(text, "=")
+        .into_iter()
+        .filter(|r| r.enabled && !r.key.is_empty())
+        .map(|r| {
+            let key = sub(&r.key).replace('=', "%3D");
+            let value = if let Some(rest) = r.value.strip_prefix("@@") {
+                format!("@@{}", sub(rest))
+            } else if let Some(path) = r.value.strip_prefix('@') {
+                format!("@{}", sub(path))
+            } else {
+                let text = sub(&r.value);
+                if text.starts_with('@') {
+                    format!("@{text}")
+                } else {
+                    text
+                }
+            };
+            format!("{key}={value}")
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
 /// Encode a Multipart body: one `name=value` field per line, `name=@path`
-/// for a file read from disk. `#` lines are switched off. Returns the
-/// boundary and the bytes.
+/// for a file read from disk, `name=@@x` for the text `@x`. `#` lines are
+/// switched off. Returns the boundary and the bytes.
 pub fn multipart_body(text: &str) -> Result<(String, Vec<u8>), String> {
     let boundary = format!(
         "mercury-{:x}",
@@ -64,7 +97,9 @@ pub fn multipart_body(text: &str) -> Result<(String, Vec<u8>), String> {
         }
         out.extend(format!("--{boundary}\r\n").as_bytes());
         let name = quote(&row.key);
-        match row.value.strip_prefix('@') {
+        let file = row.value.strip_prefix('@').filter(|p| !p.starts_with('@'));
+        let text = row.value.strip_prefix('@').unwrap_or(&row.value);
+        match file {
             Some(path) => {
                 let path = std::path::Path::new(path.trim());
                 let bytes = std::fs::read(path)
@@ -80,11 +115,7 @@ pub fn multipart_body(text: &str) -> Result<(String, Vec<u8>), String> {
                 out.extend(bytes);
             }
             None => out.extend(
-                format!(
-                    "Content-Disposition: form-data; name=\"{name}\"\r\n\r\n{}",
-                    row.value
-                )
-                .as_bytes(),
+                format!("Content-Disposition: form-data; name=\"{name}\"\r\n\r\n{text}").as_bytes(),
             ),
         }
         out.extend(b"\r\n");
@@ -442,6 +473,27 @@ pub fn format_xml(body: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// An imported collection ships its own `.env`. A variable's value
+    /// must not add a field, rename one into a file, or make text an upload.
+    #[test]
+    fn variables_cannot_turn_a_field_into_an_upload() {
+        let vars = std::collections::HashMap::from([
+            ("V".to_string(), "@/etc/passwd".to_string()),
+            ("N".to_string(), "x\nb=@/etc/hosts".to_string()),
+            ("K".to_string(), "k=@/etc/group".to_string()),
+            ("P".to_string(), "/tmp/avatar.png".to_string()),
+        ]);
+        let body = "a={{V}}\nc={{N}}\n{{K}}=1\nf=@{{P}}\nt=@@{{V}}\n# off=@{{V}}";
+        assert_eq!(
+            substitute_multipart(body, &vars),
+            "a=@@/etc/passwd\nc=x b=@/etc/hosts\nk%3D@/etc/group=1\nf=@/tmp/avatar.png\nt=@@@/etc/passwd"
+        );
+        // and the encoder sends `@@x` as the text `@x`
+        let (_, bytes) = multipart_body("a=@@/etc/passwd").unwrap();
+        let text = String::from_utf8(bytes).unwrap();
+        assert!(text.contains("name=\"a\"\r\n\r\n@/etc/passwd\r\n") && !text.contains("filename"));
+    }
 
     #[test]
     fn multipart_encodes_fields_and_files() {
