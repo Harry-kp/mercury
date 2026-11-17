@@ -144,7 +144,13 @@ pub const ESCAPE_HELP: (&str, &str) = (
 impl Shortcut {
     fn pressed(&self, i: &egui::InputState, typing: bool) -> bool {
         if self.command {
-            i.modifiers.command && i.modifiers.shift == self.shift && i.key_pressed(self.key)
+            // egui-winit turns ⌘C (with or without ⇧) into Event::Copy and
+            // never reports the C key, so ⌘⇧C has to listen for that event
+            let copy =
+                self.key == Key::C && i.events.iter().any(|e| matches!(e, egui::Event::Copy));
+            i.modifiers.command
+                && i.modifiers.shift == self.shift
+                && (i.key_pressed(self.key) || copy)
         } else {
             // bare keys must not fire while typing ("?" in a URL)
             !typing
@@ -307,6 +313,11 @@ pub struct MercuryApp {
     pub dialog: Option<Dialog>,
     pub dialog_text: String,
     pub toast: Option<Toast>,
+    /// See [`Self::focus`].
+    pending_focus: Option<&'static str>,
+    /// The Authorization value last used for each auth type in this request
+    /// (indexed like `AuthMode::ALL`), restored when switching back.
+    pub auth_stash: [Option<String>; 4],
     /// egui time at the start of this frame (for toasts).
     time: f64,
 
@@ -373,6 +384,8 @@ impl MercuryApp {
             dialog: None,
             dialog_text: String::new(),
             toast: None,
+            pending_focus: None,
+            auth_stash: Default::default(),
             time: 0.0,
             ctx: ctx.clone(),
             tx,
@@ -679,9 +692,10 @@ impl MercuryApp {
         self.headers_text = request.headers;
         self.body_text = request.body;
         self.query_params = kv::parse_query_params(&self.url);
-        // Open on the tab that holds this request's content. The tab used to
-        // be one global value, so a GET opened on an empty Body editor, or on
-        // whatever the previous request was showing.
+        self.auth_stash = Default::default(); // another request's auth
+                                              // Open on the tab that holds this request's content. The tab used to
+                                              // be one global value, so a GET opened on an empty Body editor, or on
+                                              // whatever the previous request was showing.
         self.tab = if !self.body_text.trim().is_empty()
             || matches!(
                 self.method,
@@ -828,8 +842,13 @@ impl MercuryApp {
         }
     }
 
-    fn focus(&self, id: &str) {
-        self.ctx.memory_mut(|m| m.request_focus(egui::Id::new(id)));
+    /// Focus a widget at the start of the next frame. Commands run from the
+    /// keyboard or the palette after this frame's widgets are drawn, and the
+    /// find bar or a dialog field may not exist yet: focusing it now put a
+    /// node that isn't there into the accessibility tree, which the platform
+    /// adapters reject outright.
+    fn focus(&mut self, id: &'static str) {
+        self.pending_focus = Some(id);
     }
 
     // -----------------------------------------------------------------------
@@ -1263,9 +1282,21 @@ impl MercuryApp {
             Action::History => self.show_history = !self.show_history,
             Action::ToggleRaw => self.raw_view = !self.raw_view,
             Action::FindInResponse => {
-                self.response_tab = ResponseTab::Body;
-                self.find.get_or_insert_with(String::new);
-                self.focus("response_find");
+                // the find bar only exists over a text body
+                let text = self.response.as_ref().is_some_and(|r| {
+                    matches!(
+                        r.response_type,
+                        http::ResponseType::Json
+                            | http::ResponseType::Xml
+                            | http::ResponseType::Html
+                            | http::ResponseType::PlainText
+                    )
+                });
+                if text && !self.show_history {
+                    self.response_tab = ResponseTab::Body;
+                    self.find.get_or_insert_with(String::new);
+                    self.focus("response_find");
+                }
             }
             Action::CopyCurl => self.copy_as_curl(),
             Action::FormatBody => {
@@ -1676,6 +1707,9 @@ impl MercuryApp {
             return;
         }
         self.time = ctx.input(|i| i.time);
+        if let Some(id) = self.pending_focus.take() {
+            ctx.memory_mut(|m| m.request_focus(egui::Id::new(id)));
+        }
         theme::set_dark(
             ctx,
             match self.theme_mode {
