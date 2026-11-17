@@ -37,7 +37,7 @@ The header stays the source of truth, so editing `Content-Type` by hand in the H
 
 ### Body
 
-A plain text editor with JSON highlighting. The format button at the top right pretty-prints the body if it's valid JSON. Mercury doesn't set `Content-Type` for you, so add it on the Headers tab.
+A plain text editor with JSON highlighting. The format button at the top right pretty-prints the body if it's valid JSON, and otherwise says where it stops being JSON. Mercury doesn't set `Content-Type` for you, so add it on the Headers tab.
 
 ### Params
 

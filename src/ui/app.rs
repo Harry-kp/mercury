@@ -433,7 +433,6 @@ impl MercuryApp {
                 .filter(|p| p.is_file())
             {
                 app.open_file(&file);
-                app.expand_to(&file);
             }
         }
         app
@@ -608,23 +607,27 @@ impl MercuryApp {
 
     /// Expand every folder between the workspace root and `file`, so a
     /// reopened request is visible in the tree instead of hidden three
-    /// collapsed folders deep.
+    /// collapsed folders deep. Rescans only if a folder had to be opened:
+    /// a rescan reads every visible request, and this runs on every click.
     pub fn expand_to(&mut self, file: &Path) {
         let Some(root) = self.workspace.clone() else {
             return;
         };
+        let mut changed = false;
         let mut dir = file.parent();
         while let Some(path) = dir {
             if !path.starts_with(&root) {
                 break;
             }
-            self.expanded.insert(path.to_path_buf());
+            changed |= self.expanded.insert(path.to_path_buf());
             if path == root {
                 break;
             }
             dir = path.parent();
         }
-        self.rebuild_tree();
+        if changed {
+            self.rebuild_tree();
+        }
     }
 
     /// Forget the workspace without touching the request being edited: it
@@ -819,11 +822,7 @@ impl MercuryApp {
                 );
                 self.opened_content = self.saved_content.clone();
                 // opened from ⌘K, history or a relaunch: show where it lives
-                let expanded = self.expanded.len();
                 self.expand_to(path);
-                if self.expanded.len() != expanded {
-                    self.rebuild_tree();
-                }
                 self.last_folder = path.parent().map(Path::to_path_buf);
                 self.opened_recently.retain(|p| p != path);
                 self.opened_recently.insert(0, path.to_path_buf());
@@ -1120,7 +1119,7 @@ impl MercuryApp {
                 // a file that no longer parses stays where it was, and the
                 // entry's response landed under whatever request was open
                 match file.filter(|f| self.current_file.as_ref() == Some(f)) {
-                    Some(file) => self.expand_to(&file),
+                    Some(_) => {}
                     None => {
                         self.autosave();
                         self.load_request(entry.request, None);
@@ -1562,7 +1561,11 @@ impl MercuryApp {
             }
             Action::CopyCurl => self.copy_as_curl(),
             Action::FormatBody => {
-                self.body_text = http::format_json(&self.body_text);
+                // it used to do nothing at all for a body it couldn't parse
+                match serde_json::from_str::<serde::de::IgnoredAny>(&self.body_text) {
+                    Ok(_) => self.body_text = http::format_json(&self.body_text),
+                    Err(e) => self.notify(format!("Not valid JSON: {e}"), true),
+                }
                 self.tab = Tab::Body;
             }
             Action::FocusMode => self.focus_mode = !self.focus_mode,

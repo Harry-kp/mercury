@@ -14,21 +14,6 @@ use crate::{curl, vars};
 use eframe::egui::{self, Align, Margin, RichText, ScrollArea, Sense, Stroke, Ui, Vec2};
 use std::collections::BTreeSet;
 
-/// How many characters one edit inserted: what is left of `after` once the
-/// prefix and suffix it shares with `before` are taken away. A keystroke
-/// inserts one; a paste inserts many.
-fn inserted_chars(before: &str, after: &str) -> usize {
-    let (b, a): (Vec<char>, Vec<char>) = (before.chars().collect(), after.chars().collect());
-    let prefix = b.iter().zip(&a).take_while(|(x, y)| x == y).count();
-    let suffix = b[prefix..]
-        .iter()
-        .rev()
-        .zip(a[prefix..].iter().rev())
-        .take_while(|(x, y)| x == y)
-        .count();
-    a.len() - prefix - suffix
-}
-
 impl MercuryApp {
     pub fn editor(&mut self, ui: &mut Ui) {
         self.url_bar(ui);
@@ -77,7 +62,9 @@ impl MercuryApp {
                     } else {
                         widgets::button_width(ui, &widgets::send_label(target.as_deref()))
                     };
-                    let before = self.url.clone();
+                    if focused {
+                        self.take_pasted_curl(ui);
+                    }
                     // {{variables}} stand out: accent when the environment
                     // defines them, warning when it doesn't
                     let env = &self.env_vars;
@@ -143,10 +130,14 @@ impl MercuryApp {
                         url
                     };
                     if url.changed() {
-                        self.on_url_edited(&before);
+                        self.query_params = kv::parse_query_params(&self.url);
                     }
                     ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
-                        if send_button(ui, executing, target.as_deref()).clicked() {
+                        let send = send_button(ui, executing, target.as_deref());
+                        // a double-click on Send landed its second click on
+                        // Stop, cancelling the request it had just sent
+                        let repeat = send.double_clicked() || send.triple_clicked();
+                        if send.clicked() && !repeat {
                             if executing {
                                 self.cancel_request();
                             } else {
@@ -240,19 +231,28 @@ impl MercuryApp {
         });
     }
 
-    /// A pasted cURL command becomes the request; otherwise re-sync params.
+    /// A cURL command pasted into the URL bar becomes the request.
     ///
-    /// Only a paste counts: typing "curl …" by hand would otherwise re-parse
-    /// on every keystroke. And a saved request is never overwritten: autosave
-    /// would write the cURL over the file within seconds, and ⌘Z only knows
-    /// about the URL text, so the headers and body were simply gone.
-    fn on_url_edited(&mut self, before: &str) {
-        let pasted = inserted_chars(before, &self.url) > 1;
-        if pasted && self.url.trim_start().starts_with("curl ") {
-            match curl::parse(&self.url) {
+    /// It's taken out of the input before the field sees it: a one-line
+    /// field turns line breaks into spaces, which made every `\`-continued
+    /// command parse as garbage. Only a paste counts (typing "curl …" would
+    /// re-parse on every keystroke), and a saved request is never
+    /// overwritten: autosave would write the cURL over the file within
+    /// seconds, and ⌘Z only knows about the URL text.
+    fn take_pasted_curl(&mut self, ui: &Ui) {
+        let pasted = ui.input_mut(|i| {
+            let at = i.events.iter().position(
+                |e| matches!(e, egui::Event::Paste(t) if t.trim_start().starts_with("curl ")),
+            )?;
+            match i.events.remove(at) {
+                egui::Event::Paste(t) => Some(t),
+                _ => None,
+            }
+        });
+        if let Some(cmd) = pasted {
+            match curl::parse(&cmd) {
                 Ok(req) => {
                     let saved = self.current_file.is_some();
-                    self.url = before.to_string(); // the open file keeps its URL
                     self.autosave();
                     let headers = req
                         .headers
@@ -277,12 +277,10 @@ impl MercuryApp {
                         },
                         false,
                     );
-                    return;
                 }
                 Err(e) => self.notify(e, true),
             }
         }
-        self.query_params = kv::parse_query_params(&self.url);
     }
 
     fn request_tabs(&mut self, ui: &mut Ui) {
@@ -652,42 +650,31 @@ impl MercuryApp {
             let value = kv::auth_value(&self.headers_text).unwrap_or("").to_string();
             ui.label(section_label("Sent as"));
             ui.add_space(Space::SM);
+            // the value is cut to the width left of the copy button: a long
+            // token ran past the panel and took the button with it
             widgets::code_frame().show(ui, |ui| {
-                ui.horizontal(|ui| {
-                    ui.label(
-                        RichText::new("Authorization:")
-                            .font(mono(Text::SMALL))
-                            .color(t.syntax.key),
-                    );
-                    ui.label(
-                        RichText::new(widgets::truncate(&value, 64))
-                            .font(mono(Text::SMALL))
-                            .color(t.text_muted),
-                    );
-                    ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
+                egui::containers::Sides::new().shrink_left().show(
+                    ui,
+                    |ui| {
+                        ui.label(
+                            RichText::new("Authorization:")
+                                .font(mono(Text::SMALL))
+                                .color(t.syntax.key),
+                        );
+                        ui.add(
+                            egui::Label::new(
+                                RichText::new(&value)
+                                    .font(mono(Text::SMALL))
+                                    .color(t.text_muted),
+                            )
+                            .truncate(),
+                        );
+                    },
+                    |ui| {
                         copy_button(ui, "auth_preview", || format!("Authorization: {value}"));
-                    });
-                });
+                    },
+                );
             });
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::inserted_chars;
-
-    #[test]
-    fn inserted_chars_tells_a_keystroke_from_a_paste() {
-        assert_eq!(inserted_chars("curl", "curl "), 1);
-        assert_eq!(inserted_chars("ab", "aXb"), 1);
-        assert_eq!(
-            inserted_chars("{{BASE}}/users", "curl x.y"),
-            8,
-            "replacing a selection"
-        );
-        assert_eq!(inserted_chars("aaa", "aaaa"), 1, "repeated characters");
-        assert_eq!(inserted_chars("abc", "ab"), 0, "deleting");
-        assert_eq!(inserted_chars("", "curl https://a.b"), 16);
     }
 }

@@ -374,7 +374,33 @@ fn open_send_edit_and_save() {
             .is_some(),
         "the sidebar filter must search the whole workspace, not just open folders"
     );
+    // a folder found by its name shows what is in it, not an empty folder
+    harness.state_mut().search = "invoices".into();
+    harness.run_steps(3);
+    assert!(
+        harness
+            .query_by_role_and_label(accesskit::Role::Button, "get-invoice")
+            .is_some(),
+        "a folder that matches the filter must show its requests"
+    );
+    // nothing matching says so, instead of an empty sidebar
+    harness.state_mut().search = "nothing-here".into();
+    harness.run_steps(3);
+    harness.get_by_label("No requests match \"nothing-here\"");
     harness.state_mut().search.clear();
+    harness.run_steps(2);
+
+    // Opening a request whose folder is already open must not rescan the
+    // workspace, which reads every visible request file: on every click.
+    let unseen = ws.join("users/unseen.json");
+    std::fs::write(&unseen, r#"{"method":"GET","url":"u"}"#).unwrap();
+    harness.state_mut().open_file(&file);
+    let listed = |tree: &[crate::model::CollectionItem]| format!("{tree:?}").contains("unseen");
+    assert!(
+        !listed(&harness.state().tree),
+        "opening a request rescanned the workspace"
+    );
+    std::fs::remove_file(&unseen).unwrap();
     harness.run_steps(2);
 
     // history records the request that was sent, even if the form changes
@@ -481,8 +507,10 @@ fn open_send_edit_and_save() {
     harness.run_steps(2);
     harness.key_press_modifiers(Modifiers::COMMAND, Key::A);
     harness.run_steps(1);
+    // as copied from docs or a browser: `\`-continued over several lines
+    // (the one-line field turned the breaks into spaces before parsing)
     harness.event(egui::Event::Paste(format!(
-        "curl -X POST {server}/x -d 'a=1'"
+        "curl -X POST \\\n  {server}/x \\\n  -H 'X-A: 1' \\\n  -d 'a=1'"
     )));
     harness.run_steps(2);
     assert!(
@@ -490,6 +518,8 @@ fn open_send_edit_and_save() {
         "the cURL must open as a new request, not take over the saved one"
     );
     assert_eq!(harness.state().method, crate::model::HttpMethod::POST);
+    assert_eq!(harness.state().url, format!("{server}/x"));
+    assert!(harness.state().headers_text.contains("X-A: 1"));
     assert_eq!(
         harness.state().tab,
         Tab::Body,
@@ -970,6 +1000,49 @@ fn open_send_edit_and_save() {
     assert_eq!(harness.state().substituted_body(), "a=@@/etc/passwd");
     harness.state_mut().env_vars.remove("CT");
     harness.state_mut().env_vars.remove("V");
+
+    // Format on a body that isn't JSON says so (it did nothing at all)
+    harness.state_mut().toast = None;
+    harness.state_mut().body_text = "{oops".into();
+    harness.state_mut().run(super::app::Action::FormatBody);
+    assert!(
+        harness.state().toast.as_ref().is_some_and(|t| t.is_error),
+        "Format must say why it didn't"
+    );
+    assert_eq!(harness.state().body_text, "{oops");
+
+    // a double-click on Send keeps the request going: its second click
+    // landed on Stop, which had taken Send's place
+    let silent = TcpListener::bind("127.0.0.1:0").unwrap(); // never answers
+    let mut app = MercuryApp::new(&egui::Context::default());
+    app.url = format!("http://{}/slow", silent.local_addr().unwrap());
+    let mut dbl = Harness::builder()
+        .with_size(egui::vec2(1200.0, 800.0))
+        .with_step_dt(1.0 / 60.0) // clicks a frame apart, as a hand makes them
+        .build_state(|ctx, app: &mut MercuryApp| app.frame(ctx), app);
+    dbl.run_steps(2);
+    let at = dbl
+        .get_by_role_and_label(accesskit::Role::Button, "Send")
+        .rect()
+        .center();
+    dbl.event(egui::Event::PointerMoved(at));
+    for _ in 0..2 {
+        for pressed in [true, false] {
+            dbl.event(egui::Event::PointerButton {
+                pos: at,
+                button: egui::PointerButton::Primary,
+                pressed,
+                modifiers: Modifiers::NONE,
+            });
+        }
+        dbl.step();
+    }
+    assert!(
+        dbl.state().in_flight.is_some(),
+        "a double-click on Send cancelled its own request"
+    );
+    drop(dbl);
+    drop(silent);
 
     // Environments, start to finish, as a user does it: a request whose URL
     // needs variables isn't sent while they're undefined (it used to fail as
