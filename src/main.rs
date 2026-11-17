@@ -33,16 +33,24 @@ fn main() -> eframe::Result {
         .expect("bundled icon is a valid PNG")
         .into_rgba8();
     let (width, height) = icon.dimensions();
+    let viewport = egui::ViewportBuilder::default()
+        .with_inner_size([1280.0, 840.0])
+        .with_min_inner_size([900.0, 620.0])
+        .with_title("Mercury")
+        .with_icon(egui::IconData {
+            rgba: icon.into_raw(),
+            width,
+            height,
+        });
+    // macOS: Mercury's own top bar sits beside the traffic lights instead of
+    // under a grey system title bar (it reserves the space and handles drag)
+    #[cfg(target_os = "macos")]
+    let viewport = viewport
+        .with_fullsize_content_view(true)
+        .with_titlebar_shown(false)
+        .with_title_shown(false);
     let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default()
-            .with_inner_size([1280.0, 840.0])
-            .with_min_inner_size([900.0, 620.0])
-            .with_title("Mercury")
-            .with_icon(egui::IconData {
-                rgba: icon.into_raw(),
-                width,
-                height,
-            }),
+        viewport,
         ..Default::default()
     };
     eframe::run_native(

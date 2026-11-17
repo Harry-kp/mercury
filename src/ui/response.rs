@@ -23,7 +23,9 @@ impl MercuryApp {
             .resizable(true)
             .frame(
                 egui::Frame::NONE
-                    .fill(t.panel)
+                    // the work area (editor + response) is one surface;
+                    // only the sidebar and the bars are `panel` chrome
+                    .fill(t.bg)
                     .inner_margin(Margin::symmetric(Space::XL as i8, Space::LG as i8)),
             )
             .show(ctx, |ui| {

@@ -33,10 +33,14 @@ impl MercuryApp {
     pub fn editor(&mut self, ui: &mut Ui) {
         self.url_bar(ui);
         ui.add_space(Space::LG);
-        widgets::card().show(ui, |ui| {
-            ui.set_min_height(ui.available_height());
-            self.request_tabs(ui);
-        });
+        // no card around the tabs: the URL bar is the one framed control,
+        // and a border around everything below it just boxed the boxes
+        egui::Frame::NONE
+            .inner_margin(Margin::symmetric(Space::XS as i8, 0))
+            .show(ui, |ui| {
+                ui.set_min_height(ui.available_height());
+                self.request_tabs(ui);
+            });
     }
 
     fn url_bar(&mut self, ui: &mut Ui) {
