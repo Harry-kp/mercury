@@ -1911,7 +1911,8 @@ impl MercuryApp {
         let chip = widgets::chip(ui, Icon::Layers, &name, color, self.workspace.is_some());
         let (mut picked, mut edit, mut create) = (None, None, false);
         popup_menu(ui, &chip, Layout::MENU_WIDTH, |ui| {
-            if menu_item(ui, None, "No environment", "") {
+            let check = self.selected_env.is_none().then_some(Icon::Check);
+            if menu_item(ui, check, "No environment", "") {
                 picked = Some(None);
             }
             // scrolls: two dozen files ran off the window, taking Edit and

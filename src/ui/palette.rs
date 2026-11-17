@@ -289,7 +289,7 @@ impl MercuryApp {
                 egui::Modal::default_area(egui::Id::new("command_palette"))
                     .anchor(egui::Align2::CENTER_TOP, Vec2::new(0.0, 96.0)),
             )
-            .backdrop_color(widgets::backdrop())
+            .backdrop_color(theme().backdrop)
             .frame(widgets::modal_frame(Space::MD))
             .show(ctx, |ui| {
                 ui.set_width(Layout::PALETTE_WIDTH);

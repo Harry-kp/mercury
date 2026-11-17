@@ -20,6 +20,8 @@ Each entry shows:
 - the response time
 - the environment it was sent with
 
+When the panel is narrow (a small window), a row keeps the URL, status and time, and shows the response time and environment when you hover it.
+
 Newest entries are at the top. The **Search history...** box filters entries by URL.
 
 ## Restoring an entry

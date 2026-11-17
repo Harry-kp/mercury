@@ -726,6 +726,31 @@ fn open_send_edit_and_save() {
     harness.run_steps(2);
     let entries = harness.state().history.len();
     assert!(entries > 0);
+    // At the minimum window a row gave its URL ~5 characters next to status,
+    // duration, environment and time. Narrow rows keep status and time.
+    let durations = |harness: &Harness<'_, MercuryApp>| {
+        // row contents aren't accessibility nodes: count the painted text
+        let shapes = &harness.output().shapes;
+        shapes
+            .iter()
+            .filter(
+                |s| matches!(&s.shape, egui::Shape::Text(t) if t.galley.text().ends_with(" ms")),
+            )
+            .count()
+    };
+    assert!(
+        durations(&harness) > entries.min(2),
+        "a wide row shows duration: {} of {entries}",
+        durations(&harness)
+    );
+    harness.set_size(egui::vec2(900.0, 620.0));
+    harness.run_steps(3);
+    assert!(
+        durations(&harness) <= 1, // the response's own time may remain
+        "a narrow History row still lists its duration"
+    );
+    harness.set_size(egui::vec2(1200.0, 800.0));
+    harness.run_steps(3);
     harness
         .get_by_role_and_label(accesskit::Role::Button, "Clear all")
         .click();
