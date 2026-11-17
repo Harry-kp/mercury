@@ -723,6 +723,15 @@ fn open_send_edit_and_save() {
     let mut many = Harness::builder()
         .with_size(egui::vec2(1200.0, 800.0))
         .build_state(|ctx, app: &mut MercuryApp| app.frame(ctx), app);
+    many.run_steps(3);
+    let below = |h: &Harness<'_, MercuryApp>, a: &str, b: &str| {
+        let r = |l: &str| h.query_all_by_label(l).next().unwrap().rect();
+        r(a).top() >= r(b).bottom()
+    };
+    assert!(
+        below(&many, "Send request", "Search requests and commands"),
+        "the first row is in view when the palette opens"
+    );
     many.event(egui::Event::Text("req-".into())); // every request, no command
     many.run_steps(3);
     assert!(many.query_all_by_label("req-000").next().is_some());

@@ -271,7 +271,9 @@ impl MercuryApp {
             None
         } else if top < offset {
             Some(top)
-        } else if top + ROW_H > offset + height {
+        } else if height > 0.0 && top + ROW_H > offset + height {
+            // (height is 0 until the list has been drawn once; scrolling
+            // then hid the first row behind the search box)
             Some(top + ROW_H - height)
         } else {
             None

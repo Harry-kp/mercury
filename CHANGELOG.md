@@ -39,6 +39,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The body type reads **Body type: none / JSON / Form / Text**.
 
 ### Fixed
+- `⌘ K` opened with its first row scrolled up behind the search box.
 - **Find** showed every match the same, so "1 of 2" didn't say which one you were on; the current match is now highlighted in the accent colour. The find field also looks like Mercury's other search fields instead of a bare text box.
 - Opening a request from `⌘ K`, history or a relaunch now reveals it in the sidebar; it used to stay hidden inside collapsed folders.
 - **Request failed** shows the explanation ("Nothing is listening on … Is the server running?") as plain text, with the network library's message quiet underneath; both used to be pink monospace.
