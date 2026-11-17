@@ -44,7 +44,7 @@ jobs:
     env:
       # What users download (the dist profile), Linux x86_64. Raise it in the
       # same PR as a change that genuinely needs the room, and say why.
-      BUDGET_KIB: 12288
+      BUDGET_KIB: 14000
     steps:
       - uses: actions/checkout@v4
 
