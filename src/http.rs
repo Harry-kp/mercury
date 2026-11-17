@@ -200,6 +200,17 @@ pub fn client_with(check_certs: bool) -> reqwest::blocking::Client {
 }
 
 /// `host[:port]` of a URL as typed (no scheme needed).
+/// The host a [`CERT_ERROR`] names: the one the failed request went to,
+/// whatever the URL bar says by now.
+pub fn untrusted_host(error: &str) -> Option<&str> {
+    let host = error
+        .strip_prefix(CERT_ERROR)?
+        .trim_start()
+        .split(". ")
+        .next()?;
+    (host != "the server").then_some(host)
+}
+
 pub fn host(url: &str) -> Option<String> {
     let u = reqwest::Url::parse(&with_scheme(url)).ok()?;
     Some(format!(

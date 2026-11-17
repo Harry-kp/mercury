@@ -13,7 +13,7 @@ Mercury imports Postman and Insomnia exports and cURL commands, and it can copy 
 Choose **Import from Postman…** or **Import from Insomnia…** from the workspace menu in the top bar. With no folder open, the sidebar also lists **Postman collection** and **Insomnia export** under **Import**. Pick the export file (or several at once: a Postman collection and its environment exports), and then:
 
 - if a workspace is open, the requests are written into it, in a **new folder named after the collection** (`acme-api/`), so they can't mix with or replace your own
-- if no workspace is open, Mercury asks for a folder to write to and opens it as the workspace; an empty folder gets the requests directly
+- if no workspace is open, Mercury asks for a folder to write to and opens it as the workspace; an empty folder (or one holding only `.env` files) gets the requests directly
 
 Environments go in the workspace root as `.env.<name>`, where Mercury looks for them. When the import is done, its first request is open and its environment selected, and a notification says what was imported and where.
 
@@ -21,15 +21,17 @@ File and folder names are sanitized: they're lowercased, and spaces and characte
 
 ## Postman
 
-Export the collection from Postman as **Collection v2.1** (JSON). Your environments are separate exports in Postman (**Environments → ⋯ → Export**): select them together with the collection, or import each one later, and each becomes `.env.<name>`. Disabled variables are left out.
+Export the collection from Postman as **Collection v2.1** (JSON); v2.0 works too. Your environments are separate exports in Postman (**Environments → ⋯ → Export**): select them together with the collection, or import each one later, and each becomes `.env.<name>`. A **globals** export becomes `.env`, which every environment shares (or `.env.<name>` if the folder already has a `.env`). Disabled variables are left out.
 
 | Postman | Mercury |
 |---------|---------|
 | Request | `<name>.json` |
 | Folder (any depth) | Folder, with the same nesting |
 | Collection variables | `.env.<collection-name>` in the import folder |
-| Headers | Headers (disabled ones are skipped) |
+| Headers | Headers; disabled ones stay, switched off (`# Name: value`) |
+| Request description | A `description` field in the request file |
 | Raw body | Body |
+| GraphQL body | The JSON body Postman sends (`{"query": …, "variables": …}`), with `Content-Type: application/json` |
 | URL-encoded body | A [Form body](/docs/features/requests#body), with the matching `Content-Type` |
 | Form-data body | A [Multipart body](/docs/features/requests#body). File fields arrive switched off: tick one once you've checked which file it uploads |
 | Bearer / Basic / API key auth | The `Authorization` (or API key) header, or a query parameter |
@@ -39,7 +41,7 @@ Auth set on the collection or a folder applies to every request under it, and a 
 
 Postman `{{variables}}` stay as they are in URLs, headers and bodies, so they work with the generated `.env` file. Path variables are filled in (`/users/:userId` with value 42 becomes `/users/42`), or become `{{userId}}` when the collection has no value for them. A raw body's language (JSON, XML, text) sets the `Content-Type` Postman would have sent. Postman's built-in `{{$guid}}`, `{{$timestamp}}`, `{{$isoTimestamp}}` and `{{$randomInt}}` work as they are. Scripts and tests aren't imported.
 
-What Mercury can't express is **named in the notification** rather than dropped quietly: OAuth 2 and other token-exchange auth, binary-file bodies, and GraphQL bodies. Anything listed there needs finishing by hand on the [Auth tab](/docs/features/auth) or the Body tab.
+What Mercury can't express is **named in the notification** rather than dropped quietly: OAuth 2 and other token-exchange auth, and binary-file bodies. Anything listed there needs finishing by hand on the [Auth tab](/docs/features/auth) or the Body tab.
 
 Example: importing a collection named "My API":
 
@@ -67,10 +69,12 @@ In Insomnia, use **Export** on a collection (v5 YAML, Insomnia 10 and later) or 
 | `{{ _.base_url }}` | `{{base_url}}`; nested values (`_.api.url`) become `api.url` |
 | Bearer, API key and Basic auth | The `Authorization` (or API key) header, or a query parameter |
 | JSON / text body | Body, with its `Content-Type` |
+| GraphQL body | Its JSON body, with `Content-Type: application/json` |
 | Form URL-encoded / Multipart body | A Form / Multipart body. File fields arrive switched off |
-| Headers | Headers (disabled ones are skipped) |
+| Headers | Headers; disabled ones stay, switched off |
+| Description | A `description` field in the request file |
 
-Named in the notification, because Mercury can't express them: OAuth 2 and other token-exchange auth, Basic auth whose username or password is a variable (the header is base64, which would hide it), GraphQL bodies, and template tags such as `{% response %}` or `{% uuid %}`.
+Named in the notification, because Mercury can't express them: OAuth 2 and other token-exchange auth, Basic auth whose username or password is a variable (the header is base64, which would hide it), a file as the whole body, and template tags such as `{% response %}` or `{% uuid %}`.
 
 ```
 workspace/
@@ -97,8 +101,8 @@ curl -X POST https://api.example.com/users \
 | Flag | Effect |
 |------|--------|
 | `-X`, `--request` | Method |
-| `-H`, `--header` | Header |
-| `-d`, `--data`, `--data-raw`, `--data-binary` | Body. Changes a `GET` to `POST`. Repeated flags are joined with `&`, as curl does. Without a `Content-Type` header, adds `application/x-www-form-urlencoded`, which is what curl sends. |
+| `-H`, `--header` | Header (`Name;` is a header with an empty value, as in curl) |
+| `-d`, `--data`, `--data-raw`, `--data-binary` | Body. Changes a `GET` to `POST`, unless the command says `-X GET`. Repeated flags are joined with `&`, as curl does. Without a `Content-Type` header, adds `application/x-www-form-urlencoded`, which is what curl sends. |
 | `--data-urlencode` | Body, percent-encoded: in `name=value` only the value is encoded. |
 | `--json` | Body plus `Content-Type: application/json`. Changes a `GET` to `POST`. |
 | `-u`, `--user` | `Authorization: Basic ...` |
@@ -125,6 +129,8 @@ curl -X GET 'https://api.example.com/users' \
 - Variables from the selected environment are substituted in. Undefined ones stay as `{{NAME}}`.
 - Disabled (`#`) headers are left out.
 - Arguments are single-quoted, so you can paste the command into a POSIX shell as is.
+- The body goes in `--data-raw`, so one starting with `@` is sent as text, not read from a file. A `HEAD` request is `-I`, a URL with `[ ]` or `{ }` gets `-g` so curl doesn't read it as a pattern, and a header with an empty value is written `Name;`.
+- Pasted back into the URL bar, the command gives the same request.
 
 ## Sharing request files
 

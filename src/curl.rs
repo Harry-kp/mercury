@@ -68,6 +68,8 @@ pub fn parse(cmd: &str) -> Result<CurlRequest, String> {
     let mut data: Vec<String> = Vec::new();
     let mut form: Vec<String> = Vec::new();
     let mut get = false;
+    // a body turns only curl's default GET into a POST, not `-X GET`
+    let mut method_given = false;
     // a stack, so a word can be split and its rest read next
     let mut args: Vec<String> = tokens.into_iter().rev().collect();
     while let Some(mut token) = args.pop() {
@@ -90,10 +92,17 @@ pub fn parse(cmd: &str) -> Result<CurlRequest, String> {
             "-X" | "--request" => {
                 if let Some(m) = args.pop() {
                     req.method = HttpMethod::parse(&m).unwrap_or_default();
+                    method_given = true;
                 }
             }
             "-H" | "--header" => {
-                if let Some((k, v)) = args.pop().as_deref().and_then(|h| h.split_once(':')) {
+                let header = args.pop().unwrap_or_default();
+                // `Name;` is curl's spelling of a header with an empty value
+                let pair = match header.trim().strip_suffix(';') {
+                    Some(name) if !name.contains(':') => Some((name, "")),
+                    _ => header.split_once(':'),
+                };
+                if let Some((k, v)) = pair {
                     req.headers
                         .push((k.trim().to_string(), v.trim().to_string()));
                 }
@@ -125,11 +134,14 @@ pub fn parse(cmd: &str) -> Result<CurlRequest, String> {
                     // one -F is one body line, even if `$'…'` hid a newline
                     let field = &field.replace(['\r', '\n'], " ");
                     let literal = token == "--form-string";
+                    let file = field
+                        .split_once('=')
+                        .is_some_and(|(_, v)| v.starts_with('@'));
                     form.push(match field.split_once("=@") {
                         // --form-string's `@` is text: Mercury writes that `@@`
-                        Some((k, v)) if literal => format!("{k}=@@{v}"),
-                        Some(_) => field.split(';').next().unwrap_or(field).to_string(),
-                        None => field.clone(),
+                        Some((k, v)) if literal && file => format!("{k}=@@{v}"),
+                        Some(_) if file => field.split(';').next().unwrap_or(field).to_string(),
+                        _ => field.clone(),
                     });
                 }
             }
@@ -179,7 +191,7 @@ pub fn parse(cmd: &str) -> Result<CurlRequest, String> {
     if !form.is_empty() {
         req.body = Some(form.join("\n"));
         default_type(&mut req, "multipart/form-data");
-        if req.method == HttpMethod::GET {
+        if !method_given && req.method == HttpMethod::GET {
             req.method = HttpMethod::POST;
         }
     }
@@ -192,7 +204,7 @@ pub fn parse(cmd: &str) -> Result<CurlRequest, String> {
         } else {
             req.body = Some(data);
             default_type(&mut req, "application/x-www-form-urlencoded");
-            if req.method == HttpMethod::GET {
+            if !method_given && req.method == HttpMethod::GET {
                 req.method = HttpMethod::POST;
             }
         }
@@ -214,12 +226,29 @@ pub fn generate(
     headers: &BTreeMap<String, String>,
     body: &str,
 ) -> String {
-    let mut curl = format!("curl -X {} {}", method.as_str(), shell_quote(url));
+    // `-X HEAD` makes curl wait for a body that never comes
+    let method = match method {
+        HttpMethod::HEAD => "-I".to_string(),
+        m => format!("-X {}", m.as_str()),
+    };
+    // curl reads `[…]` and `{…}` in a URL as a pattern unless told not to
+    let globoff = if url.contains(['[', ']', '{', '}']) {
+        " -g"
+    } else {
+        ""
+    };
+    let mut curl = format!("curl {method}{globoff} {}", shell_quote(url));
     let multipart = crate::http::is_multipart(headers);
     for (k, v) in headers {
         // curl writes its own, with the boundary
         if !(multipart && k.eq_ignore_ascii_case("content-type")) {
-            curl.push_str(&format!(" \\\n  -H {}", shell_quote(&format!("{k}: {v}"))));
+            // `Name:` with nothing after it removes the header in curl
+            let header = if v.trim().is_empty() {
+                format!("{k};")
+            } else {
+                format!("{k}: {v}")
+            };
+            curl.push_str(&format!(" \\\n  -H {}", shell_quote(&header)));
         }
     }
     if multipart {
@@ -238,7 +267,8 @@ pub fn generate(
             }
         }
     } else if !body.is_empty() {
-        curl.push_str(&format!(" \\\n  -d {}", shell_quote(body)));
+        // not -d: it reads a body starting with `@` from a file
+        curl.push_str(&format!(" \\\n  --data-raw {}", shell_quote(body)));
     }
     curl
 }
@@ -407,6 +437,64 @@ mod tests {
     #[test]
     fn missing_url_is_error() {
         assert!(parse("curl -X POST").is_err());
+    }
+
+    /// Copy as cURL, pasted back, is the same request: every body type and
+    /// the quoting that used to change it on the way.
+    #[test]
+    fn copy_then_paste_is_the_same_request() {
+        let json = BTreeMap::from([("Content-Type".to_string(), "application/json".to_string())]);
+        let multipart = BTreeMap::from([(
+            "Content-Type".to_string(),
+            "multipart/form-data".to_string(),
+        )]);
+        let headers = BTreeMap::from([
+            ("X-Empty".to_string(), String::new()),
+            ("X-Time".to_string(), "12:30:00".to_string()),
+        ]);
+        let cases = [
+            (
+                HttpMethod::GET,
+                "https://a.com/x?ids[]=1&q={a}",
+                &headers,
+                "",
+            ),
+            (HttpMethod::HEAD, "https://a.com/", &headers, ""),
+            // a GET with a body (Elasticsearch) stays a GET
+            (
+                HttpMethod::GET,
+                "https://a.com/_search",
+                &json,
+                "{\"q\": 1}",
+            ),
+            (
+                HttpMethod::POST,
+                "https://a.com",
+                &json,
+                "{\"it's\": \"$HOME é ✓\",\n  \"x\": \"\\\"\"}",
+            ),
+            // a raw body starting with `@` is text, not a file to upload
+            (HttpMethod::PUT, "https://a.com", &json, "@me"),
+            (
+                HttpMethod::POST,
+                "https://a.com",
+                &multipart,
+                "name=Ada\nf=@/tmp/a b.png\nlit=@@x\neq=a=@b",
+            ),
+        ];
+        for (method, url, headers, body) in cases {
+            let cmd = generate(method, url, headers, body);
+            let back = parse(&cmd).unwrap();
+            assert_eq!((back.method, back.url.as_str()), (method, url), "{cmd}");
+            assert_eq!(back.body.unwrap_or_default(), body, "{cmd}");
+            let sent: BTreeMap<String, String> = back.headers.into_iter().collect();
+            assert_eq!(&sent, headers, "{cmd}");
+            // and curl itself: no `-d @…` file read, no `-X HEAD` hang, no
+            // URL globbing, no `Name:` that deletes the header
+            assert!(!cmd.contains(" -d ") && !cmd.contains("-X HEAD"), "{cmd}");
+            assert!(!url.contains('[') || cmd.contains(" -g "), "{cmd}");
+            assert!(!cmd.contains("X-Empty:"), "{cmd}");
+        }
     }
 
     #[test]

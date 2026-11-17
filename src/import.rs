@@ -35,7 +35,11 @@ pub fn merge(total: Option<ImportCount>, next: ImportCount) -> ImportCount {
     total.requests += next.requests;
     total.envs += next.envs;
     total.skipped.extend(next.skipped);
-    total.env = total.env.or(next.env);
+    // the shared `.env` (Postman globals) only if no real environment came
+    total.env = match total.env {
+        Some(env) if env != ".env" => Some(env),
+        base => next.env.or(base),
+    };
     total
 }
 
@@ -47,10 +51,12 @@ pub fn merge(total: Option<ImportCount>, next: ImportCount) -> ImportCount {
 fn sanitize_filename(name: &str) -> String {
     let mut out = String::with_capacity(name.len());
     for ch in name.to_lowercase().chars() {
-        if matches!(
-            ch,
-            ' ' | '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|'
-        ) {
+        if ch.is_control()
+            || matches!(
+                ch,
+                ' ' | '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|'
+            )
+        {
             if !out.is_empty() && !out.ends_with('-') {
                 out.push('-');
             }
@@ -58,6 +64,9 @@ fn sanitize_filename(name: &str) -> String {
             out.push(ch);
         }
     }
+    // a file name is at most 255 bytes: a long request name failed the
+    // whole import halfway through (64 chars of up to 4 bytes, plus `-N.json`)
+    let out: String = out.chars().take(64).collect();
     let out = out.trim_end_matches('-').trim_start_matches('.');
     if out.is_empty() {
         "untitled".to_string()
@@ -104,7 +113,12 @@ fn import_folder(out: &Path, name: &str) -> Result<std::path::PathBuf, String> {
         .map(|entries| {
             entries
                 .flatten()
-                .all(|e| e.file_name().to_string_lossy() == ".DS_Store")
+                // environments too: picked together with a collection, an
+                // environment imported first put the requests in a subfolder
+                .all(|e| {
+                    let name = e.file_name().to_string_lossy().into_owned();
+                    name == ".DS_Store" || name == ".env" || name.starts_with(".env.")
+                })
         })
         .unwrap_or(true);
     let dir = if empty {
@@ -126,62 +140,56 @@ fn create_dir(path: &Path) -> Result<(), String> {
     fs::create_dir_all(path).map_err(|e| format!("Failed to create '{}': {e}", path.display()))
 }
 
-fn write_request(
-    dir: &Path,
-    name: &str,
-    method: &str,
-    url: String,
-    headers: BTreeMap<String, String>,
-    body: String,
-) -> Result<(), String> {
+/// `request`'s headers and body as imported; what Mercury will load is
+/// worked out here.
+fn write_request(dir: &Path, name: &str, mut request: RequestFile) -> Result<(), String> {
     // The headers exactly as Mercury will load them: written as `name:
     // value` lines and parsed back. A newline in a value, a name holding a
     // `:` ("Content-Type: multipart/form-data;x"), padding around a name:
     // each turns into something else once loaded, so the check below and
     // the file both use the loaded form, never the imported one.
     let flat = |s: String| s.replace(['\r', '\n'], " ");
-    let flattened: BTreeMap<String, String> = headers
-        .into_iter()
-        .map(|(k, v)| (flat(k), flat(v)))
-        .collect();
-    let headers = kv::headers_to_map(&kv::map_to_headers(&flattened));
+    let loaded = |headers: BTreeMap<String, String>| {
+        let flattened: BTreeMap<String, String> = headers
+            .into_iter()
+            .map(|(k, v)| (flat(k), flat(v)))
+            .collect();
+        kv::headers_to_map(&kv::map_to_headers(&flattened))
+    };
+    request.headers = loaded(std::mem::take(&mut request.headers));
+    request.disabled_headers = loaded(std::mem::take(&mut request.disabled_headers));
     // Whatever path the body took (a raw body under a multipart
     // Content-Type, an odd mimeType), if it could be sent as Multipart, no
     // line of it is a live file upload until the user ticks it: a collection
     // from someone else could otherwise post ~/.ssh/id_rsa. "Could" is
     // decided before variables: `Content-Type: {{CT}}`, or a header *named*
     // by a variable, can turn multipart at send time.
-    let maybe_multipart = headers.iter().any(|(k, v)| {
+    let maybe_multipart = request.headers.iter().any(|(k, v)| {
         k.contains("{{")
             || (k.eq_ignore_ascii_case("content-type")
                 && (v.contains("{{") || v.to_ascii_lowercase().contains("multipart")))
     });
-    let body = if maybe_multipart {
-        let mut rows = kv::parse_lines(&body, "=");
+    if maybe_multipart {
+        let mut rows = kv::parse_lines(&request.body, "=");
         for row in &mut rows {
             if row.value.starts_with('@') && !row.value.starts_with("@@") {
                 row.enabled = false;
             }
         }
-        kv::format_lines(&rows, "=")
-    } else {
-        body
-    };
-    let request = RequestFile {
-        method: HttpMethod::parse(method).unwrap_or_default(),
-        url,
-        headers,
-        body,
-        ..Default::default()
-    };
+        request.body = kv::format_lines(&rows, "=");
+    }
     let path = unique(dir.join(format!("{}.json", sanitize_filename(name))));
     write_file(&path, request.to_json())
 }
 
-/// Writes `.env.<name>` (never over an existing one) and returns its name.
+/// A free `.env.<name>` in `dir`.
+fn env_file(dir: &Path, name: &str) -> std::path::PathBuf {
+    unique(dir.join(format!(".env.{}", sanitize_filename(name))))
+}
+
+/// Writes a new environment file at `path` and returns its name.
 fn write_env<'a>(
-    dir: &Path,
-    name: &str,
+    path: std::path::PathBuf,
     vars: impl IntoIterator<Item = (&'a String, &'a Value)>,
 ) -> Result<String, String> {
     let content: String = vars
@@ -194,7 +202,6 @@ fn write_env<'a>(
             )
         })
         .collect();
-    let path = unique(dir.join(format!(".env.{}", sanitize_filename(name))));
     write_file(&path, content)?;
     Ok(path
         .file_name()
@@ -240,14 +247,21 @@ struct PostmanItem {
 
 #[derive(Deserialize)]
 struct PostmanRequest {
+    /// both optional in the schema: Postman leaves them out of a request
+    /// that was never given one, and that failed the whole import
+    #[serde(default)]
     method: String,
     #[serde(default)]
     header: Vec<PostmanKeyValue>,
+    #[serde(default)]
     url: PostmanUrl,
     #[serde(default)]
     body: Option<PostmanBody>,
     #[serde(default)]
     auth: Option<PostmanAuth>,
+    /// a string, or `{"content": …}`
+    #[serde(default)]
+    description: Option<Value>,
 }
 
 #[derive(Deserialize)]
@@ -269,6 +283,12 @@ enum PostmanUrl {
         #[serde(default)]
         variable: Vec<PostmanKeyValue>,
     },
+}
+
+impl Default for PostmanUrl {
+    fn default() -> Self {
+        PostmanUrl::String(String::new())
+    }
 }
 
 #[derive(Deserialize)]
@@ -308,6 +328,9 @@ struct PostmanBody {
     urlencoded: Vec<PostmanKeyValue>,
     #[serde(default)]
     formdata: Vec<PostmanKeyValue>,
+    /// `{"query": "…", "variables": "<JSON text>"}`
+    #[serde(default)]
+    graphql: Option<Value>,
     /// `{"raw": {"language": "json"}}`: Postman sends the matching
     /// `Content-Type` itself, so the request file has to say it
     #[serde(default)]
@@ -334,8 +357,8 @@ fn multipart_line(key: &str, value: &str, file: bool) -> String {
 }
 
 /// A Postman body in Mercury's terms, plus the `Content-Type` it implies when
-/// the request did not set one. The modes that come back `None` are the ones
-/// Mercury has nowhere to put — a raw `file` body, GraphQL — so the import
+/// the request did not set one. The mode that comes back `None` is the one
+/// Mercury has nowhere to put — a raw `file` body — so the import
 /// can say what it could not
 /// bring across, instead of writing an empty body under a `Content-Type` that
 /// promises one.
@@ -377,7 +400,18 @@ fn postman_body(body: &PostmanBody) -> Option<(String, Option<&'static str>)> {
                 .collect();
             Some((lines.join("\n"), Some("multipart/form-data")))
         }
-        Some("file") | Some("graphql") => None,
+        // what Postman sends for it: a JSON body. The variables are JSON
+        // text, kept as written: `{"id": {{id}}}` only parses once filled in.
+        Some("graphql") => {
+            let text = |k: &str| body.graphql.as_ref().map_or("", |g| str_of(g, k)).trim();
+            let query = Value::from(text("query"));
+            let body = match text("variables") {
+                "" => format!("{{\"query\": {query}}}"),
+                vars => format!("{{\"query\": {query}, \"variables\": {vars}}}"),
+            };
+            Some((body, Some("application/json")))
+        }
+        Some("file") => None,
         // "raw", or a body with no mode at all
         _ => {
             let language = body
@@ -410,15 +444,18 @@ struct PostmanAuth {
 impl PostmanAuth {
     /// The auth parameters are a list of `{key, value}` under a field named
     /// after the type: `{"type": "bearer", "bearer": [{"key": "token", …}]}`.
+    /// (v2.0 wrote them as an object, `"bearer": {"token": …}`, and its
+    /// tokens came across empty)
     fn param(&self, name: &str) -> String {
-        self.params
-            .get(&self.kind)
-            .and_then(Value::as_array)
-            .into_iter()
-            .flatten()
-            .find(|e| e.get("key").and_then(Value::as_str) == Some(name))
-            .and_then(|e| e.get("value"))
-            .map_or_else(String::new, value_to_string)
+        let value = match self.params.get(&self.kind) {
+            Some(Value::Array(list)) => list
+                .iter()
+                .find(|e| e.get("key").and_then(Value::as_str) == Some(name))
+                .and_then(|e| e.get("value")),
+            Some(object) => object.get(name),
+            None => None,
+        };
+        value.map_or_else(String::new, value_to_string)
     }
 }
 
@@ -458,7 +495,11 @@ enum Auth {
 #[derive(Deserialize)]
 struct PostmanVariable {
     key: String,
+    /// left out for a variable without one, which failed the whole import
+    #[serde(default)]
     value: Value,
+    #[serde(default)]
+    disabled: bool,
 }
 
 /// Use `raw` when present, else rebuild from parts (disabled params dropped).
@@ -548,12 +589,15 @@ fn postman_item(
     let auth = item.auth.as_ref().or(inherited);
     if let Some(req) = &item.request {
         let auth = req.auth.as_ref().or(auth);
-        let mut headers: BTreeMap<String, String> = req
-            .header
-            .iter()
-            .filter(|h| !h.disabled)
-            .map(|h| (h.key.clone(), h.value()))
-            .collect();
+        // a header switched off in Postman stays, switched off
+        let headers_where = |disabled: bool| -> BTreeMap<String, String> {
+            req.header
+                .iter()
+                .filter(|h| h.disabled == disabled)
+                .map(|h| (h.key.clone(), h.value()))
+                .collect()
+        };
+        let mut headers = headers_where(false);
         let mut url = postman_url(&req.url);
         match auth.map(postman_auth) {
             Some(Some(Auth::Header(name, value))) => {
@@ -587,7 +631,22 @@ fn postman_item(
             }
             None => String::new(),
         };
-        write_request(dir, &item.name, &req.method, url, headers, body)?;
+        let mut request = RequestFile {
+            method: HttpMethod::parse(&req.method).unwrap_or_default(),
+            url,
+            headers,
+            body,
+            disabled_headers: headers_where(true),
+            ..Default::default()
+        };
+        let description = match &req.description {
+            Some(Value::Object(d)) => d.get("content").map(value_to_string),
+            other => other.as_ref().map(value_to_string),
+        };
+        if let Some(d) = description.filter(|d| !d.trim().is_empty()) {
+            request.extra.insert("description".into(), d.into());
+        }
+        write_request(dir, &item.name, request)?;
         return Ok(1);
     }
     if item.item.is_empty() {
@@ -630,6 +689,9 @@ pub fn import_postman(path: &Path, out: &Path) -> Result<ImportCount, String> {
             .to_string()
     })?;
     if json.get("values").is_some() && json.get("item").is_none() {
+        // globals apply under every environment: Mercury's `.env`, which
+        // each `.env.<name>` is layered over (unless the folder has one)
+        let globals = str_of(&json, "_postman_variable_scope") == "globals";
         let env: PostmanEnvironment = serde_json::from_value(json)
             .map_err(|e| format!("That Postman environment couldn't be read: {e}"))?;
         let vars: Vec<_> = env
@@ -638,7 +700,11 @@ pub fn import_postman(path: &Path, out: &Path) -> Result<ImportCount, String> {
             .filter(|v| v.enabled && !v.key.is_empty())
             .map(|v| (&v.key, &v.value))
             .collect();
-        let name = write_env(out, &env.name, vars)?;
+        let path = match out.join(".env") {
+            base if globals && !crate::workspace::taken(&base) => base,
+            _ => env_file(out, &env.name),
+        };
+        let name = write_env(path, vars)?;
         return Ok(ImportCount {
             envs: 1,
             folder: out.to_path_buf(),
@@ -660,8 +726,12 @@ pub fn import_postman(path: &Path, out: &Path) -> Result<ImportCount, String> {
     let folder = import_folder(out, &collection.info.name)?;
     let mut env = None;
     if !collection.variable.is_empty() {
-        let vars = collection.variable.iter().map(|v| (&v.key, &v.value));
-        env = Some(write_env(out, &collection.info.name, vars)?);
+        let vars = collection
+            .variable
+            .iter()
+            .filter(|v| !v.disabled)
+            .map(|v| (&v.key, &v.value));
+        env = Some(write_env(env_file(out, &collection.info.name), vars)?);
     }
     let mut skipped = Vec::new();
     let requests = collection
@@ -727,20 +797,23 @@ fn flatten_env(prefix: &str, data: &Value, out: &mut BTreeMap<String, Value>) {
 /// written as a Mercury request file into `dir`.
 fn insomnia_request(req: &Value, dir: &Path, skipped: &mut Vec<String>) -> Result<(), String> {
     let name = str_of(req, "name");
-    let mut headers: BTreeMap<String, String> = req
-        .get("headers")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-        .filter(|h| !h.get("disabled").and_then(Value::as_bool).unwrap_or(false))
-        .filter(|h| !str_of(h, "name").is_empty())
-        .map(|h| {
-            (
-                insomnia_text(str_of(h, "name")),
-                insomnia_text(str_of(h, "value")),
-            )
-        })
-        .collect();
+    // a header switched off in Insomnia stays, switched off
+    let headers_where = |disabled: bool| -> BTreeMap<String, String> {
+        req.get("headers")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .filter(|h| h.get("disabled").and_then(Value::as_bool).unwrap_or(false) == disabled)
+            .filter(|h| !str_of(h, "name").is_empty())
+            .map(|h| {
+                (
+                    insomnia_text(str_of(h, "name")),
+                    insomnia_text(str_of(h, "value")),
+                )
+            })
+            .collect()
+    };
+    let mut headers = headers_where(false);
     let mut url = insomnia_text(str_of(req, "url"));
 
     // authentication
@@ -792,7 +865,7 @@ fn insomnia_request(req: &Value, dir: &Path, skipped: &mut Vec<String>) -> Resul
     let body = req.get("body").cloned().unwrap_or(Value::Null);
     // the media type alone, as the sender compares it ("Multipart/Form-Data;
     // boundary=x" is multipart too)
-    let mime = str_of(&body, "mimeType")
+    let mut mime = str_of(&body, "mimeType")
         .split(';')
         .next()
         .unwrap_or("")
@@ -830,11 +903,18 @@ fn insomnia_request(req: &Value, dir: &Path, skipped: &mut Vec<String>) -> Resul
             })
             .collect::<Vec<_>>()
             .join("\n"),
+        // the text is already the `{"query": …}` JSON Insomnia sends
         "application/graphql" => {
-            skipped.push(format!("{name}: GraphQL body"));
-            String::new()
+            mime = "application/json".into();
+            insomnia_text(str_of(&body, "text"))
         }
-        _ => insomnia_text(str_of(&body, "text")),
+        _ => {
+            // a file as the whole body: Mercury has nowhere to put one
+            if !str_of(&body, "fileName").is_empty() {
+                skipped.push(format!("{name}: file body"));
+            }
+            insomnia_text(str_of(&body, "text"))
+        }
     };
     if !mime.is_empty() && !text.is_empty() {
         let has_type = headers
@@ -851,7 +931,21 @@ fn insomnia_request(req: &Value, dir: &Path, skipped: &mut Vec<String>) -> Resul
     {
         skipped.push(format!("{name}: template tags ({{% … %}})"));
     }
-    write_request(dir, name, str_of(req, "method"), url, headers, text)
+    let mut request = RequestFile {
+        method: HttpMethod::parse(str_of(req, "method")).unwrap_or_default(),
+        url,
+        headers,
+        body: text,
+        disabled_headers: headers_where(true),
+        ..Default::default()
+    };
+    let description = str_of(req, "description");
+    if !description.trim().is_empty() {
+        request
+            .extra
+            .insert("description".into(), description.into());
+    }
+    write_request(dir, name, request)
 }
 
 /// Writes one `.env` per environment the user can pick: each sub-environment
@@ -871,14 +965,14 @@ fn insomnia_envs(
         if base_vars.is_empty() {
             return Ok((0, None));
         }
-        let name = write_env(out, collection, &base_vars)?;
+        let name = write_env(env_file(out, collection), &base_vars)?;
         return Ok((1, Some(name)));
     }
     let mut first = None;
     for (name, data) in subs {
         let mut vars = base_vars.clone();
         flatten_env("", data, &mut vars);
-        let file = write_env(out, name, &vars)?;
+        let file = write_env(env_file(out, name), &vars)?;
         first.get_or_insert(file);
     }
     Ok((subs.len(), first))
@@ -1025,9 +1119,16 @@ mod tests {
             skipped: vec!["x".into()],
             ..Default::default()
         };
-        let both = merge(Some(merge(None, env)), collection);
-        assert_eq!((both.requests, both.envs), (3, 1));
+        let globals = ImportCount {
+            envs: 1,
+            folder: "/ws".into(),
+            env: Some(".env".into()),
+            ..Default::default()
+        };
+        let both = merge(Some(merge(Some(globals), env)), collection);
+        assert_eq!((both.requests, both.envs), (3, 2));
         assert_eq!(both.folder, std::path::Path::new("/ws/acme"));
+        // a real environment is selected over the shared globals
         assert_eq!(both.env.as_deref(), Some(".env.staging"));
         assert_eq!(both.skipped, ["x"]);
     }
@@ -1567,5 +1668,112 @@ environments:
         assert_eq!(sanitize_filename("what?"), "what");
         assert_eq!(sanitize_filename("???"), "untitled");
         assert_eq!(sanitize_filename(".hidden"), "hidden");
+    }
+
+    /// QA round 10: each of these failed the import, came across empty, or
+    /// was dropped although Mercury can hold it.
+    #[test]
+    fn postman_shapes_that_used_to_fail_or_go_missing() {
+        let long = "ü".repeat(200);
+        let export = format!(
+            r#"{{"info": {{"name": "Old"}},
+            "auth": {{"type": "bearer", "bearer": {{"token": "v2-0"}}}},
+            "variable": [{{"key": "empty"}}, {{"key": "off", "value": "1", "disabled": true}}],
+            "item": [
+                {{"name": "No method or url", "request": {{}}}},
+                {{"name": "Query", "request": {{"method": "POST", "url": "https://g.test",
+                  "description": {{"content": "Finds a user"}},
+                  "header": [{{"key": "X-Debug", "value": "1", "disabled": true}}],
+                  "body": {{"mode": "graphql", "graphql":
+                    {{"query": "query ($id: ID) {{ user(id: $id) {{ name }} }}", "variables": "{{\"id\": {{{{id}}}}}}"}}}}}}}},
+                {{"name": "{long}", "request": {{"method": "GET", "url": "https://x"}}}},
+                {{"name": "tab\tname", "request": {{"method": "GET", "url": "https://x"}}}}
+            ]}}"#
+        );
+        let (dir, result) = import(import_postman, &export);
+        let count = result.unwrap();
+        assert_eq!(count.requests, 4);
+        assert!(count.skipped.is_empty(), "{:?}", count.skipped);
+
+        // v2.0 wrote auth params as an object
+        let bare = RequestFile::from_json(&read_out(&dir, "no-method-or-url.json")).unwrap();
+        assert_eq!((bare.method, bare.url.as_str()), (HttpMethod::GET, ""));
+        assert_eq!(bare.headers["Authorization"], "Bearer v2-0");
+
+        // GraphQL is the JSON body Postman sends; a disabled header and the
+        // description are kept
+        let query = RequestFile::from_json(&read_out(&dir, "query.json")).unwrap();
+        assert_eq!(query.headers["Content-Type"], "application/json");
+        assert_eq!(
+            query.body,
+            r#"{"query": "query ($id: ID) { user(id: $id) { name } }", "variables": {"id": {{id}}}}"#
+        );
+        assert_eq!(query.disabled_headers["X-Debug"], "1");
+        assert_eq!(query.extra["description"], "Finds a user");
+
+        // a 200-character name is cut to a file name the OS accepts
+        assert!(dir
+            .path()
+            .join("out")
+            .join(format!("{}.json", "ü".repeat(64)))
+            .is_file());
+        assert!(dir.path().join("out/tab-name.json").is_file());
+
+        let env = read_out(&dir, ".env.old");
+        assert!(env.contains("empty=") && !env.contains("off="), "{env}");
+    }
+
+    /// Several files picked at once land the same in any order, globals are
+    /// the `.env` every environment shares, and a big collection with
+    /// duplicate names keeps every request.
+    #[test]
+    fn postman_globals_env_order_and_duplicates() {
+        let dir = TempDir::new().unwrap();
+        let out = dir.path().join("ws");
+        fs::create_dir_all(&out).unwrap();
+        let env = r#"{"name": "Dev", "values": [{"key": "a", "value": "1"}]}"#;
+        import_into(import_postman, env, &out).unwrap();
+        let globals = r#"{"name": "My Workspace Globals", "_postman_variable_scope": "globals",
+            "values": [{"key": "g", "value": "2"}]}"#;
+        let count = import_into(import_postman, globals, &out).unwrap();
+        assert_eq!(count.env.as_deref(), Some(".env"));
+        assert_eq!(fs::read_to_string(out.join(".env")).unwrap(), "g=2\n");
+        // a second globals file never overwrites the first
+        let count = import_into(import_postman, globals, &out).unwrap();
+        assert_eq!(count.env.as_deref(), Some(".env.my-workspace-globals"));
+
+        let items: Vec<String> = (0..1000)
+            .map(|i| {
+                format!(
+                    r#"{{"name": "Get", "request": {{"method": "GET", "url": "https://x/{i}"}}}}"#
+                )
+            })
+            .collect();
+        let collection = format!(
+            r#"{{"info": {{"name": "Big"}}, "item": [{}]}}"#,
+            items.join(",")
+        );
+        let count = import_into(import_postman, &collection, &out).unwrap();
+        // only environments were there: the requests go in the root
+        assert_eq!((count.requests, count.folder), (1000, out.clone()));
+        assert!(file(&out.join("get-1000.json")).url.ends_with("/999"));
+    }
+
+    #[test]
+    fn insomnia_graphql_file_body_and_disabled_headers() {
+        let export = r#"{"resources":[
+         {"_id":"a","_type":"request","name":"Gql","method":"POST","url":"https://x","description":"Lists users",
+          "headers":[{"name":"X-Off","value":"1","disabled":true}],
+          "body":{"mimeType":"application/graphql","text":"{\"query\":\"{ users { id } }\"}"}},
+         {"_id":"b","_type":"request","name":"Upload","method":"PUT","url":"https://x",
+          "body":{"mimeType":"application/octet-stream","fileName":"/tmp/a.bin"}}]}"#;
+        let (dir, result) = import(import_insomnia, export);
+        let count = result.unwrap();
+        assert_eq!(count.skipped, ["Upload: file body"]);
+        let gql = RequestFile::from_json(&read_out(&dir, "gql.json")).unwrap();
+        assert_eq!(gql.body, r#"{"query":"{ users { id } }"}"#);
+        assert_eq!(gql.headers["Content-Type"], "application/json");
+        assert_eq!(gql.disabled_headers["X-Off"], "1");
+        assert_eq!(gql.extra["description"], "Lists users");
     }
 }

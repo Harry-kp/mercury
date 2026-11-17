@@ -88,10 +88,7 @@ impl MercuryApp {
         ui.add_space(Space::XL);
         // a dev server's self-signed certificate: every other client has a
         // "don't verify" setting; here it's asked for where it's needed
-        let untrusted = error
-            .starts_with(http::CERT_ERROR)
-            .then(|| http::host(&crate::vars::substitute(&self.url, &self.env_vars)))
-            .flatten();
+        let untrusted = http::untrusted_host(error).map(str::to_string);
         ui.vertical_centered(|ui| match untrusted {
             Some(host) => {
                 let label = format!("Trust {host} and retry");
