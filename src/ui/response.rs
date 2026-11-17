@@ -86,9 +86,27 @@ impl MercuryApp {
     fn failed_state(&mut self, ui: &mut Ui, error: &str) {
         error_state(ui, error);
         ui.add_space(Space::XL);
-        ui.vertical_centered(|ui| {
-            if widgets::ghost_button(ui, "Retry").clicked() {
-                self.send_request();
+        // a dev server's self-signed certificate: every other client has a
+        // "don't verify" setting; here it's asked for where it's needed
+        let untrusted = error
+            .starts_with(http::CERT_ERROR)
+            .then(|| http::host(&crate::vars::substitute(&self.url, &self.env_vars)))
+            .flatten();
+        ui.vertical_centered(|ui| match untrusted {
+            Some(host) => {
+                let label = format!("Trust {host} and retry");
+                if widgets::ghost_button(ui, &label)
+                    .on_hover_text("Skips its certificate check until Mercury quits")
+                    .clicked()
+                {
+                    self.trusted_hosts.insert(host);
+                    self.send_request();
+                }
+            }
+            None => {
+                if widgets::ghost_button(ui, "Retry").clicked() {
+                    self.send_request();
+                }
             }
         });
     }

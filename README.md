@@ -212,7 +212,8 @@ There's no settings screen. These are fixed:
 
 | | |
 |---|---|
-| Timeout | 30 seconds |
+| Timeout | None (`Esc` cancels); 30 seconds to connect |
+| Self-signed certificates | **Trust host and retry** on the error, for this session |
 | Redirects | Followed (up to 10) |
 | Largest response downloaded | 10 MB |
 | Largest body shown inline | Any size up to the download limit, syntax-coloured |

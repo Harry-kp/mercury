@@ -121,9 +121,10 @@ These values are fixed in the app and can't be changed:
 
 | Setting | Value |
 |---------|-------|
-| Timeout | 30 seconds |
+| Timeout | None: a slow endpoint can take as long as it needs; `Esc` cancels. Connecting gives up after 30 seconds. |
 | Redirects | Followed (up to 10) |
 | Cookies | Kept for the session (see below) |
+| Certificates | Checked against your system's trusted roots (so company and `mkcert` CAs work). A self-signed certificate fails with **Trust host and retry**, which skips the check for that host until Mercury quits. |
 
 ## Cookies
 

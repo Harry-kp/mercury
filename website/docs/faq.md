@@ -29,7 +29,7 @@ Mercury doesn't upload anything. Network requests go only to the APIs you call a
 
 ### Are there settings?
 
-No. The timeout (30 s), redirect handling and response size limits are fixed. See [Defaults](/docs/features/requests#defaults).
+No. Redirect handling and the response size limit are fixed, and there's no timeout (`Esc` cancels). See [Defaults](/docs/features/requests#defaults).
 
 ## Migration
 
@@ -46,7 +46,7 @@ Request files are plain JSON, so you can copy them, commit them or send them to 
 ### My request doesn't send
 
 - The URL needs to include `http://` or `https://`.
-- The failed-request panel names the cause (nothing listening, host not found, untrusted certificate, no reply after 30s) and shows the full error below it. For anything network-related, check the network, VPN or proxy.
+- The failed-request panel names the cause (nothing listening, host not found, untrusted certificate, can't connect within 30s) and shows the full error below it. For anything network-related, check the network, VPN or proxy.
 - Press `Esc` to cancel a request that is stuck.
 
 ### My `{{variable}}` is sent literally
@@ -55,18 +55,11 @@ The selected environment doesn't define it. Check the environment picker at the 
 
 ### How do I send form data?
 
-Set the header and write the body yourself:
-
-```
-Content-Type: application/x-www-form-urlencoded
-```
-```
-username=john&password=secret
-```
+Pick **Form** in the Body tab and fill in the table. Mercury sets `Content-Type: application/x-www-form-urlencoded`. See [Body types](/docs/features/requests).
 
 ### Can I upload files (multipart)?
 
-No. Multipart bodies aren't supported.
+Yes. Pick **Multipart** in the Body tab and use **Attach file…**, or write `name=@/path/to/file`.
 
 ### Does Mercury support GraphQL?
 
@@ -82,6 +75,10 @@ There's no schema explorer.
 
 Not supported. Mercury only sends HTTP requests.
 
+### My dev server uses a self-signed certificate
+
+The request fails with an SSL/TLS error and a **Trust host and retry** button. It skips the certificate check for that host until Mercury quits. A certificate from a CA your system trusts (your company's, or one made with `mkcert`) just works.
+
 ### Are cookies kept?
 
 Yes, for the current session only. See [Cookies](/docs/features/requests#cookies).
@@ -90,7 +87,7 @@ Yes, for the current session only. See [Cookies](/docs/features/requests#cookies
 
 ### Mercury won't start
 
-- **macOS:** if Gatekeeper blocks Mercury, open **System Settings → Privacy & Security** and click **Allow Anyway**.
+- **macOS:** if Gatekeeper blocks Mercury, open **System Settings → Privacy & Security** and click **Open Anyway**.
 - **Windows:** at the SmartScreen prompt, click **More info**, then **Run anyway**.
 
 ### Edits from my editor don't show up

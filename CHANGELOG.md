@@ -8,10 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Trust a self-signed certificate where it fails.** The SSL/TLS error has **Trust host and retry**, which skips the check for that host until Mercury quits. No setting, and nothing is remembered.
 - **Hover a `{{variable}}` in the URL bar to see its value** and the environment it comes from, even while you type. Before, only the Headers and Body chips showed values, so you opened the `.env` file to check.
 - **Import several exports at once.** The Postman and Insomnia pickers take more than one file, so a collection and its environment exports come in together.
 
 ### Changed
+- **No request timeout.** Slow endpoints (reports, LLM APIs) used to fail at 30 seconds with no way around it. Now only connecting is limited (30 s); `Esc` cancels anything else.
 - **The `⋯` beside Send is gone.** Copy as cURL and Revert to saved are on the open request's `⋯` in the sidebar (and in `⌘ K`); Format is in the Body tab, where it already was.
 - The install instructions include `brew trust --cask harry-kp/tap/mercury`: Homebrew 7 refuses casks from untrusted taps, so the one-line install failed.
 

@@ -4,7 +4,11 @@ use crate::model::RequestFile;
 use serde::{Deserialize, Serialize};
 use std::time::{Duration, Instant};
 
-pub const TIMEOUT_SECS: u64 = 30;
+/// Only connecting is timed out: a slow endpoint (a report, an LLM) may take
+/// minutes to answer, and Esc cancels a request that never will.
+pub const CONNECT_TIMEOUT_SECS: u64 = 30;
+/// Starts every message `error_message` gives an untrusted certificate.
+pub const CERT_ERROR: &str = "SSL/TLS error talking to";
 /// Bodies larger than this are not downloaded ("Response Too Large").
 pub const MAX_RESPONSE_SIZE: usize = 10 * 1024 * 1024;
 
@@ -156,16 +160,38 @@ impl HttpResponse {
     }
 }
 
-/// One client for the whole session so cookies persist across requests.
+#[cfg(test)]
 pub fn client() -> reqwest::blocking::Client {
+    client_with(Default::default(), true)
+}
+
+/// `check_certs: false` is for hosts the user chose to trust (a dev server's
+/// self-signed certificate); it shares `jar` so a login carries across.
+pub fn client_with(
+    jar: std::sync::Arc<reqwest::cookie::Jar>,
+    check_certs: bool,
+) -> reqwest::blocking::Client {
     // reqwest is built without a crypto provider (see Cargo.toml); use ring.
     // Err only means one is already installed, which is fine.
     let _ = rustls::crypto::ring::default_provider().install_default();
     reqwest::blocking::Client::builder()
-        .cookie_store(true)
-        .timeout(Duration::from_secs(TIMEOUT_SECS))
+        .cookie_provider(jar)
+        .connect_timeout(Duration::from_secs(CONNECT_TIMEOUT_SECS))
+        // the blocking client's default is a 30 s total
+        .timeout(None::<Duration>)
+        .danger_accept_invalid_certs(!check_certs)
         .build()
         .expect("HTTP client builds with static config")
+}
+
+/// `host[:port]` of a URL as typed (no scheme needed).
+pub fn host(url: &str) -> Option<String> {
+    let u = reqwest::Url::parse(&with_scheme(url)).ok()?;
+    Some(format!(
+        "{}{}",
+        u.host_str()?,
+        u.port().map(|p| format!(":{p}")).unwrap_or_default()
+    ))
 }
 
 /// `localhost:3000/users` is what people type into a URL bar. Give a
@@ -283,22 +309,16 @@ fn error_message(e: &reqwest::Error) -> String {
     let lower = text.to_lowercase();
     let host = e
         .url()
-        .and_then(|u| {
-            Some(format!(
-                "{}{}",
-                u.host_str()?,
-                u.port().map(|p| format!(":{p}")).unwrap_or_default()
-            ))
-        })
+        .and_then(|u| host(u.as_str()))
         .unwrap_or_else(|| "the server".into());
     let summary = if e.is_timeout() {
-        format!("No reply from {host} after {TIMEOUT_SECS}s.")
+        format!("Could not connect to {host} within {CONNECT_TIMEOUT_SECS}s.")
     } else if e.is_connect()
         && ["certificate", "ssl", "tls", "handshake"]
             .iter()
             .any(|w| lower.contains(w))
     {
-        format!("SSL/TLS error talking to {host}. Its certificate may not be trusted.")
+        format!("{CERT_ERROR} {host}. Its certificate may not be trusted.")
     } else if e.is_connect() && lower.contains("refused") {
         format!("Nothing is listening on {host}. Is the server running?")
     } else if lower.contains("dns") || lower.contains("lookup") || lower.contains("nodename") {
@@ -629,10 +649,23 @@ mod tests {
         let ok = get("https://example.com", &[]).expect("https request");
         assert_eq!(ok.status, 200);
         let bad = get("https://self-signed.badssl.com", &[]).unwrap_err();
-        assert!(
-            bad.contains("SSL/TLS") || bad.to_lowercase().contains("certificate"),
-            "{bad}"
-        );
+        assert!(bad.starts_with(CERT_ERROR), "{bad}");
+        // the host the user chose to trust
+        let trusted = execute(
+            &client_with(Default::default(), false),
+            &RequestFile {
+                url: "https://self-signed.badssl.com".into(),
+                ..Default::default()
+            },
+        )
+        .expect("trusted host skips the certificate check");
+        assert_eq!(trusted.status, 200);
+    }
+
+    #[test]
+    fn host_of_a_typed_url() {
+        assert_eq!(host("localhost:8443/x").as_deref(), Some("localhost:8443"));
+        assert_eq!(host("https://api.dev/v1").as_deref(), Some("api.dev"));
     }
 
     #[test]

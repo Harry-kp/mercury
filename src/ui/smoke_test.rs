@@ -438,6 +438,22 @@ fn open_send_edit_and_save() {
         "hovering {{{{BASE}}}} must show its value"
     );
     harness.event(egui::Event::PointerGone);
+    harness.run_steps(2);
+
+    // An untrusted certificate offers to trust that host, right on the error.
+    let host = crate::http::host(&server).unwrap();
+    harness.state_mut().request_error = Some(format!(
+        "{} {host}. Its certificate may not be trusted.",
+        crate::http::CERT_ERROR
+    ));
+    harness.state_mut().response = None;
+    harness.run_steps(2);
+    harness
+        .get_by_role_and_label(accesskit::Role::Button, &format!("Trust {host} and retry"))
+        .click();
+    harness.run_steps(2);
+    assert!(harness.state().trusted_hosts.contains(&host));
+    wait_for_response(&mut harness);
     harness.state_mut().url = typed;
     harness.run_steps(2);
 
