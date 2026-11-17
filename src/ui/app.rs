@@ -907,9 +907,11 @@ impl MercuryApp {
                 self.history.push(HistorySummary::from(&entry));
                 let excess = self.history.len().saturating_sub(storage::MAX_HISTORY);
                 self.history.drain(..excess);
+                // queued now (instantly visible to history reads), written
                 // off the UI thread: it rewrites the whole history file
-                self.spawn(move || {
-                    storage::append_history(entry);
+                storage::queue_history(entry);
+                self.spawn(|| {
+                    storage::flush_history();
                     None
                 });
 
