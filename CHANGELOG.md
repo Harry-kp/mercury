@@ -36,6 +36,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The body type reads **Body type: none / JSON / Form / Text**.
 
 ### Fixed
+- **About one history entry in eight wouldn't open** once it had been written to disk: its timestamp, which identifies it, was read back from the file a hair off. Timestamps now survive the file exactly.
 - **Pasted cURL commands that came out wrong:** repeated `-d` kept only the last one (curl joins them with `&`); `--data-urlencode` was ignored; `-XPOST` and other values glued to their flag were ignored; `-G` sent the data as a POST body instead of the query string; bash's `$'…'` quoting (Chrome's Copy as cURL for bodies with quotes or newlines) kept the `$` and the backslashes; and `-F` took the form field as the URL. `-F` now says multipart isn't supported.
 - `.env` files with `export KEY=value` lines or a byte-order mark (some Windows editors add one) lost those variables.
 - **Security:** updated the TLS stack (`rustls` 0.23.46, `rustls-webpki` 0.103.17, `webpki-root-certs` 1.0.12) for six advisories, including a ServerHello downgrade (RUSTSEC-2026-0349) and acceptance of distrusted intermediates (RUSTSEC-2026-0382).
