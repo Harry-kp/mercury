@@ -734,6 +734,12 @@ impl MercuryApp {
                     Some(path.to_path_buf()),
                 );
                 self.opened_content = self.saved_content.clone();
+                // opened from ⌘K, history or a relaunch: show where it lives
+                let expanded = self.expanded.len();
+                self.expand_to(path);
+                if self.expanded.len() != expanded {
+                    self.rebuild_tree();
+                }
                 self.last_folder = path.parent().map(Path::to_path_buf);
                 self.opened_recently.retain(|p| p != path);
                 self.opened_recently.insert(0, path.to_path_buf());
@@ -1542,7 +1548,7 @@ impl MercuryApp {
         let chip = widgets::chip(ui, Icon::Layers, &name, color, self.workspace.is_some());
         let mut picked = None;
         popup_menu(ui, &chip, Layout::MENU_WIDTH, |ui| {
-            if menu_item(ui, None, "None", "") {
+            if menu_item(ui, None, "No environment", "") {
                 picked = Some(None);
             }
             for (i, env) in self.env_files.iter().enumerate() {

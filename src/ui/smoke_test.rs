@@ -754,6 +754,16 @@ fn open_send_edit_and_save() {
     assert_eq!(first.state().current_file, None);
     drop(first);
 
+    // opening a request from anywhere (⌘K, history, relaunch) reveals it in
+    // the tree; it used to stay hidden inside collapsed folders
+    harness
+        .state_mut()
+        .open_file(&ws.join("billing/invoices/get-invoice.json"));
+    assert!(harness
+        .state()
+        .expanded
+        .contains(&ws.join("billing/invoices")));
+
     // quitting and relaunching reopens the request that was open, instead of
     // orphaning it into an "Untitled" unsaved request
     harness.state_mut().open_file(&file);

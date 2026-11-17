@@ -79,8 +79,34 @@ impl MercuryApp {
                     } + Layout::ICON_BUTTON
                         + Space::SM;
                     let before = self.url.clone();
+                    // {{variables}} stand out: accent when the environment
+                    // defines them, warning when it doesn't
+                    let env = &self.env_vars;
+                    let mut layouter = |ui: &Ui, text: &dyn egui::TextBuffer, _: f32| {
+                        let t = theme();
+                        let text = text.as_str();
+                        let font = mono(Text::BODY);
+                        let mut job = egui::text::LayoutJob::default();
+                        let mut at = 0;
+                        let put = |job: &mut egui::text::LayoutJob, s: &str, c| {
+                            job.append(s, 0.0, egui::TextFormat::simple(font.clone(), c));
+                        };
+                        crate::vars::for_each_var(text, |name, range| {
+                            put(&mut job, &text[at..range.start], t.text);
+                            let c = if env.contains_key(name) {
+                                t.accent
+                            } else {
+                                t.warning
+                            };
+                            put(&mut job, &text[range.clone()], c);
+                            at = range.end;
+                        });
+                        put(&mut job, &text[at..], t.text);
+                        ui.fonts_mut(|f| f.layout_job(job))
+                    };
                     let url = ui.add(
                         egui::TextEdit::singleline(&mut self.url)
+                            .layouter(&mut layouter)
                             .hint_text(muted("https://api.example.com/users"))
                             .desired_width(
                                 (ui.available_width() - send_width - Space::MD).max(72.0),

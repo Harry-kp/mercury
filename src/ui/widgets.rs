@@ -200,7 +200,11 @@ pub fn highlight_ranges(job: &mut LayoutJob, ranges: &[Range<usize>], color: Col
     let piece = |section: &LayoutSection, range: Range<usize>, hit: bool| {
         let mut section = section.clone();
         section.byte_range = range;
-        section.format.background = if hit { color } else { Color32::TRANSPARENT };
+        // keep what an earlier pass painted (the current match is drawn
+        // over the others)
+        if hit {
+            section.format.background = color;
+        }
         section
     };
     let mut out = Vec::with_capacity(job.sections.len());
@@ -1190,22 +1194,30 @@ pub fn error_state(ui: &mut Ui, error: &str) {
         icon::paint(ui.painter(), Icon::Alert, rect, t.error);
         ui.add_space(Space::LG);
         ui.label(heading("Request failed").color(t.error));
-        ui.add_space(Space::LG);
-        egui::Frame::NONE
-            .fill(t.tint(t.error, 0.10))
-            .corner_radius(Radius::SM)
-            .stroke(Stroke::new(1.0_f32, t.tint(t.error, 0.3)))
-            .inner_margin(Margin::same(Space::LG as i8))
-            .show(ui, |ui| {
-                ui.set_width(ui.available_width());
-                // must wrap: egui grows a side panel to fit its content, and
-                // a long single-line error dragged the whole layout wider
-                ui.add(
-                    egui::Label::new(code(error).color(t.error))
-                        .wrap()
-                        .selectable(true),
-                );
-            });
+        ui.add_space(Space::MD);
+        // errors come as "what to do\n\nwhat the network library said": the
+        // first is for reading, the second for searching or a bug report
+        let (hint, detail) = error.split_once("\n\n").unwrap_or((error, ""));
+        // must wrap: egui grows a side panel to fit its content, and
+        // a long single-line error dragged the whole layout wider
+        ui.add(egui::Label::new(label(hint)).wrap().selectable(true));
+        if !detail.is_empty() {
+            ui.add_space(Space::LG);
+            egui::Frame::NONE
+                .fill(t.tint(t.error, 0.06))
+                .corner_radius(Radius::SM)
+                .inner_margin(Margin::same(Space::MD as i8))
+                .show(ui, |ui| {
+                    ui.set_width(ui.available_width());
+                    ui.with_layout(egui::Layout::top_down(Align::Min), |ui| {
+                        ui.add(
+                            egui::Label::new(code(detail).color(t.text_muted))
+                                .wrap()
+                                .selectable(true),
+                        );
+                    });
+                });
+        }
     });
 }
 
@@ -1633,6 +1645,27 @@ pub fn divider(ui: &mut Ui) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Find paints every match, then the current one over it; the second
+    /// pass used to wipe the first pass's tint off the rest of the line.
+    #[test]
+    fn a_second_highlight_keeps_the_first() {
+        let mut job = plain_job("aa bb aa", f32::INFINITY);
+        highlight_ranges(&mut job, &[0..2, 6..8], Color32::RED);
+        highlight_ranges(&mut job, std::slice::from_ref(&(0..2)), Color32::BLUE);
+        let bg = |at: usize| {
+            job.sections
+                .iter()
+                .find(|s| s.byte_range.contains(&at))
+                .unwrap()
+                .format
+                .background
+        };
+        assert_eq!(
+            (bg(0), bg(3), bg(6)),
+            (Color32::BLUE, Color32::TRANSPARENT, Color32::RED)
+        );
+    }
 
     #[test]
     fn find_all_is_ascii_case_insensitive_and_byte_exact() {
