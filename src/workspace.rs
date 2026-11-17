@@ -21,31 +21,45 @@ fn file_name(path: &Path) -> String {
 /// Folders first, then requests, each sorted by name. Hidden entries are
 /// skipped. Only folders in `expanded` are scanned recursively (lazy loading).
 pub fn scan(dir: &Path, expanded: &HashSet<PathBuf>) -> Vec<CollectionItem> {
+    scan_dir(dir, expanded, true)
+}
+
+/// [`scan`], optionally without opening each request to read its method.
+fn scan_dir(dir: &Path, expanded: &HashSet<PathBuf>, methods: bool) -> Vec<CollectionItem> {
     let Ok(entries) = fs::read_dir(dir) else {
         return Vec::new();
     };
-    let mut paths: Vec<PathBuf> = entries.flatten().map(|e| e.path()).collect();
+    // the type read_dir already has, not a stat per entry; links followed
+    let mut paths: Vec<(PathBuf, bool)> = entries
+        .flatten()
+        .map(|e| {
+            let path = e.path();
+            let dir = e
+                .file_type()
+                .is_ok_and(|t| t.is_dir() || (t.is_symlink() && path.is_dir()));
+            (path, dir)
+        })
+        .collect();
     paths.sort();
 
     let mut folders = Vec::new();
     let mut requests = Vec::new();
-    for path in paths {
+    for (path, is_dir) in paths {
         let name = file_name(&path);
         if name.starts_with('.') {
             continue;
         }
-        if path.is_dir() {
-            let children = expanded.contains(&path).then(|| scan(&path, expanded));
+        if is_dir {
+            let children = expanded
+                .contains(&path)
+                .then(|| scan_dir(&path, expanded, methods));
             folders.push(CollectionItem::Folder {
                 name,
                 path,
                 children,
             });
         } else if path.extension().is_some_and(|e| e == "json") {
-            let method = fs::read_to_string(&path)
-                .ok()
-                .and_then(|c| RequestFile::from_json(&c).ok())
-                .map(|r| r.method);
+            let method = if methods { request_method(&path) } else { None };
             requests.push(CollectionItem::Request { name, path, method });
         }
     }
@@ -53,8 +67,16 @@ pub fn scan(dir: &Path, expanded: &HashSet<PathBuf>) -> Vec<CollectionItem> {
     folders
 }
 
+/// The method of the request file at `path`, if it parses.
+pub fn request_method(path: &Path) -> Option<crate::model::HttpMethod> {
+    let content = fs::read_to_string(path).ok()?;
+    RequestFile::from_json(&content).ok().map(|r| r.method)
+}
+
 /// Every request in the workspace, depth-first — what the command palette
-/// searches. Unlike [`scan`] this does not stop at collapsed folders.
+/// searches. Unlike [`scan`] this does not stop at collapsed folders, and it
+/// leaves `method` as `None`: reading every file took ~50 ms at 2,000
+/// requests. Use [`request_method`] for the few on screen.
 pub fn all_requests(root: &Path) -> Vec<CollectionItem> {
     /// Deep enough for any real collection; stops runaway symlink loops.
     const MAX_DEPTH: usize = 16;
@@ -63,7 +85,7 @@ pub fn all_requests(root: &Path) -> Vec<CollectionItem> {
         if depth == 0 {
             return;
         }
-        for item in scan(dir, &HashSet::new()) {
+        for item in scan_dir(dir, &HashSet::new(), false) {
             match item {
                 CollectionItem::Folder { path, .. } => walk(&path, depth - 1, out),
                 request => out.push(request),
@@ -307,6 +329,18 @@ mod tests {
             panic!("folder first")
         };
         assert_eq!(children.as_ref().unwrap().len(), 1);
+
+        // a linked folder is still a folder (types come from read_dir now,
+        // which doesn't follow links on its own)
+        #[cfg(unix)]
+        {
+            std::os::unix::fs::symlink(root.join("users"), root.join("linked")).unwrap();
+            assert!(matches!(
+                &scan(root, &HashSet::new())[0],
+                CollectionItem::Folder { name, .. } if name == "linked"
+            ));
+            assert_eq!(all_requests(root).len(), 4, "a.json, broken, both get.json");
+        }
     }
 
     #[test]
