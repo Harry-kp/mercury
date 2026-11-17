@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-11-17
+
+0.4.0's release was published without installers: a CI output was dropped, so no build ran. 0.4.1 is the same code, built and published. The changes are listed under 0.4.0.
+
 ## [0.4.0] - 2026-11-17
 
 ### Added
