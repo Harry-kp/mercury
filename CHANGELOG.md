@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.3] - 2026-11-17
+
+The first published build of the 0.4 line: everything below, and everything listed under 0.4.0.
+
 ### Added
 - **Create and edit environments in Mercury.** The environment menu has **New environment…** (seeded with the variables the open request uses) and **Edit .env.dev…**, a table of variables with **Bulk edit** for the raw file. Before, the menu only said to add `.env` files to the workspace folder.
 - Hover the URL bar to see it with every variable filled in, and a variable chip to see its value.
@@ -15,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Postman's `{{$guid}}`, `{{$timestamp}}`, `{{$isoTimestamp}}` and `{{$randomInt}}` work, with a fresh value at every send.
 
 ### Fixed
+- **Security:** new files (requests, environments, duplicates, imports) are created atomically and never through a symlink. A folder from someone else with a dangling link such as `.env.staging -> ~/.zshenv` could make Mercury create the file it pointed to.
 - **Security:** an environment file that is a symlink is ignored. A folder from someone else could link `.env.dev` to `~/.aws/credentials`, whose `key = value` lines read as variables a request could send, or to a file that editing the environment would overwrite.
 - **A URL with an undefined variable is no longer sent.** It failed as something else ("invalid international domain name"), or reached the server as `%7B%7BUSER_ID%7D%7D`. The response panel now says which variable is missing and where to define it, and the message goes away when you switch environment.
 - **Importing into an open workspace could overwrite your files.** A request or `.env` with the same name as one in the collection was replaced without a word. Imports now go into their own folder in the workspace, and a taken name gets a suffix instead.
@@ -24,7 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.4.2] - 2026-11-17
 
-The first published build of the 0.4 line; the changes are listed under 0.4.0. 0.4.0 went out without installers (a CI output was dropped, so no build ran) and was withdrawn; 0.4.1's Apple Silicon build died on a GitHub runner image that has been retired. Same code, now built and published.
+Not published: GitHub had no Apple Silicon runner capacity for its macOS build. (0.4.0 went out without installers because a CI output was dropped, and was withdrawn; 0.4.1's Apple Silicon build hit a retired runner image.) Its changes are listed under 0.4.0 and ship in 0.4.3.
 
 ## [0.4.0] - 2026-11-17
 

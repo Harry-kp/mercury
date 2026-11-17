@@ -90,7 +90,8 @@ fn value_to_string(value: &Value) -> String {
 /// `.json` extension). An import never overwrites what is already on disk:
 /// a request or `.env` the user had, or an earlier request of the same name.
 fn unique(path: std::path::PathBuf) -> std::path::PathBuf {
-    if !path.exists() {
+    use crate::workspace::taken;
+    if !taken(&path) {
         return path;
     }
     let name = path
@@ -104,7 +105,7 @@ fn unique(path: std::path::PathBuf) -> std::path::PathBuf {
     };
     (2..)
         .map(|n| path.with_file_name(format!("{stem}-{n}{ext}")))
-        .find(|p| !p.exists())
+        .find(|p| !taken(p))
         .expect("some suffix is free")
 }
 
@@ -128,8 +129,10 @@ fn import_folder(out: &Path, name: &str) -> Result<std::path::PathBuf, String> {
     Ok(dir)
 }
 
+/// Always a new file (see [`crate::workspace::create_new`]): never over an
+/// existing one, never through a symlink.
 fn write_file(path: &Path, content: String) -> Result<(), String> {
-    fs::write(path, content).map_err(|e| format!("Failed to write '{}': {e}", path.display()))
+    crate::workspace::create_new(path, &content)
 }
 
 fn create_dir(path: &Path) -> Result<(), String> {
