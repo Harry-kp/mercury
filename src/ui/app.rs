@@ -683,14 +683,22 @@ impl MercuryApp {
 
     fn load_env(&mut self) {
         self.env_vars.clear();
-        let (Some(root), Some(name)) = (&self.workspace, self.env_name()) else {
+        let (Some(root), Some(name)) = (self.workspace.clone(), self.env_name()) else {
             return;
         };
-        match workspace::env_path(root, name)
-            .and_then(|p| fs::read_to_string(p).map_err(|e| e.to_string()))
-        {
-            Ok(content) => self.env_vars = vars::parse_env(&content),
-            Err(e) => self.notify(format!("Could not read {name}: {e}"), true),
+        // dotenv's convention: `.env` holds what every environment shares,
+        // and `.env.<name>` overrides it
+        let mut files = vec![name.to_string()];
+        if name != ".env" && self.env_files.iter().any(|f| f == ".env") {
+            files.insert(0, ".env".into());
+        }
+        for file in files {
+            match workspace::env_path(&root, &file)
+                .and_then(|p| fs::read_to_string(p).map_err(|e| e.to_string()))
+            {
+                Ok(content) => self.env_vars.extend(vars::parse_env(&content)),
+                Err(e) => self.notify(format!("Could not read {file}: {e}"), true),
+            }
         }
     }
 
@@ -1057,8 +1065,17 @@ impl MercuryApp {
     }
 
     /// Add the send that just finished to history; returns what was sent.
-    fn record_history(&mut self, response: http::HttpResponse, error: Option<String>) -> Request {
+    fn record_history(
+        &mut self,
+        mut response: http::HttpResponse,
+        error: Option<String>,
+    ) -> Request {
         self.ensure_history_loaded();
+        if response.body.len() > storage::HISTORY_BODY_LIMIT {
+            response.body = String::new();
+            response.pretty = None;
+            response.response_type = http::ResponseType::TooLarge;
+        }
         let request = self.sent.take().unwrap_or_else(|| self.form_request());
         let entry = HistoryEntry {
             timestamp: storage::now(),
@@ -1461,6 +1478,27 @@ impl MercuryApp {
     }
 
     /// Open the editor on an environment file of the open workspace.
+    /// A response value kept for the next request: written into the selected
+    /// environment file (other lines and comments untouched) and live at once.
+    pub fn save_variable(&mut self, key: &str, value: &str) {
+        let (Some(root), Some(file)) =
+            (self.workspace.clone(), self.env_name().map(str::to_string))
+        else {
+            return;
+        };
+        let saved = workspace::env_path(&root, &file).and_then(|path| {
+            let text = fs::read_to_string(&path).map_err(|e| e.to_string())?;
+            fs::write(&path, vars::set_env_var(&text, key, value)).map_err(|e| e.to_string())
+        });
+        match saved {
+            Ok(()) => {
+                self.load_env();
+                self.notify(format!("Saved {{{{{key}}}}} in {file}"), false);
+            }
+            Err(e) => self.notify(format!("Could not save {file}: {e}"), true),
+        }
+    }
+
     pub fn edit_env(&mut self, file: &str) {
         let Some(root) = &self.workspace else {
             return;

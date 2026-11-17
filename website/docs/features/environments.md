@@ -22,6 +22,16 @@ BASE_URL=https://api.example.com
 API_TOKEN="prod token"
 ```
 
+### Shared variables in `.env`
+
+`.env` itself (no suffix) holds what every environment shares, as in dotenv and Vite: with `.env.dev` selected, Mercury reads `.env` first and `.env.dev` on top, so a variable in both takes `.env.dev`'s value. Selecting `.env` uses it alone.
+
+```bash
+# .env: shared by every environment
+API_VERSION=v2
+USER_AGENT=mercury
+```
+
 ## Choosing an environment
 
 **Only one environment is active at a time.** Files aren't layered or merged. A plain `.env` is not loaded on top of the selected one.
@@ -44,7 +54,7 @@ EQUALS=a=b
 
 - One `KEY=VALUE` per line. The line is split at the first `=`.
 - Spaces around the key and value are trimmed.
-- A value wrapped in matching `"` or `'` has the quotes removed. No other escaping is done.
+- A value wrapped in matching `"` or `'` has the quotes removed. Inside double quotes, `\n` is a line break and `\"` a quote; nothing else is escaped.
 - Blank lines and lines starting with `#` are ignored. Lines without `=` are ignored.
 - A shell-style `export ` before the name is ignored, so a file you also `source` works as is. So is a byte-order mark at the start of the file.
 - Keys are case-sensitive.
@@ -77,6 +87,10 @@ From the environment menu at the top right:
 
 - **New environment…** asks for a name (`staging` makes `.env.staging`), selects it, and opens it in the editor, already listing the variables the open request uses, so you only fill in values.
 - **Edit .env.dev…** opens the selected environment in the same editor: a table of variables, or **Bulk edit** for the file as text. **Save** writes the file; the next request uses the new values.
+
+### Saving a value from a response
+
+Right-click a field in a JSON response (a login's `access_token`, the `id` of something you just created) and choose **Save as `{{access_token}}` in .env.dev**. Mercury writes that line into the selected environment file, replacing the variable if it's already there and leaving the other lines and comments alone, and the next request uses it. **Copy value** is in the same menu.
 
 It's the same plain file either way, and you can also edit `.env` files in any editor. Mercury picks up changes right away: new or removed env files update the picker (your selection is kept), and edited values apply to the next request.
 

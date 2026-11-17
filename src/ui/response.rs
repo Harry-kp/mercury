@@ -5,8 +5,8 @@ use super::icon::{self, Icon};
 use super::theme::{mono, theme, Layout, Space, Text};
 use super::widgets::{
     self, clear_button, copy_button, empty_state, error_state, faint, format_bytes, icon_button,
-    key_combo, kv_section, label, method_text, muted, relative_time, response_time, search_input,
-    status_badge, tab_button, xml_job,
+    key_combo, kv_section, label, menu_item, method_text, muted, relative_time, response_time,
+    search_input, status_badge, tab_button, xml_job,
 };
 use crate::http::{self, ResponseType, MAX_RESPONSE_SIZE};
 use crate::storage;
@@ -400,6 +400,8 @@ impl MercuryApp {
 
         let t = theme();
         let mut save = false;
+        let mut save_var = None;
+        let env_name = self.env_name().map(str::to_string);
         match kind {
             ResponseType::Empty => {
                 let color = if (200..300).contains(&response.status) {
@@ -413,6 +415,19 @@ impl MercuryApp {
                     Some(color),
                     response.status_text.trim(),
                     &["The server returned an empty body"],
+                );
+            }
+            // a body under the download limit is only "too large" for history
+            ResponseType::TooLarge if response.size_bytes <= MAX_RESPONSE_SIZE => {
+                empty_state(
+                    ui,
+                    Icon::Clock,
+                    None,
+                    "Body not kept in history",
+                    &[
+                        &format!("{} is over 1 MB", format_bytes(response.size_bytes)),
+                        "Send again to see it",
+                    ],
                 );
             }
             ResponseType::TooLarge => {
@@ -518,13 +533,20 @@ impl MercuryApp {
                                 let here = hits_in(std::slice::from_ref(c), row);
                                 widgets::highlight_ranges(&mut job, &here, current_tint);
                             }
-                            ui.add(
+                            let label = ui.add(
                                 egui::Label::new(job)
                                     // you often want one field's value,
                                     // not the whole body
                                     .selectable(true)
                                     .wrap_mode(egui::TextWrapMode::Extend),
                             );
+                            // a login's token, an id just created: right-click
+                            // the field to keep it for the next request
+                            if formatted_lines && kind == ResponseType::Json {
+                                if let Some(field) = http::json_field(line) {
+                                    field_menu(&label, &field, env_name.as_deref(), &mut save_var);
+                                }
+                            }
                         }
                     });
                 });
@@ -533,7 +555,36 @@ impl MercuryApp {
         if save {
             self.save_response();
         }
+        if let Some((key, value)) = save_var {
+            self.save_variable(&key, &value);
+        }
     }
+}
+
+/// Right-click on one JSON field: copy its value, or save it to the selected
+/// environment as `{{key}}`.
+fn field_menu(
+    label: &egui::Response,
+    (key, value): &(String, String),
+    env: Option<&str>,
+    save: &mut Option<(String, String)>,
+) {
+    label.context_menu(|ui| {
+        if menu_item(ui, Some(Icon::Copy), "Copy value", "") {
+            ui.ctx().copy_text(value.clone());
+        }
+        if let Some(env) = env {
+            let name = crate::vars::env_key(key);
+            if menu_item(
+                ui,
+                Some(Icon::Layers),
+                &format!("Save as {{{{{name}}}}} in {env}"),
+                "",
+            ) {
+                *save = Some((name, value.clone()));
+            }
+        }
+    });
 }
 
 /// A free, long-lived public JSON API, for the first-run sample request.

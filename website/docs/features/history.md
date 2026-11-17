@@ -34,6 +34,7 @@ Bodies of images and binary responses aren't stored in history. A restored binar
 |---|---|
 | File | `~/.mercury/history.json` (one list for all workspaces) |
 | Entries kept | The newest 50 |
+| Response bodies | Kept up to 1 MB. A bigger body is shown in full when it arrives, but history keeps only its status, headers and timing: send it again to see the body |
 | Age | Entries older than 7 days are dropped |
 | Clearing | The trash icon in the history header clears it at once. The notification that follows has an **Undo** link for a few seconds |
 

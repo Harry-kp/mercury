@@ -20,14 +20,70 @@ pub fn parse_env(content: &str) -> HashMap<String, String> {
                 && ((v.starts_with('"') && v.ends_with('"'))
                     || (v.starts_with('\'') && v.ends_with('\'')));
             let v = match (quoted, v.starts_with('"')) {
-                // import writes `"` as `\"` inside double quotes
-                (true, true) => v[1..v.len() - 1].replace("\\\"", "\""),
+                // `env_value` writes `"` as `\"` and a newline as `\n`
+                (true, true) => v[1..v.len() - 1].replace("\\n", "\n").replace("\\\"", "\""),
                 (true, false) => v[1..v.len() - 1].to_string(),
                 _ => v.to_string(),
             };
             (k.trim().to_string(), v)
         })
         .collect()
+}
+
+/// A key as `.env` can hold it. Kept as-is (requests reference them as
+/// `{{api-key}}`); only characters that would break a `KEY=VALUE` line change.
+pub fn env_key(key: &str) -> String {
+    let key: String = key
+        .trim()
+        .chars()
+        .map(|c| {
+            if c == '=' || c.is_whitespace() {
+                '_'
+            } else {
+                c
+            }
+        })
+        .collect();
+    if key.starts_with('#') {
+        format!("_{key}")
+    } else {
+        key
+    }
+}
+
+/// A value as `.env` can hold it, so `parse_env` reads back exactly `value`.
+pub fn env_value(value: &str) -> String {
+    if value.contains(['=', '\n', '"', ' ']) {
+        format!("\"{}\"", value.replace('"', "\\\"").replace('\n', "\\n"))
+    } else {
+        value.to_string()
+    }
+}
+
+/// `content` with `key` set to `value`: its line replaced where it is (comments
+/// and order kept), or added at the end.
+pub fn set_env_var(content: &str, key: &str, value: &str) -> String {
+    let key = env_key(key);
+    let line = format!("{key}={}", env_value(value));
+    let mut found = false;
+    let mut out: Vec<String> = content
+        .lines()
+        .map(|l| {
+            let t = l.trim();
+            let bare = t.strip_prefix("export ").unwrap_or(t);
+            match bare.split_once('=') {
+                Some((k, _)) if k.trim() == key && !t.starts_with('#') => {
+                    found = true;
+                    line.clone()
+                }
+                _ => l.to_string(),
+            }
+        })
+        .collect();
+    if !found {
+        out.push(line);
+    }
+    out.join("\n") + "\n"
 }
 
 /// Calls `f` with each `{{name}}` (trimmed) and its byte range in `text`.
@@ -144,6 +200,18 @@ mod tests {
 
     fn vars() -> HashMap<String, String> {
         parse_env("host=api.example.com\ntoken=abc123")
+    }
+
+    #[test]
+    fn a_saved_variable_reads_back_exactly() {
+        let env = "# dev\nBASE=http://x\nTOKEN=old\n";
+        let tricky = "line one\nsays \"hi\" a=b";
+        let out = set_env_var(env, "TOKEN", tricky);
+        assert!(out.starts_with("# dev\nBASE=http://x\nTOKEN="), "{out}");
+        assert_eq!(parse_env(&out)["TOKEN"], tricky);
+        let added = set_env_var(&out, "user id", "42");
+        assert_eq!(parse_env(&added)["user_id"], "42");
+        assert_eq!(parse_env(&added)["BASE"], "http://x");
     }
 
     #[test]
