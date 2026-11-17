@@ -95,6 +95,34 @@ pub fn map_to_headers<'a>(headers: impl IntoIterator<Item = (&'a String, &'a Str
         .join("\n")
 }
 
+/// The switched-off `# Key: value` lines, as a request file stores them.
+pub fn disabled_headers_to_map(text: &str) -> BTreeMap<String, String> {
+    let disabled: String = text
+        .lines()
+        .filter_map(|l| l.trim().strip_prefix('#'))
+        .collect::<Vec<_>>()
+        .join("\n");
+    headers_to_map(&disabled)
+}
+
+/// A request file's headers as editor text: enabled lines, then disabled.
+pub fn file_headers_text(
+    enabled: &BTreeMap<String, String>,
+    disabled: &BTreeMap<String, String>,
+) -> String {
+    let on = map_to_headers(enabled);
+    let off = disabled
+        .iter()
+        .map(|(k, v)| format!("# {k}: {v}"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    match (on.is_empty(), off.is_empty()) {
+        (_, true) => on,
+        (true, false) => off,
+        _ => format!("{on}\n{off}"),
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Authorization header — the header text is the single source of truth; the
 // Auth tab is only a view over it.
@@ -395,6 +423,14 @@ mod tests {
     fn format_lines_is_inverse_of_parse() {
         let text = "a=1\n# b=2\nflag";
         assert_eq!(format_lines(&parse_lines(text, "="), "="), text);
+    }
+
+    #[test]
+    fn disabled_headers_survive_the_file() {
+        let text = "A: 1\n# B: 2\n# a note, not a header\nC: 3";
+        let (on, off) = (headers_to_map(text), disabled_headers_to_map(text));
+        assert_eq!(off.len(), 1);
+        assert_eq!(file_headers_text(&on, &off), "A: 1\nC: 3\n# B: 2");
     }
 
     #[test]

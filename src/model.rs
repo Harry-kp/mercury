@@ -70,6 +70,10 @@ pub struct RequestFile {
     pub headers: BTreeMap<String, String>,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub body: String,
+    /// Headers switched off in the editor (`# Key: value`), kept so turning
+    /// one off doesn't delete it. Not sent. Added in 0.4.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub disabled_headers: BTreeMap<String, String>,
 }
 
 impl RequestFile {

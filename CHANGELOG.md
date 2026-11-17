@@ -39,6 +39,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The body type reads **Body type: none / JSON / Form / Text**.
 
 ### Fixed
+- **Unchecking a header deleted it** once the request was saved: request files kept only the headers that are sent. Disabled headers are now saved in a new `disabled_headers` field and come back unchecked. Older Mercury versions ignore the field.
 - `⌘ K` opened with its first row scrolled up behind the search box.
 - **Find** showed every match the same, so "1 of 2" didn't say which one you were on; the current match is now highlighted in the accent colour. The find field also looks like Mercury's other search fields instead of a bare text box.
 - Opening a request from `⌘ K`, history or a relaunch now reveals it in the sidebar; it used to stay hidden inside collapsed folders.

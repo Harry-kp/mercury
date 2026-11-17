@@ -103,6 +103,7 @@ fn write_request(
         url,
         headers,
         body,
+        ..Default::default()
     };
     let path = dir.join(format!("{}.json", sanitize_filename(name)));
     write_file(&path, request.to_json())

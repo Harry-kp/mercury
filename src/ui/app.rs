@@ -679,6 +679,7 @@ impl MercuryApp {
             url: self.url.clone(),
             headers: kv::headers_to_map(&self.headers_text),
             body: self.body_text.clone(),
+            disabled_headers: kv::disabled_headers_to_map(&self.headers_text),
         }
         .to_json()
     }
@@ -728,7 +729,7 @@ impl MercuryApp {
                     Request {
                         method: file.method,
                         url: file.url,
-                        headers: kv::map_to_headers(&file.headers),
+                        headers: kv::file_headers_text(&file.headers, &file.disabled_headers),
                         body: file.body,
                     },
                     Some(path.to_path_buf()),
@@ -828,7 +829,7 @@ impl MercuryApp {
             Request {
                 method: file.method,
                 url: file.url,
-                headers: kv::map_to_headers(&file.headers),
+                headers: kv::file_headers_text(&file.headers, &file.disabled_headers),
                 body: file.body,
             },
             Some(path),
@@ -880,6 +881,7 @@ impl MercuryApp {
             url: vars::substitute(&self.url, &self.env_vars),
             headers: kv::headers_to_map(&vars::substitute(&self.headers_text, &self.env_vars)),
             body: vars::substitute(&self.body_text, &self.env_vars),
+            ..Default::default()
         };
         self.request_counter += 1;
         let id = self.request_counter;
