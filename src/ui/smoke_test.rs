@@ -587,8 +587,9 @@ fn open_send_edit_and_save() {
     harness.event(egui::Event::PointerGone);
     harness.run_steps(2);
 
-    // An untrusted certificate offers to trust that host, right on the error.
-    let host = crate::http::host(&server).unwrap();
+    // An untrusted certificate offers to trust that host, right on the error:
+    // the host that failed, not whatever the URL bar was edited to since.
+    let host = "dev.test:8443";
     harness.state_mut().request_error = Some(format!(
         "{} {host}. Its certificate may not be trusted.",
         crate::http::CERT_ERROR
@@ -599,7 +600,7 @@ fn open_send_edit_and_save() {
         .get_by_role_and_label(accesskit::Role::Button, &format!("Trust {host} and retry"))
         .click();
     harness.run_steps(2);
-    assert!(harness.state().trusted_hosts.contains(&host));
+    assert!(harness.state().trusted_hosts.contains(host));
     wait_for_response(&mut harness);
     harness.state_mut().url = typed;
     harness.run_steps(2);
@@ -738,6 +739,31 @@ fn open_send_edit_and_save() {
     harness.run_steps(2);
     let entries = harness.state().history.len();
     assert!(entries > 0);
+    // At the minimum window a row gave its URL ~5 characters next to status,
+    // duration, environment and time. Narrow rows keep status and time.
+    let durations = |harness: &Harness<'_, MercuryApp>| {
+        // row contents aren't accessibility nodes: count the painted text
+        let shapes = &harness.output().shapes;
+        shapes
+            .iter()
+            .filter(
+                |s| matches!(&s.shape, egui::Shape::Text(t) if t.galley.text().ends_with(" ms")),
+            )
+            .count()
+    };
+    assert!(
+        durations(&harness) > entries.min(2),
+        "a wide row shows duration: {} of {entries}",
+        durations(&harness)
+    );
+    harness.set_size(egui::vec2(900.0, 620.0));
+    harness.run_steps(3);
+    assert!(
+        durations(&harness) <= 1, // the response's own time may remain
+        "a narrow History row still lists its duration"
+    );
+    harness.set_size(egui::vec2(1200.0, 800.0));
+    harness.run_steps(3);
     harness
         .get_by_role_and_label(accesskit::Role::Button, "Clear all")
         .click();

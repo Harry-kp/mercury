@@ -326,7 +326,14 @@ impl MercuryApp {
         ui.set_max_width(Layout::MENU_WIDTH);
         // the open request's actions live on its row, not beside Send
         let open = self.current_file.as_deref() == Some(path);
-        if open && menu_item(ui, Some(Icon::Terminal), "Copy as cURL", "⌘ ⇧ C") {
+        if open
+            && menu_item(
+                ui,
+                Some(Icon::Terminal),
+                "Copy as cURL",
+                super::app::keys(Action::CopyCurl),
+            )
+        {
             self.run(Action::CopyCurl);
         }
         if menu_item(ui, Some(Icon::File), "Duplicate", "") {

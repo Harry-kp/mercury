@@ -88,10 +88,7 @@ impl MercuryApp {
         ui.add_space(Space::XL);
         // a dev server's self-signed certificate: every other client has a
         // "don't verify" setting; here it's asked for where it's needed
-        let untrusted = error
-            .starts_with(http::CERT_ERROR)
-            .then(|| http::host(&crate::vars::substitute(&self.url, &self.env_vars)))
-            .flatten();
+        let untrusted = http::untrusted_host(error).map(str::to_string);
         ui.vertical_centered(|ui| match untrusted {
             Some(host) => {
                 let label = format!("Trust {host} and retry");
@@ -258,6 +255,9 @@ impl MercuryApp {
                     if !search.is_empty() && !entry.url.to_lowercase().contains(&search) {
                         continue;
                     }
+                    // a narrow panel left the URL ~5 characters next to four
+                    // columns: keep status and time, move the rest to the tooltip
+                    let wide = ui.available_width() >= Layout::HISTORY_DETAILS_MIN;
                     let row = widgets::row(
                         ui,
                         ("history", entry.timestamp.to_bits()),
@@ -274,14 +274,16 @@ impl MercuryApp {
                                 |ui| {
                                     ui.spacing_mut().item_spacing.x = Space::MD;
                                     ui.label(faint(relative_time(entry.timestamp, now)));
-                                    if let Some(env) = &entry.env {
+                                    if let Some(env) = entry.env.as_ref().filter(|_| wide) {
                                         ui.label(faint(env).color(t.env(env)));
                                     }
                                     if entry.status == 0 {
                                         // no response at all (see HttpResponse::failed)
                                         ui.label(muted("Failed").color(t.error));
                                     } else {
-                                        ui.label(faint(format!("{} ms", entry.duration_ms)));
+                                        if wide {
+                                            ui.label(faint(format!("{} ms", entry.duration_ms)));
+                                        }
                                         ui.label(
                                             muted(entry.status.to_string())
                                                 .color(t.status(entry.status)),
@@ -291,7 +293,13 @@ impl MercuryApp {
                             );
                         },
                     );
-                    if row.on_hover_text(&entry.url).clicked() {
+                    let tip = if wide {
+                        entry.url.clone()
+                    } else {
+                        let env = entry.env.as_deref().unwrap_or("No environment");
+                        format!("{}\n{} ms · {env}", entry.url, entry.duration_ms)
+                    };
+                    if row.on_hover_text(tip).clicked() {
                         open = Some(entry.timestamp);
                     }
                 }

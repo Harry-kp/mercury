@@ -15,6 +15,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Import several exports at once.** The Postman and Insomnia pickers take more than one file, so a collection and its environment exports come in together.
 
 ### Fixed
+- **Saving a request or an environment can no longer cut the file short.** It used to be truncated and rewritten in place, so a full disk or a crash mid-save lost it; it is now written beside the file and swapped in. A symlinked file is saved through the link, and a private `.env` stays private.
+- **Postman import:** v2.0 collections lost their auth tokens; a request without a method or URL, or a collection variable without a value, failed the whole import; a request name over ~250 bytes failed it halfway through. GraphQL bodies come in as the JSON body Postman sends instead of being dropped, disabled headers stay (switched off), and request descriptions are kept. A globals export becomes the shared `.env`.
+- **Insomnia import:** GraphQL bodies come in as JSON, disabled headers and descriptions are kept, and a file sent as the whole body is named in the notification instead of vanishing.
+- Picking a collection and its environment together put the requests in a subfolder when the environment file happened to be imported first. A folder that only holds `.env` files now takes the requests directly, and the summary no longer says "0 environments".
+- **Copy as cURL** wrote a body starting with `@` as `-d @…`, which makes curl upload that file; `HEAD` as `-X HEAD`, which hangs; a URL with `[ ]` or `{ }` without `-g`, which curl rejects; and an empty header as `Name: `, which curl deletes. Pasted back, a `GET` with a body became a `POST` and a `--form-string` value containing `=@` changed.
+- **Trust host and retry** named the host in the URL bar, not the one whose certificate failed, after the URL had been edited.
+- Menu and status-bar shortcut hints are read from the shortcut table, so they can't drift from the real keys.
 - **Request files keep fields Mercury doesn't know.** A `description` added by hand used to vanish on the next save. Files with a UTF-8 BOM (Notepad) open instead of failing to parse, and saved files end with a newline.
 - When the open request's file is deleted or renamed outside Mercury (or a `git checkout` drops it), the editor keeps it as an unsaved request instead of clearing it, unsaved edits included. A file that can't be read is reported as such, not as deleted.
 - A file changed in another editor reloads without moving the editor back to Params or the response back to Body.
@@ -66,6 +73,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A history search that matches nothing says so, instead of an empty panel.
 - A big request body no longer slows every frame: a 1 MB JSON body was re-highlighted and re-measured ~30 times a second (35 ms a frame, even just moving the mouse). It is laid out again only when it changes.
 - Opening History, the first send of a session, and clicking a history entry no longer freeze the window while the history file is read (40 ms for 10 MB of saved responses). It is read in the background.
+- At the minimum window a History row gave its URL about five characters. A narrow row now shows URL, status and time; the response time and environment are in its tooltip.
+- At the minimum window the Params and Headers tabs started 30 px lower than at other sizes, below an empty line.
+- The method, body type and environment menus line up: only the current choice has a check, and the other names sat an icon's width to the left of it. **No environment** gets the check when it's the current choice.
+- In the `⋯` menu, **Hide / show sidebar** ran into its shortcut.
 
 ### Changed
 - **History keeps response bodies up to 1 MB.** It rewrote up to 50 × 10 MB on every send; a bigger body is still shown in full when it arrives.
