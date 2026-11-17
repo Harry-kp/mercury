@@ -179,9 +179,10 @@ pub fn is_dark() -> bool {
 }
 
 /// An environment file that looks like production (`.env.prod`,
-/// `.env.production`). It turns the env chip red and labels the Send button.
+/// `.env.production`, `.env.PROD`). It turns the env chip red and labels the
+/// Send button.
 pub fn is_prod(env_name: &str) -> bool {
-    env_name.contains("prod")
+    env_name.to_ascii_lowercase().contains("prod")
 }
 
 impl Theme {
@@ -202,7 +203,7 @@ impl Theme {
     pub fn env(&self, name: &str) -> Color32 {
         if is_prod(name) {
             self.error
-        } else if name.contains("stag") {
+        } else if name.to_ascii_lowercase().contains("stag") {
             self.warning
         } else {
             self.text_muted
@@ -491,6 +492,13 @@ pub fn apply_style(ctx: &egui::Context) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// `.env.Production` is as dangerous as `.env.production`.
+    #[test]
+    fn env_colours_ignore_case() {
+        assert!(is_prod(".env.Production") && is_prod(".env.PROD"));
+        assert_eq!(LIGHT.env(".env.Staging"), LIGHT.warning);
+    }
 
     #[test]
     fn every_method_has_its_own_color_in_both_palettes() {

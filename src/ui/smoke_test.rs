@@ -259,6 +259,9 @@ fn open_send_edit_and_save() {
     assert_eq!(harness.state().env_name(), Some(".env.dev"));
     assert_eq!(harness.state().env_vars["SHARED"], "yes");
     assert_eq!(harness.state().env_vars["TOKEN"], "rotated");
+    // the URL tooltip names the file a value is from
+    assert!(harness.state().env_shared.contains("SHARED"));
+    assert!(!harness.state().env_shared.contains("TOKEN"), "overridden");
     std::fs::remove_file(ws.join(".env")).unwrap();
     for _ in 0..300 {
         harness.step();
@@ -1060,6 +1063,55 @@ fn open_send_edit_and_save() {
     wait_for_response(&mut e);
     let echoed = e.state().response.as_ref().unwrap().body.clone();
     assert!(echoed.contains("GET /users/7 "), "{echoed}");
+
+    // an unclosed `{{x` in the URL ran on into the headers and named a
+    // variable "{{x Authorization: Bearer {{nope}}"
+    e.state_mut().url = format!("{server}/{{{{x");
+    e.state_mut().headers_text = "Authorization: Bearer {{nope}}".into();
+    e.run_steps(2);
+    assert!(e.query_by_label_contains("{{x").is_none());
+    e.get_by_label_contains("{{nope}} isn't defined in .env.local");
+
+    // two dozen environments: the menu scrolls, so New environment… (below
+    // the list) stays on screen and clickable
+    for i in 0..24 {
+        std::fs::write(envs.join(format!(".env.e{i:02}")), "").unwrap();
+    }
+    for _ in 0..300 {
+        e.step();
+        if e.state().env_files.len() == 25 {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    e.get_by_role_and_label(accesskit::Role::Button, ".env.local")
+        .click();
+    e.run_steps(2);
+    e.query_all_by_label("New environment…")
+        .next()
+        .unwrap()
+        .click();
+    e.run_steps(2);
+    assert!(matches!(e.state().dialog, Some(Dialog::NewEnv)));
+    e.key_press(Key::Escape);
+    e.run_steps(2);
+
+    // the selected file deleted outside Mercury: said, not silent
+    std::fs::remove_file(envs.join(".env.local")).unwrap();
+    for _ in 0..300 {
+        e.step();
+        if e.state().env_name().is_none() {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    let toast = e.state().toast.as_ref().map(|t| t.text.clone());
+    assert!(
+        toast
+            .as_deref()
+            .is_some_and(|t| t.contains(".env.local is gone")),
+        "{toast:?}"
+    );
     drop(e);
 
     // a header switched off in the editor survives save + reopen (the file

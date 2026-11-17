@@ -76,7 +76,7 @@ A `multipart/form-data` body is one field per line, `name=value`, with `name=@/p
 
 ## Variables
 
-`{{NAME}}` (or `{{ NAME }}`) in `url`, header values or `body` is replaced with a value from the selected environment when you send the request. Variables that aren't defined are sent as the literal text. See [Environments](/docs/features/environments).
+`{{NAME}}` (or `{{ NAME }}`) in `url`, header values or `body` is replaced with a value from the selected environment when you send the request. Variables that aren't defined are sent as the literal text in headers and the body; one in the URL stops the send instead. See [Environments](/docs/features/environments).
 
 ## Editing by hand
 

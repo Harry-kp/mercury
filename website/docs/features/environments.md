@@ -10,7 +10,7 @@ Environments are `.env` files in the workspace root. Use them for base URLs, tok
 
 ## Environment files
 
-Every file in the **workspace root** whose name starts with `.env` is an environment: `.env`, `.env.dev`, `.env.production`, `.env.local` and so on. `.env` files in subfolders are ignored.
+Every file in the **workspace root** named `.env` or `.env.<something>` is an environment: `.env`, `.env.dev`, `.env.production`, `.env.local` and so on. `.env` files in subfolders, links to files elsewhere, and look-alikes such as direnv's `.envrc` are ignored.
 
 ```bash
 # .env.dev
@@ -34,12 +34,12 @@ USER_AGENT=mercury
 
 ## Choosing an environment
 
-**Only one environment is active at a time.** Files aren't layered or merged. A plain `.env` is not loaded on top of the selected one.
+**One environment is selected at a time**, with the shared `.env` underneath it (see above). If the selected file is deleted or renamed outside Mercury, it says so and switches to No environment.
 
 - Pick the environment in the menu at the **top right** of the window. **No environment** turns variables off.
 - `⌘ E` switches to the next environment, in file-name order. After the last one it goes to None, then starts over. Every switch, from the menu or `⌘ E`, shows a notification naming the environment you landed on.
 - When you open a workspace, Mercury selects the first file (alphabetically) whose name contains `.dev`, or else the first file. When Mercury reopens the workspace at launch, it restores the environment you last had selected.
-- Environment names that contain `prod` are shown in red, and names that contain `stag` in amber, so it's harder to send to production by mistake. With a `prod` environment selected, the Send button turns red and reads **Send · prod** (or `production`, and so on).
+- Environment names that contain `prod` are shown in red, and names that contain `stag` in amber (in any case: `.env.PROD` too), so it's harder to send to production by mistake. With a `prod` environment selected, the Send button turns red and reads **Send · prod** (or `production`, and so on).
 
 ## File format
 
@@ -54,8 +54,8 @@ EQUALS=a=b
 
 - One `KEY=VALUE` per line. The line is split at the first `=`.
 - Spaces around the key and value are trimmed.
-- A value wrapped in matching `"` or `'` has the quotes removed. Inside double quotes, `\n` is a line break and `\"` a quote; nothing else is escaped.
-- Blank lines and lines starting with `#` are ignored. Lines without `=` are ignored.
+- A value wrapped in matching `"` or `'` has the quotes removed. Inside double quotes, `\n` is a line break, `\"` a quote and `\\` a backslash; any other backslash is kept as it is.
+- Blank lines and lines starting with `#` are ignored. A line with only a name (`KEY`, no `=`) defines it as empty.
 - A shell-style `export ` before the name is ignored, so a file you also `source` works as is. So is a byte-order mark at the start of the file.
 - Keys are case-sensitive.
 - Values are used as they are. A value that contains `{{OTHER}}` is not expanded.
@@ -79,7 +79,7 @@ Authorization: Bearer {{API_TOKEN}}
 - In the URL bar, `{{variables}}` are coloured: violet when the selected environment defines them, amber when it doesn't.
 - If any variable in the request is undefined, a line under the URL bar names it and the environment it's missing from, and the tab that holds it shows a warning.
 - The **Params** and **Headers** tabs show a chip for each variable they use: ✓ if it's defined, ✗ if it isn't. Hover a chip to see its value.
-- Hover a `{{variable}}` in the URL bar to see its value and which environment it comes from. Hover anywhere else in the URL to see it with every variable filled in.
+- Hover a `{{variable}}` in the URL bar to see its value and which file it comes from (the selected one, or the shared `.env`). Hover anywhere else in the URL to see it with every variable filled in.
 
 ## Creating and editing environments
 
@@ -114,7 +114,6 @@ If a variable isn't substituted:
 1. Check that the right environment is selected at the top right.
 2. Check that the file is in the workspace **root** and its name starts with `.env`.
 3. Check the spelling. Names are case-sensitive.
-4. If you just edited the file, select the environment again to reload it.
 
 ## Related
 

@@ -27,6 +27,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Format** on a body that isn't valid JSON says where it fails, instead of doing nothing.
 - A double-click on **Send** no longer cancels the request it just sent (the second click landed on Stop).
 - The Auth tab's **Sent as** line cuts a long token short instead of running past the panel and pushing its copy button out of sight.
+- **Environments:** the environment menu scrolls, so with two dozen `.env` files **Edit** and **New environment…** no longer fall off the window. `.envrc` (direnv) is no longer listed as an environment.
+- A variable saved with an empty value in the environment editor stays defined (the table wrote `KEY` without `=`, which read back as undefined).
+- **Save as `{{key}}`** keeps values that start and end with quotes, or hold a backslash (`C:\new`, JSON text), exactly; they came back changed. It replaces a variable on the file's first line instead of adding a second copy when the file starts with a byte-order mark.
+- `.env.Production` and `.env.PROD` are red and say **Send · Production** like `.env.prod`; the check was case-sensitive. A long production name is cut short on the Send button instead of squeezing out the URL.
+- An unclosed `{{x` in the URL no longer makes the undefined-variable line read "`{{x Authorization: Bearer …}}` isn't defined". `{{$guid}}` and the other built-ins are no longer amber in the URL bar.
+- Hovering a variable that comes from the shared `.env` says **from .env**, not from the selected file.
+- Deleting or renaming the selected environment file outside Mercury says so, instead of quietly switching to No environment.
+- The environment editor shows a commented first line as a comment when the file starts with a byte-order mark (it was an enabled variable).
 
 ### Changed
 - **History keeps response bodies up to 1 MB.** It rewrote up to 50 × 10 MB on every send; a bigger body is still shown in full when it arrives.
