@@ -234,6 +234,21 @@ struct PostmanBody {
     formdata: Vec<PostmanKeyValue>,
 }
 
+/// One imported Multipart field as one body line, never more and never a
+/// live upload: a collection from someone else could otherwise smuggle in an
+/// enabled `name=@~/.ssh/id_rsa` through a newline, an `=` in a key, or a
+/// text value starting with `@`. Any line that reads back as a file is
+/// switched off until the user ticks it.
+fn multipart_line(key: &str, value: &str) -> String {
+    let flat = |s: &str| s.replace(['\r', '\n'], " ");
+    let line = format!("{}={}", flat(key).replace('=', "%3D"), flat(value));
+    if value.starts_with('@') {
+        format!("# {line}")
+    } else {
+        line
+    }
+}
+
 /// A Postman body in Mercury's terms, plus the `Content-Type` it implies when
 /// the request did not set one. The modes that come back `None` are the ones
 /// Mercury has nowhere to put — a raw `file` body, GraphQL — so the import
@@ -271,9 +286,9 @@ fn postman_body(body: &PostmanBody) -> Option<(String, Option<&'static str>)> {
                             None => None,
                         }
                         .unwrap_or_default();
-                        format!("# {}=@{src}", r.key)
+                        multipart_line(&r.key, &format!("@{src}"))
                     }
-                    _ => format!("{}={}", r.key, r.value()),
+                    _ => multipart_line(&r.key, &r.value()),
                 })
                 .collect();
             Some((lines.join("\n"), Some("multipart/form-data")))
@@ -678,7 +693,10 @@ mod tests {
                 "auth": {"type": "oauth2", "oauth2": []},
                 "body": {"mode": "formdata", "formdata": [{"key": "file", "type": "file"},
                     {"key": "key", "type": "file", "src": "/home/me/.ssh/id_rsa"},
-                    {"key": "note", "value": "hi"}]},
+                    {"key": "note", "value": "hi"},
+                    {"key": "a", "value": "x\nb=@/etc/passwd"},
+                    {"key": "c=@/etc/hosts", "value": "1"},
+                    {"key": "d", "value": "@/etc/shadow"}]},
                 "url": {"raw": "https://acme.test/files"}
             }}
         ]
@@ -719,10 +737,19 @@ mod tests {
         // a formdata body becomes a Multipart one; file rows arrive switched
         // off, so an imported collection can't upload a local file unseen
         let upload = RequestFile::from_json(&read_out(&dir, "upload.json")).unwrap();
+        // and nothing in a field can turn into a live upload: no newline
+        // makes a second line, no `=` in a key moves the split, and a text
+        // value that reads as a file is switched off too
         assert_eq!(
             upload.body,
-            "# file=@\n# key=@/home/me/.ssh/id_rsa\nnote=hi"
+            "# file=@\n# key=@/home/me/.ssh/id_rsa\nnote=hi\na=x b=@/etc/passwd\n\
+             c%3D@/etc/hosts=1\n# d=@/etc/shadow"
         );
+        let live: Vec<_> = kv::parse_lines(&upload.body, "=")
+            .into_iter()
+            .filter(|r| r.enabled && r.value.starts_with('@'))
+            .collect();
+        assert!(live.is_empty(), "{live:?}");
         assert_eq!(
             upload.headers.get("Content-Type").map(String::as_str),
             Some("multipart/form-data")

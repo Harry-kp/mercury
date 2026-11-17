@@ -114,6 +114,8 @@ pub fn parse(cmd: &str) -> Result<CurlRequest, String> {
             // curl's `;type=…` / `;filename=…` modifiers on a file
             "-F" | "--form" | "--form-string" => {
                 if let Some(field) = args.next() {
+                    // one -F is one body line, even if `$'…'` hid a newline
+                    let field = &field.replace(['\r', '\n'], " ");
                     let file = token != "--form-string" && field.contains("=@");
                     form.push(if file {
                         field.split(';').next().unwrap_or(field).to_string()
@@ -329,6 +331,9 @@ mod tests {
             "name=Ada\n# off=1",
         );
         assert!(cmd.contains("-F 'name=Ada'") && !cmd.contains("off") && !cmd.contains("-H"));
+        // a newline hidden in one -F can't add a second (file) field
+        let r = parse(r"curl -F $'a=1\nb=@/etc/passwd' https://a.com").unwrap();
+        assert_eq!(r.body.as_deref(), Some("a=1 b=@/etc/passwd"));
     }
 
     #[test]
