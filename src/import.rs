@@ -144,11 +144,25 @@ fn write_request(
     headers: BTreeMap<String, String>,
     body: String,
 ) -> Result<(), String> {
+    // One header is one line: a newline in a name or value would become a
+    // second header once the file is loaded.
+    let flat = |s: String| s.replace(['\r', '\n'], " ");
+    let headers: BTreeMap<String, String> = headers
+        .into_iter()
+        .map(|(k, v)| (flat(k), flat(v)))
+        .collect();
     // Whatever path the body took (a raw body under a multipart
-    // Content-Type, an odd mimeType), if the sender will treat it as
-    // Multipart, no line of it is a live file upload until the user ticks it:
-    // a collection from someone else could otherwise post ~/.ssh/id_rsa.
-    let body = if crate::http::is_multipart(&headers) {
+    // Content-Type, an odd mimeType), if it could be sent as Multipart, no
+    // line of it is a live file upload until the user ticks it: a collection
+    // from someone else could otherwise post ~/.ssh/id_rsa. "Could" is
+    // decided before variables: `Content-Type: {{CT}}`, or a header *named*
+    // by a variable, can turn multipart at send time.
+    let maybe_multipart = headers.iter().any(|(k, v)| {
+        k.contains("{{")
+            || (k.eq_ignore_ascii_case("content-type")
+                && (v.contains("{{") || v.to_ascii_lowercase().contains("multipart")))
+    });
+    let body = if maybe_multipart {
         let mut rows = kv::parse_lines(&body, "=");
         for row in &mut rows {
             if row.value.starts_with('@') && !row.value.starts_with("@@") {
@@ -1421,6 +1435,36 @@ resources:
                     .collect();
                 assert!(live.is_empty(), "{}: {body:?}", entry.path().display());
             }
+        }
+        // a Content-Type (or header name) that a variable decides, and a
+        // newline smuggled into a header, count too
+        let sneaky = r#"{"resources":[
+         {"_id":"c","_type":"request","name":"Var type","method":"POST","url":"https://x",
+          "headers":[{"name":"Content-Type","value":"{{ _.ct }}"}],
+          "body":{"mimeType":"text/plain","text":"f=@/etc/passwd"}},
+         {"_id":"d","_type":"request","name":"Var name","method":"POST","url":"https://x",
+          "headers":[{"name":"{{ _.h }}","value":"multipart/form-data"}],
+          "body":{"mimeType":"text/plain","text":"f=@/etc/passwd"}},
+         {"_id":"e","_type":"request","name":"Newline","method":"POST","url":"https://x",
+          "headers":[{"name":"X-A","value":"1\r\nContent-Type: multipart/form-data"}],
+          "body":{"text":"f=@/etc/passwd"}}]}"#;
+        let out = dir.path().join("ws-sneaky");
+        fs::create_dir_all(&out).unwrap();
+        import_into(import_insomnia, sneaky, &out).unwrap();
+        for name in ["var-type", "var-name", "newline"] {
+            let req = file(&out.join(format!("{name}.json")));
+            let text = kv::file_headers_text(&req.headers, &req.disabled_headers);
+            let sent = kv::headers_to_map(&text);
+            let live = kv::parse_lines(&req.body, "=")
+                .into_iter()
+                .any(|r| r.enabled && r.value.starts_with('@') && !r.value.starts_with("@@"));
+            // either the body can't be multipart once loaded, or nothing in it is live
+            assert!(
+                !(crate::http::is_multipart(&sent) && live),
+                "{name}: {req:?}"
+            );
+            assert!(!live || name == "newline", "{name}: {:?}", req.body);
+            assert!(sent.keys().all(|k| !k.contains('\n')));
         }
         // the odd mime type still counts as multipart
         let odd = file(&dir.path().join("ws0/odd-mime.json"));
