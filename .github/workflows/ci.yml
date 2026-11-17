@@ -33,5 +33,37 @@ jobs:
           components: rustfmt, clippy
 
       - run: cargo fmt --check
-      - run: cargo clippy --all-targets -- -D warnings
-      - run: cargo test
+      # --locked: test the dependency versions that are committed, and fail
+      # if Cargo.lock is out of date instead of silently rewriting it
+      - run: cargo clippy --locked --all-targets -- -D warnings
+      - run: cargo test --locked
+
+  size:
+    name: Binary size
+    runs-on: ubuntu-latest
+    env:
+      # What users download (the dist profile), Linux x86_64. Raise it in the
+      # same PR as a change that genuinely needs the room, and say why.
+      BUDGET_KIB: 12288
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libspeechd-dev libxkbcommon-dev libssl-dev
+
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+
+      - name: Build what users download
+        run: cargo build --locked --profile dist
+
+      - name: Check the size budget
+        run: |
+          kib=$(( $(stat -c %s target/dist/mercury) / 1024 ))
+          echo "### mercury: ${kib} KiB (budget ${BUDGET_KIB} KiB)" >> "$GITHUB_STEP_SUMMARY"
+          echo "mercury is ${kib} KiB (budget ${BUDGET_KIB} KiB)"
+          if [ "$kib" -gt "$BUDGET_KIB" ]; then
+            echo "::error::mercury is ${kib} KiB, over the ${BUDGET_KIB} KiB budget"
+            exit 1
+          fi

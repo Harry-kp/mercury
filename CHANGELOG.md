@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - History entries record the **environment** they were sent with, and the response panel shows it, as **from .env.dev** once you've switched. Reopening an entry opens the **file** it was sent from instead of a detached copy. Older history entries load as before.
 
 ### Changed
+- CI checks that the shipped binary stays within a size budget, runs against the committed `Cargo.lock`, audits dependency changes before they merge, and fails if the shortcut tables in the README or docs drift from the app.
 - **Smaller download: 8.7 MB → 7.6 MB.** TLS now uses rustls on the `ring` crypto provider instead of aws-lc (same verification against the system's trusted certificates), and release builds use full link-time optimisation.
 - **Sending no longer stutters with a large history.** Each response used to rewrite the whole history file (up to 50 full responses) on the UI thread, about 60 ms per send at 50 MB. It's written in the background now.
 - **On macOS the top bar is the title bar.** The grey system title bar is gone; the window buttons sit in Mercury's own top bar, which drags the window and zooms it on double-click.

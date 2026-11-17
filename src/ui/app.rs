@@ -1848,6 +1848,35 @@ mod tests {
         );
     }
 
+    /// CLAUDE.md: a change to SHORTCUTS updates the README and the docs
+    /// site's table in the same PR. This holds both to it, row for row.
+    #[test]
+    fn shortcut_tables_in_the_docs_match_the_app() {
+        let expected: Vec<String> = SHORTCUTS
+            .iter()
+            .map(|s| (s.keys, s.label))
+            .chain([ESCAPE_HELP])
+            .map(|(keys, label)| format!("| `{keys}` | {label} |"))
+            .collect();
+        for (doc, text) in [
+            ("README.md", include_str!("../../README.md")),
+            (
+                "website/docs/reference/keyboard-shortcuts.md",
+                include_str!("../../website/docs/reference/keyboard-shortcuts.md"),
+            ),
+        ] {
+            let rows: Vec<&str> = text
+                .lines()
+                .skip_while(|l| !l.starts_with(&expected[0]))
+                .take_while(|l| l.starts_with("| `"))
+                .collect();
+            assert_eq!(
+                rows, expected,
+                "the shortcut table in {doc} is out of sync with SHORTCUTS"
+            );
+        }
+    }
+
     /// The help modal and the palette render `keys` as one cap per space-run.
     #[test]
     fn shortcut_keys_are_renderable_caps() {

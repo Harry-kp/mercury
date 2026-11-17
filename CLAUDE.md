@@ -2,12 +2,14 @@
 
 Mercury is a native Rust + egui API client. Requests are plain JSON files in a folder the user opens; environments are `.env` files. Product rule: **say no by default** — no accounts, cloud, telemetry, plugins or settings screens. Small, boring, fast. The shortest correct diff wins.
 
-## Commands (CI runs the last three)
+## Commands (CI runs the last three, with `--locked`)
 - Run: `MERCURY_HOME=$(mktemp -d) cargo run` (isolated app data; plain `cargo run` uses your real `~/.mercury`)
 - One test / module: `cargo test kv::` · `cargo test smoke`
+- After touching TLS: `cargo test -- --ignored` (a real HTTPS handshake; needs the network)
 - `cargo fmt --check`
 - `cargo clippy --all-targets -- -D warnings`
 - `cargo test`
+- CI also builds `--profile dist` (what users download) on Linux and fails over `BUDGET_KIB` in `ci.yml`. Small is a feature: justify any raise in the PR.
 - Docs site: `cd website && npm ci && npm run build` (fails on broken links)
 
 ## Where code lives (flat, by domain)
@@ -48,6 +50,12 @@ Mercury is a native Rust + egui API client. Requests are plain JSON files in a f
 - Names the user types are single file names, never paths: `workspace::safe_name` rejects `/`, `..` and a leading dot. Go through `create_request`/`create_folder`/`rename`, never `parent.join(user_input)`.
 - A response is only shown if `current_file` still matches what it was sent from (`sent_file`); otherwise it goes to history. Anything that changes the open request must keep that pairing honest.
 - Bare-key shortcuts must not fire while typing: check `ctx.wants_keyboard_input()`.
+- egui-winit turns any ⌘C (⇧ or not) into `Event::Copy` and never reports the C key, and selected labels answer that event at the end of the frame. ⌘⇧C is taken out of the input at frame start (`take_copy_as_curl`). kittest sends raw keys, so a test that presses ⌘⇧C proves nothing about the real app; push `Event::Copy` with the modifiers in one frame via `harness.input_mut()`.
+- Focus requests go through `MercuryApp::focus`, which applies them next frame. Focusing a widget that isn't drawn this frame puts a missing node in the accessibility tree, which accesskit (and kittest) panic on.
+- Labels aren't selectable unless they opt in with `.selectable(true)` (response body, headers, errors).
+- Don't benchmark frame time in kittest: it always builds the accessibility tree, which costs 10× the frame. Drive `egui::Context::run` + `tessellate` directly with accesskit off.
+- History is appended on a background thread; every read-modify-write of it takes `storage::history_lock`.
+- TLS is rustls on `ring` (reqwest's `rustls-no-provider`); `http::client` installs the provider. Don't re-enable reqwest's default features: they bring back aws-lc (+1.4 MB).
 - `eframe` and `egui_kittest` versions move together; dependabot ignores their minor bumps.
 - `smoke_test` sets `MERCURY_HOME` for the whole process, so keep it the only test that touches storage on disk.
 - Disabled `# Header` lines are not saved to request files (the file stores a map). This is a known limitation, not a bug.
@@ -58,7 +66,7 @@ Mercury is a native Rust + egui API client. Requests are plain JSON files in a f
 ## Keep docs in sync (same PR)
 | You changed | Also update |
 |---|---|
-| `SHORTCUTS` | README "Shortcuts", `website/docs/reference/keyboard-shortcuts.md` |
+| `SHORTCUTS` | README "Shortcuts", `website/docs/reference/keyboard-shortcuts.md` (a test fails if the tables drift) |
 | Request file / `.env` format | README "File format", `website/docs/reference/file-format.md` |
 | Anything user-visible | `CHANGELOG.md` → `[Unreleased]`, plus the matching `website/docs/features/*.md` |
 
