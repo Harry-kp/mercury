@@ -83,7 +83,7 @@ The Auth tab edits the `Authorization` header. See [Authentication](/docs/featur
 
 If a response arrives after you have opened a different request, it is recorded in [history](/docs/features/history) rather than shown under the request you are now looking at.
 
-If a request file changes on disk (for example in another editor) and you have no unsaved edits, Mercury reloads it. If you have unsaved edits, yours are kept (with a warning) and saved over the file. If the file is deleted, Mercury clears the editor.
+If a request file changes on disk (for example in another editor) and you have no unsaved edits, Mercury reloads it. If you have unsaved edits, yours are kept (with a warning) and saved over the file. If the file is deleted or renamed, Mercury keeps what's in the editor as an unsaved request; `⌘ S` saves it again.
 
 ## The response panel
 
@@ -143,7 +143,7 @@ Hover a request in the sidebar and click `⋯` (it stays visible on the open req
 | **Copy as cURL** | The open request, as a `curl` command (`⌘ Shift C`) |
 | **Duplicate** | Copies `name.json` to `name_copy1.json` (or the next free number) |
 | **Revert to saved** | The open request only: undoes edits autosave has written since you opened it |
-| **Rename** | Renames the file; `.json` is added if you leave it off. |
+| **Rename** | Renames the file; `.json` is added if you leave it off. Changing only the case (`login` → `Login`) works too. |
 | **Delete** | Deletes the file permanently, after you confirm |
 | **Copy Path** | Copies the file's full path |
 

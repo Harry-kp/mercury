@@ -272,6 +272,8 @@ pub struct MercuryApp {
     pub params_bulk_edit: bool,
     /// File content at last load/save; unsaved = current content differs.
     saved_content: Option<String>,
+    /// Fields of the open file Mercury doesn't edit, saved back as they were.
+    file_extra: std::collections::BTreeMap<String, serde_json::Value>,
     last_save: f64,
 
     // Response
@@ -383,6 +385,7 @@ impl MercuryApp {
             sent_env: None,
             response_env: None,
             opened_content: None,
+            file_extra: Default::default(),
             last_folder: None,
             opened_recently: Vec::new(),
             request_counter: 0,
@@ -781,6 +784,7 @@ impl MercuryApp {
             headers: kv::headers_to_map(&self.headers_text),
             body: self.body_text.clone(),
             disabled_headers: kv::disabled_headers_to_map(&self.headers_text),
+            extra: self.file_extra.clone(),
         }
         .to_json()
     }
@@ -810,6 +814,7 @@ impl MercuryApp {
             Tab::Params
         };
         self.current_file = file;
+        self.file_extra.clear();
         self.saved_content = self.current_file.as_ref().map(|_| self.file_content());
         self.response = None;
         self.response_env = None;
@@ -819,6 +824,21 @@ impl MercuryApp {
         self.response_tab = ResponseTab::Body;
     }
 
+    /// Load a parsed request file into the form, as saved.
+    fn load_file(&mut self, file: RequestFile, path: PathBuf) {
+        self.load_request(
+            Request {
+                method: file.method,
+                url: file.url,
+                headers: kv::file_headers_text(&file.headers, &file.disabled_headers),
+                body: file.body,
+            },
+            Some(path),
+        );
+        self.file_extra = file.extra;
+        self.saved_content = Some(self.file_content());
+    }
+
     pub fn open_file(&mut self, path: &Path) {
         self.autosave();
         let loaded = fs::read_to_string(path)
@@ -826,15 +846,7 @@ impl MercuryApp {
             .and_then(|c| RequestFile::from_json(&c));
         match loaded {
             Ok(file) => {
-                self.load_request(
-                    Request {
-                        method: file.method,
-                        url: file.url,
-                        headers: kv::file_headers_text(&file.headers, &file.disabled_headers),
-                        body: file.body,
-                    },
-                    Some(path.to_path_buf()),
-                );
+                self.load_file(file, path.to_path_buf());
                 self.opened_content = self.saved_content.clone();
                 // opened from ⌘K, history or a relaunch: show where it lives
                 self.expand_to(path);
@@ -922,15 +934,7 @@ impl MercuryApp {
             return;
         };
         let response = self.response.take();
-        self.load_request(
-            Request {
-                method: file.method,
-                url: file.url,
-                headers: kv::file_headers_text(&file.headers, &file.disabled_headers),
-                body: file.body,
-            },
-            Some(path),
-        );
+        self.load_file(file, path);
         self.response = response;
         self.saved_content = None; // differs from disk until written
         if self.save_file() {
@@ -939,6 +943,7 @@ impl MercuryApp {
     }
 
     pub fn duplicate(&mut self, path: &Path) {
+        self.autosave(); // the copy is what's on screen, not the last save
         match workspace::duplicate(path) {
             Ok(copy) => {
                 self.rebuild_tree();
@@ -1261,11 +1266,21 @@ impl MercuryApp {
         let Some(path) = self.current_file.clone() else {
             return;
         };
+        let name = path.file_name().unwrap_or_default().to_string_lossy();
         let disk = match fs::read_to_string(&path) {
             Ok(disk) => disk,
-            Err(_) => {
-                self.load_request(Request::default(), None);
-                self.notify("File was deleted externally", true);
+            // deleted, renamed, or not on the branch git switched to: what's
+            // on screen (unsaved edits too) stays, as an unsaved request
+            Err(_) if !workspace::taken(&path) => {
+                let text = format!("'{name}' was deleted on disk; it's still open, unsaved");
+                self.current_file = None;
+                self.saved_content = None;
+                self.notify(text, true);
+                return;
+            }
+            Err(e) => {
+                let text = format!("Could not read '{name}': {e}");
+                self.notify(text, true);
                 return;
             }
         };
@@ -1278,9 +1293,20 @@ impl MercuryApp {
         if self.has_unsaved_changes() {
             self.notify("File changed on disk; keeping your unsaved edits", true);
         } else {
-            let response = self.response.take();
+            // the same request, newer: the tabs and the response stay put
+            let keep = (
+                self.response.take(),
+                self.response_env.take(),
+                self.tab,
+                self.response_tab,
+            );
             self.open_file(&path);
-            self.response = response;
+            (
+                self.response,
+                self.response_env,
+                self.tab,
+                self.response_tab,
+            ) = keep;
         }
     }
 
@@ -1409,13 +1435,16 @@ impl MercuryApp {
                 match self.create_env(&name) {
                     // straight into the editor: the file is only a start
                     Ok(file) => return self.edit_env(&file),
-                    Err(e) => self.notify(e, true),
+                    // stays open on what was typed, to fix rather than retype
+                    Err(e) => return self.notify(e, true),
                 }
             }
             ModalAction::Confirm => {
                 let name = self.dialog_text.trim().to_string();
+                let keep_open = !matches!(dialog, Dialog::Delete(..));
                 match self.confirm_dialog(dialog, &name) {
                     Ok(msg) => self.notify(msg, false),
+                    Err(e) if keep_open => return self.notify(e, true),
                     Err(e) => self.notify(e, true),
                 }
             }
@@ -1425,7 +1454,7 @@ impl MercuryApp {
 
     fn confirm_dialog(&mut self, dialog: Dialog, name: &str) -> Result<&'static str, String> {
         match dialog {
-            Dialog::NewRequest(parent, _) => {
+            Dialog::NewRequest(parent, saving) => {
                 let path = workspace::create_request(&parent, name, &self.file_content())?;
                 // it's saved now, so it no longer belongs in Recent
                 let url = self.url.clone();
@@ -1434,7 +1463,7 @@ impl MercuryApp {
                 self.expanded.insert(parent);
                 self.rebuild_tree();
                 self.open_file(&path);
-                Ok("Request created")
+                Ok(if saving { "Saved" } else { "Request created" })
             }
             Dialog::NewFolder(parent) => {
                 workspace::create_folder(&parent, name)?;
@@ -1444,17 +1473,32 @@ impl MercuryApp {
             }
             Dialog::Rename(path) => {
                 let new_path = workspace::rename(&path, name)?;
-                if let Some(rest) = self
-                    .current_file
-                    .as_ref()
-                    .and_then(|f| f.strip_prefix(&path).ok())
-                {
-                    self.current_file = Some(if rest.as_os_str().is_empty() {
-                        new_path
-                    } else {
-                        new_path.join(rest)
-                    });
-                }
+                // every path into the old name follows it: the open file, a
+                // send in flight, the expanded folders, ⌘K's recent list
+                let remap = |p: &mut PathBuf| {
+                    if let Ok(rest) = p.strip_prefix(&path) {
+                        *p = if rest.as_os_str().is_empty() {
+                            new_path.clone()
+                        } else {
+                            new_path.join(rest)
+                        };
+                    }
+                };
+                self.current_file
+                    .iter_mut()
+                    .chain(&mut self.sent_file)
+                    .chain(&mut self.last_folder)
+                    .chain(&mut self.selected_folder)
+                    .chain(&mut self.opened_recently)
+                    .for_each(remap);
+                self.expanded = self
+                    .expanded
+                    .drain()
+                    .map(|mut p| {
+                        remap(&mut p);
+                        p
+                    })
+                    .collect();
                 self.rebuild_tree();
                 Ok("Renamed")
             }
