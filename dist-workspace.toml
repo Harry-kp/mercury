@@ -20,8 +20,10 @@ install-updater = false
 # Allow custom modifications to the CI workflow
 allow-dirty = ["ci"]
 
-# GitHub retired the macos-14 image ("macos-14-arm64-us-default is not
-# supported"), which dist 0.30.2 still picks for Apple Silicon: v0.4.1's
-# aarch64 build was cancelled before it started.
+# Apple Silicon is cross-compiled on the Intel runner. GitHub retired the
+# macos-14 image dist 0.30.2 picks (v0.4.1 cancelled), and its arm64 pool
+# was out of capacity for every v0.4.2 attempt ("not acquired by Runner
+# ... capacity constraints"). Xcode on Intel links arm64 fine, and the
+# bundle job lipo's both into a universal binary and checks it.
 [dist.github-custom-runners]
-aarch64-apple-darwin = "macos-15"
+aarch64-apple-darwin = "macos-15-intel"

@@ -290,7 +290,7 @@ jobs:
       - plan
       - host
     if: ${{ needs.host.result == 'success' && needs.plan.outputs.publishing == 'true' }}
-    runs-on: "macos-15" # Apple Silicon runner (macos-14 is retired)
+    runs-on: "macos-15-intel" # arm64 runners are short on capacity; lipo/codesign work on either
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
