@@ -74,15 +74,23 @@ pub struct RequestFile {
     /// one off doesn't delete it. Not sent. Added in 0.4.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub disabled_headers: BTreeMap<String, String>,
+    /// Fields Mercury doesn't know (a `description` added by hand), written
+    /// back untouched so saving never drops them.
+    #[serde(flatten)]
+    pub extra: BTreeMap<String, serde_json::Value>,
 }
 
 impl RequestFile {
     pub fn from_json(content: &str) -> Result<Self, String> {
-        serde_json::from_str(content).map_err(|e| format!("Invalid request file: {e}"))
+        // Notepad and some Windows tools start a UTF-8 file with a BOM
+        serde_json::from_str(content.trim_start_matches('\u{feff}'))
+            .map_err(|e| format!("Invalid request file: {e}"))
     }
 
+    /// Ends with a newline, as editors write text files, so a file touched
+    /// in both doesn't flip its last line in every diff.
     pub fn to_json(&self) -> String {
-        serde_json::to_string_pretty(self).expect("RequestFile always serializes")
+        serde_json::to_string_pretty(self).expect("RequestFile always serializes") + "\n"
     }
 }
 
@@ -228,6 +236,18 @@ mod tests {
         r.headers.insert("Alpha".into(), "{{token}}".into());
         let json = r.to_json();
         assert!(json.find("Alpha").unwrap() < json.find("Zeta").unwrap());
+        assert_eq!(RequestFile::from_json(&json).unwrap(), r);
+    }
+
+    /// A file written by hand (Notepad's BOM, a `description` someone added)
+    /// must open, and saving it must not drop what Mercury doesn't know.
+    #[test]
+    fn request_file_keeps_what_it_does_not_know() {
+        let hand = "\u{feff}{\"method\":\"GET\",\"url\":\"u\",\"description\":\"lists users\",\"tags\":[\"a\"]}\r\n";
+        let r = RequestFile::from_json(hand).unwrap();
+        let json = r.to_json();
+        assert!(json.contains(r#""description": "lists users""#), "{json}");
+        assert!(json.ends_with("}\n"), "a text file ends with a newline");
         assert_eq!(RequestFile::from_json(&json).unwrap(), r);
     }
 

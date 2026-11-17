@@ -15,6 +15,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Import several exports at once.** The Postman and Insomnia pickers take more than one file, so a collection and its environment exports come in together.
 
 ### Fixed
+- **Request files keep fields Mercury doesn't know.** A `description` added by hand used to vanish on the next save. Files with a UTF-8 BOM (Notepad) open instead of failing to parse, and saved files end with a newline.
+- When the open request's file is deleted or renamed outside Mercury (or a `git checkout` drops it), the editor keeps it as an unsaved request instead of clearing it, unsaved edits included. A file that can't be read is reported as such, not as deleted.
+- A file changed in another editor reloads without moving the editor back to Params or the response back to Body.
+- **Rename** confirmed without a change, or changing only the case (`login` → `Login` on macOS and Windows), said the name already exists.
+- Renaming a folder collapsed it and every folder inside it, sent a response in flight from a request inside it to history, and left the old path in ⌘K's recent requests.
+- **Duplicate** of the open request copied the last autosave, not what's on screen.
+- A name a dialog refuses (`a/b`, a name that's taken) closed the dialog and lost what you typed; it stays open now. Names with `..` inside them (`v1..v2`) are allowed.
+- Changes inside `.git` (an IDE running `git status`) no longer rescan the workspace and repeat the "changed on disk" warning.
 - A `.env` value containing a line break (from an import) is written as `\n` and read back intact, instead of splitting into a broken line.
 - JSON whose content type contains "tar" or "zip" (GitHub's `application/vnd.github.star+json`) showed as an **Archive** instead of JSON.
 - A response without a `Content-Length` was downloaded whole, however large, before being called too large. Mercury now stops reading at the 10 MB limit.

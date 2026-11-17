@@ -1137,4 +1137,77 @@ fn open_send_edit_and_save() {
     scratch.tab = Tab::Body;
     eframe::App::on_exit(&mut scratch, None);
     assert_eq!(MercuryApp::new(&egui::Context::default()).tab, Tab::Params);
+
+    // Two-way sync with files changed outside Mercury
+    let sync_dir = tempfile::TempDir::new().unwrap();
+    let sws = sync_dir.path().to_path_buf();
+    std::fs::create_dir(sws.join("auth")).unwrap();
+    let login = sws.join("auth/login.json");
+    std::fs::write(&login, r#"{"method":"POST","url":"http://a/login"}"#).unwrap();
+    let mut sync = Harness::builder()
+        .with_size(egui::vec2(1200.0, 800.0))
+        .build_state(
+            |ctx, app: &mut MercuryApp| app.frame(ctx),
+            MercuryApp::new(&egui::Context::default()),
+        );
+    sync.state_mut().open_workspace(sws.clone(), None);
+    sync.state_mut().open_file(&login);
+    sync.run_steps(2);
+    let settle = |h: &mut Harness<'_, MercuryApp>, done: &dyn Fn(&MercuryApp) -> bool| {
+        // few frames, long waits: 5 s of frames would autosave over a delete
+        for _ in 0..100 {
+            h.step();
+            if done(h.state()) {
+                return;
+            }
+            std::thread::sleep(Duration::from_millis(50));
+        }
+    };
+
+    // Duplicate copies what's on screen, not the last autosave
+    sync.state_mut().url.push_str("?v=2");
+    sync.state_mut().duplicate(&login);
+    assert!(std::fs::read_to_string(sws.join("auth/login_copy1.json"))
+        .unwrap()
+        .contains("?v=2"));
+
+    // Renaming the folder of the open request keeps it open and expanded
+    sync.state_mut()
+        .open_dialog(Dialog::Rename(sws.join("auth")), "session");
+    sync.run_steps(2);
+    sync.key_press(Key::Enter);
+    sync.run_steps(2);
+    let login = sws.join("session/login.json");
+    assert_eq!(sync.state().current_file.as_deref(), Some(login.as_path()));
+    assert!(sync.state().expanded.contains(&sws.join("session")));
+    assert_eq!(sync.state().opened_recently.first(), Some(&login));
+
+    // The open file deleted on disk while it has unsaved edits: the edits
+    // stay, as an unsaved request, instead of a cleared editor
+    sync.state_mut().url = "http://a/edited".into();
+    std::fs::remove_file(&login).unwrap();
+    settle(&mut sync, &|a| a.current_file.is_none());
+    assert_eq!(sync.state().current_file, None);
+    assert_eq!(sync.state().url, "http://a/edited");
+
+    // An edit in another editor reloads the request without moving the
+    // editor off the tab it was on
+    let x = sws.join("session/x.json");
+    std::fs::write(&x, r#"{"method":"GET","url":"http://x/1"}"#).unwrap();
+    sync.state_mut().open_file(&x);
+    sync.state_mut().tab = Tab::Headers;
+    sync.run_steps(2);
+    std::fs::write(&x, r#"{"method":"GET","url":"http://x/2"}"#).unwrap();
+    settle(&mut sync, &|a| a.url.ends_with("/2"));
+    assert_eq!(sync.state().url, "http://x/2");
+    assert_eq!(sync.state().tab, Tab::Headers);
+
+    // A name the dialog refuses leaves it open on what was typed
+    sync.state_mut()
+        .open_dialog(Dialog::NewFolder(sws.clone()), "a/b");
+    sync.run_steps(2);
+    sync.key_press(Key::Enter);
+    sync.run_steps(2);
+    assert!(matches!(sync.state().dialog, Some(Dialog::NewFolder(_))));
+    assert_eq!(sync.state().dialog_text, "a/b");
 }
