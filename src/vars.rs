@@ -31,7 +31,7 @@ pub fn parse_env(content: &str) -> HashMap<String, String> {
 }
 
 /// Calls `f` with each `{{name}}` (trimmed) and its byte range in `text`.
-fn for_each_var(text: &str, mut f: impl FnMut(&str, std::ops::Range<usize>)) {
+pub fn for_each_var(text: &str, mut f: impl FnMut(&str, std::ops::Range<usize>)) {
     let mut pos = 0;
     while let Some(start) = text[pos..].find("{{").map(|i| pos + i) {
         let Some(len) = text[start + 2..].find("}}") else {

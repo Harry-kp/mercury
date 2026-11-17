@@ -119,6 +119,10 @@ impl MercuryApp {
             });
         });
 
+        // tips are for the first run, not every unsent request in a workspace
+        if self.workspace.is_some() {
+            return;
+        }
         ui.add_space(Space::HUGE);
         ui.label(widgets::section_label("Try this"));
         ui.add_space(Space::MD);
@@ -454,6 +458,9 @@ impl MercuryApp {
                 let highlight = !self.raw_view;
                 let row_h = ui.fonts_mut(|f| f.row_height(&mono(Text::SMALL)));
                 let tint = t.tint(t.warning, 0.45);
+                // the match "n of m" points at stands out from the rest
+                let current = (!hits.is_empty()).then(|| hits[self.find_at % hits.len()].clone());
+                let current_tint = t.tint(t.accent, 0.6);
                 widgets::code_frame().show(ui, |ui| {
                     // show_rows sizes rows with *this* ui's spacing; rows
                     // are drawn without any, so it must be zero here too
@@ -484,6 +491,10 @@ impl MercuryApp {
                                 _ => widgets::plain_job(line, f32::INFINITY),
                             };
                             widgets::highlight_ranges(&mut job, &hits_in(hits, row), tint);
+                            if let Some(c) = &current {
+                                let here = hits_in(std::slice::from_ref(c), row);
+                                widgets::highlight_ranges(&mut job, &here, current_tint);
+                            }
                             ui.add(
                                 egui::Label::new(job)
                                     // you often want one field's value,
@@ -553,14 +564,13 @@ fn find_bar(
 
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = Space::SM;
-        let field = ui.add(
-            egui::TextEdit::singleline(&mut query)
-                .hint_text(widgets::muted("Find in response"))
-                .desired_width(Layout::FIND_FIELD_WIDTH)
-                .id(egui::Id::new("response_find"))
-                .font(mono(Text::SMALL)),
+        let field = widgets::search_input(
+            ui,
+            "response_find",
+            &mut query,
+            "Find in response",
+            Layout::FIND_FIELD_WIDTH,
         );
-        widgets::name(&field, "Find in response");
         // a single-line TextEdit reports Enter by losing focus
         if field.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
             at += 1;
