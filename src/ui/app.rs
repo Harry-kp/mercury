@@ -1127,10 +1127,14 @@ impl MercuryApp {
             Some(entry) => {
                 // back on the file it was sent from, if it still exists,
                 // instead of a detached "Untitled" copy
-                match entry.file.map(PathBuf::from).filter(|f| f.is_file()) {
-                    Some(file) => {
-                        self.open_file(&file);
-                    }
+                let file = entry.file.map(PathBuf::from).filter(|f| f.is_file());
+                if let Some(file) = &file {
+                    self.open_file(file);
+                }
+                // a file that no longer parses stays where it was, and the
+                // entry's response landed under whatever request was open
+                match file.filter(|f| self.current_file.as_ref() == Some(f)) {
+                    Some(_) => {}
                     None => {
                         self.autosave();
                         self.load_request(entry.request, None);

@@ -431,11 +431,9 @@ impl MercuryApp {
                 );
             }
             ResponseType::TooLarge => {
-                let size = format!(
-                    "{} (limit {})",
-                    format_bytes(response.size_bytes),
-                    format_bytes(MAX_RESPONSE_SIZE)
-                );
+                // the size is only a lower bound when the server didn't
+                // declare it, and "10.0 MB (limit 10.0 MB)" read as a contradiction
+                let size = format!("Over the {} limit", format_bytes(MAX_RESPONSE_SIZE));
                 empty_state(
                     ui,
                     Icon::Alert,
@@ -446,14 +444,17 @@ impl MercuryApp {
             }
             ResponseType::Binary | ResponseType::Image => {
                 let (what, title) = content_kind(&response.content_type);
-                empty_state(
-                    ui,
-                    what,
-                    None,
-                    title,
-                    &[&response.content_type, &format_bytes(response.size_bytes)],
-                );
-                save_button(ui, &mut save);
+                let size = format_bytes(response.size_bytes);
+                let mut lines = vec![response.content_type.as_str(), &size];
+                if can_save {
+                    empty_state(ui, what, None, title, &lines);
+                    save_button(ui, &mut save);
+                } else {
+                    // from history, which keeps no bytes: saving wrote
+                    // the "[Binary data: N bytes]" placeholder to the file
+                    lines.push("Send again to save it");
+                    empty_state(ui, what, None, title, &lines);
+                }
             }
             ResponseType::Json
             | ResponseType::Xml
@@ -461,15 +462,20 @@ impl MercuryApp {
             | ResponseType::PlainText
             | ResponseType::LargeText => {
                 let body = &response.body;
-                let formatted = self.formatted_body.get_or_insert_with(|| {
-                    // usually made on the request thread (`HttpResponse::pretty`);
-                    // history entries don't carry it
-                    response.pretty.clone().unwrap_or_else(|| match kind {
-                        ResponseType::Json => http::format_json(body),
-                        ResponseType::Xml => http::format_xml(body),
-                        _ => body.clone(),
-                    })
-                });
+                // usually made on the request thread (`HttpResponse::pretty`),
+                // and used from there: copying it (or a text body, which has
+                // no pretty form) kept 10 MB in memory twice. History
+                // entries don't carry it.
+                let formatted: &str = match (&response.pretty, kind) {
+                    (Some(pretty), _) => pretty,
+                    (None, ResponseType::Json) => self
+                        .formatted_body
+                        .get_or_insert_with(|| http::format_json(body)),
+                    (None, ResponseType::Xml) => self
+                        .formatted_body
+                        .get_or_insert_with(|| http::format_xml(body)),
+                    _ => body,
+                };
                 let text: &str = if self.raw_view { body } else { formatted };
                 let char_w = ui.fonts_mut(|f| f.glyph_width(&mono(Text::SMALL), '0'));
                 // Formatted JSON/XML keeps its own lines. Everything else
@@ -480,7 +486,9 @@ impl MercuryApp {
                 let row_bytes = if formatted_lines {
                     ROW_BYTES
                 } else {
-                    (((ui.available_width() - Space::LG * 2.0 - 14.0) / char_w) as usize).max(40)
+                    // (a floor of 40 was wider than the narrowest panel
+                    // holds: every row ran a character or two under its edge)
+                    (((ui.available_width() - Space::LG * 2.0 - 14.0) / char_w) as usize).max(16)
                 };
                 let rows = BodyRows::cached(&mut self.body_rows, text, row_bytes);
                 rows.search(text, self.find.as_deref());
