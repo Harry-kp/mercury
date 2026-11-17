@@ -152,6 +152,24 @@ pub fn create_request(parent: &Path, name: &str, content: &str) -> Result<PathBu
     Ok(path)
 }
 
+/// A new `.env.<name>` in the workspace root, holding `content`. Accepts
+/// "staging", ".env.staging" or "env.staging"; never overwrites. Returns the
+/// file name.
+pub fn create_env(root: &Path, name: &str, content: &str) -> Result<String, String> {
+    let name = name.trim();
+    let name = name
+        .strip_prefix(".env.")
+        .or_else(|| name.strip_prefix("env."))
+        .unwrap_or(name);
+    let file = format!(".env.{}", safe_name(name)?);
+    let path = root.join(&file);
+    if path.exists() {
+        return Err(format!("{file} already exists"));
+    }
+    fs::write(&path, content).map_err(|e| format!("Could not create {file}: {e}"))?;
+    Ok(file)
+}
+
 pub fn create_folder(parent: &Path, name: &str) -> Result<(), String> {
     let path = parent.join(safe_name(name)?);
     ensure_free(&path)?;
@@ -266,6 +284,33 @@ mod tests {
         }
         assert_eq!(count_contents(root), (3, 2));
         assert_eq!(count_contents(&root.join("a/b")), (1, 1));
+    }
+
+    #[test]
+    fn create_env_takes_any_spelling_and_never_overwrites() {
+        let dir = TempDir::new().unwrap();
+        assert_eq!(
+            create_env(dir.path(), " staging ", "A=1\n").unwrap(),
+            ".env.staging"
+        );
+        assert_eq!(
+            fs::read_to_string(dir.path().join(".env.staging")).unwrap(),
+            "A=1\n"
+        );
+        assert_eq!(
+            create_env(dir.path(), ".env.prod", "").unwrap(),
+            ".env.prod"
+        );
+        assert_eq!(create_env(dir.path(), "env.qa", "").unwrap(), ".env.qa");
+        assert!(create_env(dir.path(), "staging", "B=2")
+            .unwrap_err()
+            .contains("already exists"));
+        assert_eq!(
+            fs::read_to_string(dir.path().join(".env.staging")).unwrap(),
+            "A=1\n"
+        );
+        assert!(create_env(dir.path(), "../x", "").is_err());
+        assert!(create_env(dir.path(), "", "").is_err());
     }
 
     #[test]

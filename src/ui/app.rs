@@ -183,6 +183,9 @@ pub enum Dialog {
     /// The path, and the confirmation text (counted once, when opened).
     Delete(PathBuf, String),
     Shortcuts,
+    NewEnv,
+    /// The `.env` file being edited (its text is `env_edit_text`).
+    EditEnv(String),
 }
 
 pub struct Toast {
@@ -311,6 +314,9 @@ pub struct MercuryApp {
     pub palette: Option<Palette>,
     pub dialog: Option<Dialog>,
     pub dialog_text: String,
+    /// The environment editor's text and its table / bulk-edit mode.
+    pub env_edit_text: String,
+    pub env_edit_bulk: bool,
     pub toast: Option<Toast>,
     /// See [`Self::focus`].
     pending_focus: Option<&'static str>,
@@ -383,6 +389,8 @@ impl MercuryApp {
             palette: None,
             dialog: None,
             dialog_text: String::new(),
+            env_edit_text: String::new(),
+            env_edit_bulk: false,
             toast: None,
             pending_focus: None,
             auth_stash: Default::default(),
@@ -648,6 +656,9 @@ impl MercuryApp {
     /// one press from dev can land on prod.
     pub fn select_env(&mut self, index: Option<usize>) {
         self.selected_env = index;
+        // an error from the last send ("{{x}} isn't defined…") was about the
+        // environment that's no longer selected
+        self.request_error = None;
         self.load_env();
         let text = match self.env_name() {
             Some(name) => format!("Environment: {name}"),
@@ -908,6 +919,19 @@ impl MercuryApp {
         }
         // otherwise last send's "404 Not Found" sits over this send's result
         self.toast = None;
+        // A URL with an undefined variable left in it fails as something
+        // else entirely ("invalid international domain name"), or reaches
+        // the server as %7B%7BUSER_ID%7D%7D. Say what's missing instead.
+        let missing: Vec<String> = vars::extract(&self.url)
+            .into_iter()
+            .filter(|v| !self.env_vars.contains_key(v))
+            .collect();
+        if !missing.is_empty() {
+            self.response = None;
+            self.show_history = false;
+            self.request_error = Some(missing_vars_message(&missing, self.env_name()));
+            return;
+        }
         let request = RequestFile {
             method: self.method,
             url: vars::substitute(&self.url, &self.env_vars),
@@ -1273,10 +1297,42 @@ impl MercuryApp {
                 confirm_modal(ctx, title, message, title)
             }
             Dialog::Shortcuts => shortcuts_modal(ctx),
+            Dialog::NewEnv => {
+                input_modal(ctx, "New environment", "Name, e.g. staging", "Create", text)
+            }
+            Dialog::EditEnv(file) => {
+                let (body, bulk) = (&mut self.env_edit_text, &mut self.env_edit_bulk);
+                widgets::modal(ctx, &format!("Edit {file}"), |ui| {
+                    widgets::key_value_editor(
+                        ui,
+                        body,
+                        "=",
+                        bulk,
+                        "baseUrl=https://api.example.com\ntoken=…",
+                    );
+                    ui.add_space(Space::MD);
+                    ui.add(
+                        egui::Label::new(widgets::faint(
+                            "Requests use these as {{name}}. Saved as a plain file in the workspace folder.",
+                        ))
+                        .wrap(),
+                    );
+                    ui.add_space(Space::XL);
+                    widgets::modal_buttons(ui, "Save", false)
+                })
+            }
         };
         match action {
             ModalAction::Open => return,
             ModalAction::Close => {}
+            ModalAction::Confirm if matches!(dialog, Dialog::NewEnv) => {
+                let name = self.dialog_text.trim().to_string();
+                match self.create_env(&name) {
+                    // straight into the editor: the file is only a start
+                    Ok(file) => return self.edit_env(&file),
+                    Err(e) => self.notify(e, true),
+                }
+            }
             ModalAction::Confirm => {
                 let name = self.dialog_text.trim().to_string();
                 match self.confirm_dialog(dialog, &name) {
@@ -1335,8 +1391,44 @@ impl MercuryApp {
                 self.rebuild_tree();
                 Ok("Deleted")
             }
-            Dialog::Shortcuts => Ok(""),
+            Dialog::Shortcuts | Dialog::NewEnv => Ok(""),
+            Dialog::EditEnv(file) => {
+                let root = self.workspace.clone().ok_or("No folder is open")?;
+                let text = kv::format_lines(&kv::parse_lines(&self.env_edit_text, "="), "=");
+                fs::write(root.join(&file), format!("{text}\n"))
+                    .map_err(|e| format!("Could not save {file}: {e}"))?;
+                self.refresh_env_files();
+                self.request_error = None;
+                Ok("Environment saved")
+            }
         }
+    }
+
+    /// A new environment, seeded with the variables the open request uses,
+    /// then selected. Returns its file name.
+    fn create_env(&mut self, name: &str) -> Result<String, String> {
+        let root = self.workspace.clone().ok_or("Open a folder first")?;
+        let used: std::collections::BTreeSet<String> =
+            [&self.url, &self.headers_text, &self.body_text]
+                .iter()
+                .flat_map(|t| vars::extract(t))
+                .collect();
+        let content: String = used.iter().map(|k| format!("{k}=\n")).collect();
+        let file = workspace::create_env(&root, name, &content)?;
+        self.refresh_env_files();
+        let index = self.env_files.iter().position(|f| *f == file);
+        self.select_env(index);
+        Ok(file)
+    }
+
+    /// Open the editor on an environment file of the open workspace.
+    pub fn edit_env(&mut self, file: &str) {
+        let Some(root) = &self.workspace else {
+            return;
+        };
+        self.env_edit_text = fs::read_to_string(root.join(file)).unwrap_or_default();
+        self.env_edit_bulk = false;
+        self.dialog = Some(Dialog::EditEnv(file.to_string()));
     }
 
     // -----------------------------------------------------------------------
@@ -1616,7 +1708,7 @@ impl MercuryApp {
     fn env_menu(&mut self, ui: &mut egui::Ui) {
         let (name, color) = self.env_label();
         let chip = widgets::chip(ui, Icon::Layers, &name, color, self.workspace.is_some());
-        let mut picked = None;
+        let (mut picked, mut edit, mut create) = (None, None, false);
         popup_menu(ui, &chip, Layout::MENU_WIDTH, |ui| {
             if menu_item(ui, None, "No environment", "") {
                 picked = Some(None);
@@ -1627,14 +1719,26 @@ impl MercuryApp {
                     picked = Some(Some(i));
                 }
             }
-            if self.env_files.is_empty() {
-                ui.add_space(Space::XS);
-                ui.label(muted("Add .env files to the workspace root"));
-                ui.add_space(Space::XS);
+            if self.workspace.is_some() {
+                widgets::divider(ui);
+                if let Some(name) = self.env_name().map(str::to_string) {
+                    if menu_item(ui, Some(Icon::Pencil), &format!("Edit {name}…"), "") {
+                        edit = Some(name);
+                    }
+                }
+                if menu_item(ui, Some(Icon::Plus), "New environment…", "") {
+                    create = true;
+                }
             }
         });
         if let Some(index) = picked {
             self.select_env(index);
+        }
+        if let Some(file) = edit {
+            self.edit_env(&file);
+        }
+        if create {
+            self.open_dialog(Dialog::NewEnv, "");
         }
     }
 
@@ -1755,6 +1859,29 @@ fn take_copy_as_curl(ctx: &egui::Context) -> bool {
 /// "1 request" / "3 requests" — "1 requests" reads like a bug.
 fn plural(n: usize, one: &str, many: &str) -> String {
     format!("{n} {}", if n == 1 { one } else { many })
+}
+
+/// Why a URL with undefined variables wasn't sent, and where to fix it.
+fn missing_vars_message(missing: &[String], env: Option<&str>) -> String {
+    let braced: Vec<String> = missing.iter().map(|v| format!("{{{{{v}}}}}")).collect();
+    let names = match braced.as_slice() {
+        [one] => one.clone(),
+        [init @ .., last] => format!("{} and {last}", init.join(", ")),
+        [] => String::new(),
+    };
+    let (is, it) = if missing.len() == 1 {
+        ("isn't", "it")
+    } else {
+        ("aren't", "them")
+    };
+    match env {
+        Some(env) => format!(
+            "The URL wasn't sent: {names} {is} defined in {env}. Add {it} with Edit {env}… in the environment menu, or pick another environment."
+        ),
+        None => format!(
+            "The URL wasn't sent: {names} {is} defined, because no environment is selected. Pick one, or make one with New environment… in the environment menu."
+        ),
+    }
 }
 
 fn plural_import(requests: usize, envs: usize) -> String {
@@ -1898,6 +2025,21 @@ impl eframe::App for MercuryApp {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn missing_variables_say_what_and_where() {
+        let one = missing_vars_message(&["baseUrl".into()], Some(".env.dev"));
+        assert!(
+            one.contains("{{baseUrl}} isn't defined in .env.dev. Add it with Edit .env.dev…"),
+            "{one}"
+        );
+        let two = missing_vars_message(&["a".into(), "b".into()], None);
+        assert!(
+            two.contains("{{a}} and {{b}} aren't defined, because no environment is selected"),
+            "{two}"
+        );
+        assert!(two.contains("New environment…"));
+    }
 
     #[test]
     fn shortcuts_are_unique() {

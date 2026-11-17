@@ -26,7 +26,7 @@ API_TOKEN="prod token"
 
 **Only one environment is active at a time.** Files aren't layered or merged. A plain `.env` is not loaded on top of the selected one.
 
-- Pick the environment in the menu at the **top right** of the window. **None** turns variables off.
+- Pick the environment in the menu at the **top right** of the window. **No environment** turns variables off.
 - `⌘ E` switches to the next environment, in file-name order. After the last one it goes to None, then starts over. Every switch, from the menu or `⌘ E`, shows a notification naming the environment you landed on.
 - When you open a workspace, Mercury selects the first file (alphabetically) whose name contains `.dev`, or else the first file. When Mercury reopens the workspace at launch, it restores the environment you last had selected.
 - Environment names that contain `prod` are shown in red, and names that contain `stag` in amber, so it's harder to send to production by mistake. With a `prod` environment selected, the Send button turns red and reads **Send · prod** (or `production`, and so on).
@@ -61,18 +61,24 @@ Authorization: Bearer {{API_TOKEN}}
 
 - Variables are substituted when you send a request or copy it as cURL. Request files always keep the `{{NAME}}` placeholders.
 - Spaces inside the braces are allowed: `{{ NAME }}` is the same as `{{NAME}}`.
-- A variable the active environment doesn't define is **left as-is** and sent as the literal text `{{NAME}}`.
+- A variable the active environment doesn't define is **left as-is** in headers and the body, and sent as the literal text `{{NAME}}`. In the **URL** it stops the send instead: the response panel names the variable and where to define it, because a URL with `{{NAME}}` in it can only fail, usually with an error about something else (an "invalid domain name").
 
 ## Seeing what's missing
 
 - Postman's built-ins `{{$guid}}`, `{{$timestamp}}`, `{{$isoTimestamp}}` and `{{$randomInt}}` get a fresh value at every send, so imported collections that use them work. A variable of the same name in your `.env` wins.
 - In the URL bar, `{{variables}}` are coloured: violet when the selected environment defines them, amber when it doesn't.
 - If any variable in the request is undefined, a line under the URL bar names it and the environment it's missing from, and the tab that holds it shows a warning.
-- The **Params** and **Headers** tabs show a chip for each variable they use: ✓ if it's defined, ✗ if it isn't.
+- The **Params** and **Headers** tabs show a chip for each variable they use: ✓ if it's defined, ✗ if it isn't. Hover a chip to see its value.
+- Hover the URL bar to see the URL with every variable filled in.
 
-## Editing environment files
+## Creating and editing environments
 
-Edit `.env` files in any editor. Mercury picks up changes right away: new or removed env files update the picker (your selection is kept), and edited values apply to the next request.
+From the environment menu at the top right:
+
+- **New environment…** asks for a name (`staging` makes `.env.staging`), selects it, and opens it in the editor, already listing the variables the open request uses, so you only fill in values.
+- **Edit .env.dev…** opens the selected environment in the same editor: a table of variables, or **Bulk edit** for the file as text. **Save** writes the file; the next request uses the new values.
+
+It's the same plain file either way, and you can also edit `.env` files in any editor. Mercury picks up changes right away: new or removed env files update the picker (your selection is kept), and edited values apply to the next request.
 
 ## Keeping secrets out of Git
 
