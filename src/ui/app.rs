@@ -144,13 +144,9 @@ pub const ESCAPE_HELP: (&str, &str) = (
 impl Shortcut {
     fn pressed(&self, i: &egui::InputState, typing: bool) -> bool {
         if self.command {
-            // egui-winit turns ⌘C (with or without ⇧) into Event::Copy and
-            // never reports the C key, so ⌘⇧C has to listen for that event
-            let copy =
-                self.key == Key::C && i.events.iter().any(|e| matches!(e, egui::Event::Copy));
-            i.modifiers.command
-                && i.modifiers.shift == self.shift
-                && (i.key_pressed(self.key) || copy)
+            // (⌘⇧C also arrives as Event::Copy in the real app; see
+            // `take_copy_as_curl`)
+            i.modifiers.command && i.modifiers.shift == self.shift && i.key_pressed(self.key)
         } else {
             // bare keys must not fire while typing ("?" in a URL)
             !typing
@@ -166,10 +162,6 @@ pub enum Tab {
     Params,
     Headers,
     Auth,
-}
-
-impl Tab {
-    pub const ALL: [Tab; 4] = [Tab::Body, Tab::Params, Tab::Headers, Tab::Auth];
 }
 
 /// Which pane of a finished response is on screen.
@@ -403,10 +395,10 @@ impl MercuryApp {
                 },
                 None,
             );
-            app.tab = Tab::ALL
-                .get(state.selected_tab)
-                .copied()
-                .unwrap_or(Tab::Body);
+            // `selected_tab` is still written (the state file is a
+            // compatibility contract) but no longer read back: the tab
+            // follows the request, and restoring the last one put an unsaved
+            // GET back on an empty Body.
             app.theme_mode = state.theme;
             if let Some(path) = state.workspace_path {
                 app.open_workspace(PathBuf::from(path), state.env_name.as_deref());
@@ -1633,6 +1625,23 @@ impl MercuryApp {
     }
 }
 
+/// ⌘⇧C is Copy as cURL, not "copy the selected text". egui-winit turns any
+/// ⌘C, with or without ⇧, into `Event::Copy` and never reports the C key,
+/// and selected labels and fields answer that event at the end of the frame,
+/// after Mercury, so their text won the clipboard. Take the event out before
+/// any widget sees it. Plain ⌘C is untouched.
+fn take_copy_as_curl(ctx: &egui::Context) -> bool {
+    ctx.input_mut(|i| {
+        let hit = i.modifiers.command
+            && i.modifiers.shift
+            && i.events.iter().any(|e| matches!(e, egui::Event::Copy));
+        if hit {
+            i.events.retain(|e| !matches!(e, egui::Event::Copy));
+        }
+        hit
+    })
+}
+
 /// "1 request" / "3 requests" — "1 requests" reads like a bug.
 fn plural(n: usize, one: &str, many: &str) -> String {
     format!("{n} {}", if n == 1 { one } else { many })
@@ -1709,6 +1718,9 @@ impl MercuryApp {
         self.time = ctx.input(|i| i.time);
         if let Some(id) = self.pending_focus.take() {
             ctx.memory_mut(|m| m.request_focus(egui::Id::new(id)));
+        }
+        if take_copy_as_curl(ctx) {
+            self.run(Action::CopyCurl);
         }
         theme::set_dark(
             ctx,

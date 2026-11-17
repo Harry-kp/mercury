@@ -471,6 +471,10 @@ pub fn apply_style(ctx: &egui::Context) {
     style.spacing.scroll.bar_width = 8.0;
     style.spacing.scroll.floating = true;
     style.spacing.interact_size = egui::vec2(24.0, 22.0);
+    // Text you'd copy (response body, headers, cookies, errors) opts in
+    // with `.selectable(true)`. Everywhere else a click selected the label:
+    // a tree row's name ended up highlighted, and ⌘C copied it.
+    style.interaction.selectable_labels = false;
     style.visuals.text_cursor.stroke = Stroke::new(1.5_f32, t.accent);
 
     ctx.set_style(style);

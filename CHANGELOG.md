@@ -29,6 +29,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The body type reads **Body type: none / JSON / Form / Text**.
 
 ### Fixed
+- **`⌘ ⇧ C` copied the selected text instead of the request** whenever any text was selected: the selection answered the same copy event after Mercury and won the clipboard. `⌘ ⇧ C` now always copies the request as cURL; plain `⌘ C` still copies a selection.
+- Clicking a sidebar row selected its name as text. Only text you would copy is selectable now: the response body, response headers and cookies, and error messages.
+- An unsaved GET restored on relaunch opened on the Body tab instead of Params.
 - **`⌘ ⇧ C` (Copy as cURL) did nothing outside the tests.** The window layer turns any `⌘ C`, with or without `⇧`, into a copy event and never reports the key, so the shortcut never fired. It listens for that event now.
 - **`⌘ F` could crash Mercury under VoiceOver or another accessibility tool.** It put focus on the find field a frame before the field existed, and the accessibility layer rejects a focused element that isn't on screen. Focus requests from shortcuts and the palette now wait for the next frame, and `⌘ F` does nothing when there's no response to search.
 - `⌘ K` found nothing for two-word searches such as "list ord": the space had to match a character in the name. Each word now matches on its own.
