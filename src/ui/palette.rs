@@ -4,7 +4,7 @@
 //! Commands come from [`Action`], so a new action shows up here for free; the
 //! key hint next to it is read from the `SHORTCUTS` table.
 
-use super::app::{Action, MercuryApp, SHORTCUTS};
+use super::app::{Action, MercuryApp};
 use super::icon::Icon;
 use super::theme::{theme, Layout, Space};
 use super::widgets::{self, faint, label, method_text, muted};
@@ -138,10 +138,7 @@ impl Palette {
                     icon: *icon,
                     title: (*text).to_string(),
                     subtitle: String::new(),
-                    keys: SHORTCUTS
-                        .iter()
-                        .find(|s| s.action == *action)
-                        .map_or("", |s| s.keys),
+                    keys: super::app::keys(*action),
                     method: OnceCell::from(None),
                     open: Open::Command(*action),
                 },

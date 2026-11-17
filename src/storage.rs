@@ -51,15 +51,57 @@ fn save<T: Serialize + ?Sized>(name: &str, value: &T) -> Result<(), String> {
 /// whole history gone).
 fn save_to<T: Serialize + ?Sized>(dir: &Path, name: &str, value: &T) -> Result<(), String> {
     let json = serde_json::to_string_pretty(value).expect("app data serializes");
-    // per process: two Mercury windows saving at once must not share it
-    let tmp = dir.join(format!("{name}.{}.tmp", std::process::id()));
     fs::create_dir_all(dir)
-        .and_then(|_| fs::write(&tmp, json))
-        .and_then(|_| fs::rename(&tmp, dir.join(name)))
-        .map_err(|e| {
-            let _ = fs::remove_file(&tmp);
-            format!("Could not save {name} in {}: {e}", dir.display())
-        })
+        .and_then(|_| write_atomic(&dir.join(name), json.as_bytes()))
+        .map_err(|e| format!("Could not save {name} in {}: {e}", dir.display()))
+}
+
+/// Replace `path`'s contents all at once: written beside it, then renamed
+/// over it, so a full disk or a crash never leaves it cut short. A symlink
+/// is written through (its target is replaced, the link stays), and the
+/// file keeps its permissions (an `.env` may be private; a new file is
+/// owner-only).
+pub fn write_atomic(path: &Path, data: &[u8]) -> std::io::Result<()> {
+    use std::io::Write;
+    use std::sync::atomic::{AtomicU32, Ordering};
+    static COUNTER: AtomicU32 = AtomicU32::new(0);
+    let target = match fs::symlink_metadata(path) {
+        Ok(meta) if meta.file_type().is_symlink() => fs::canonicalize(path)?,
+        _ => path.to_path_buf(),
+    };
+    let name = target.file_name().unwrap_or_default().to_string_lossy();
+    let permissions = fs::metadata(&target).ok().map(|m| m.permissions());
+    // hidden, so a workspace never lists it; unguessable and created
+    // exclusively (O_EXCL never follows a planted symlink), and never more
+    // readable than the file it replaces, not even for a moment
+    let (tmp, mut file) = loop {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |d| d.subsec_nanos());
+        let n = COUNTER.fetch_add(1, Ordering::Relaxed);
+        let tmp = target.with_file_name(format!(".{name}.{}.{nanos}.{n}.tmp", std::process::id()));
+        let mut options = fs::OpenOptions::new();
+        options.write(true).create_new(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+            options.mode(permissions.as_ref().map_or(0o600, |p| p.mode() & 0o777));
+        }
+        match options.open(&tmp) {
+            Ok(file) => break (tmp, file),
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(e) => return Err(e),
+        }
+    };
+    let result = permissions
+        .map_or(Ok(()), |p| file.set_permissions(p))
+        .and_then(|_| file.write_all(data))
+        .and_then(|_| file.sync_all())
+        .and_then(|_| fs::rename(&tmp, &target));
+    if result.is_err() {
+        let _ = fs::remove_file(&tmp);
+    }
+    result
 }
 
 pub fn load_state() -> Option<AppState> {
@@ -389,6 +431,54 @@ mod tests {
             load_from::<Vec<i32>>(dir.path(), "recent.json"),
             Some(vec![1])
         );
+    }
+
+    /// Request and env files are saved this way too: a symlinked request
+    /// stays a link to the file that changed, and a private `.env` stays
+    /// private.
+    #[cfg(unix)]
+    #[test]
+    fn write_atomic_goes_through_links_and_keeps_permissions() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::TempDir::new().unwrap();
+        let real = dir.path().join("shared.json");
+        fs::write(&real, "old").unwrap();
+        fs::set_permissions(&real, fs::Permissions::from_mode(0o600)).unwrap();
+        let link = dir.path().join("link.json");
+        std::os::unix::fs::symlink(&real, &link).unwrap();
+
+        write_atomic(&link, b"new").unwrap();
+        assert!(fs::symlink_metadata(&link)
+            .unwrap()
+            .file_type()
+            .is_symlink());
+        assert_eq!(fs::read_to_string(&real).unwrap(), "new");
+        let mode = fs::metadata(&real).unwrap().permissions().mode();
+        assert_eq!(mode & 0o777, 0o600);
+        let left: Vec<_> = fs::read_dir(dir.path()).unwrap().flatten().collect();
+        assert_eq!(left.len(), 2, "no temp file left behind");
+    }
+
+    /// The temp file is never world-readable and never written through a
+    /// link planted at a guessable name.
+    #[cfg(unix)]
+    #[test]
+    fn write_atomic_temp_file_is_private_and_unguessable() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::TempDir::new().unwrap();
+        let victim = dir.path().join("victim");
+        fs::write(&victim, "keep").unwrap();
+        let planted = dir
+            .path()
+            .join(format!(".history.json.{}.tmp", std::process::id()));
+        std::os::unix::fs::symlink(&victim, &planted).unwrap();
+
+        let new = dir.path().join("history.json");
+        write_atomic(&new, b"secret").unwrap();
+        assert_eq!(fs::read_to_string(&victim).unwrap(), "keep");
+        assert_eq!(fs::read_to_string(&new).unwrap(), "secret");
+        let mode = fs::metadata(&new).unwrap().permissions().mode();
+        assert_eq!(mode & 0o777, 0o600, "a new file is owner-only");
     }
 
     #[test]

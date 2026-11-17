@@ -135,6 +135,14 @@ pub const SHORTCUTS: &[Shortcut] = &[
     },
 ];
 
+/// The keys `SHORTCUTS` gives `action`, for a hint next to it ("" if none).
+pub fn keys(action: Action) -> &'static str {
+    SHORTCUTS
+        .iter()
+        .find(|s| s.action == action)
+        .map_or("", |s| s.keys)
+}
+
 /// Not a table entry because it does different things depending on context.
 pub const ESCAPE_HELP: (&str, &str) = (
     "Esc",
@@ -877,7 +885,7 @@ impl MercuryApp {
             return false;
         };
         let content = self.file_content();
-        match fs::write(&path, &content) {
+        match storage::write_atomic(&path, content.as_bytes()) {
             Ok(()) => {
                 self.saved_content = Some(content);
                 self.last_save = self.time;
@@ -1557,7 +1565,8 @@ impl MercuryApp {
             Dialog::EditEnv(file) => {
                 let root = self.workspace.clone().ok_or("No folder is open")?;
                 let text = kv::format_lines(&kv::parse_lines(&self.env_edit_text, "="), "=");
-                fs::write(workspace::env_path(&root, &file)?, format!("{text}\n"))
+                let path = workspace::env_path(&root, &file)?;
+                storage::write_atomic(&path, format!("{text}\n").as_bytes())
                     .map_err(|e| format!("Could not save {file}: {e}"))?;
                 self.refresh_env_files();
                 self.request_error = None;
@@ -1594,7 +1603,8 @@ impl MercuryApp {
         };
         let saved = workspace::env_path(&root, &file).and_then(|path| {
             let text = fs::read_to_string(&path).map_err(|e| e.to_string())?;
-            fs::write(&path, vars::set_env_var(&text, key, value)).map_err(|e| e.to_string())
+            let text = vars::set_env_var(&text, key, value);
+            storage::write_atomic(&path, text.as_bytes()).map_err(|e| e.to_string())
         });
         match saved {
             Ok(()) => {
@@ -1827,7 +1837,12 @@ impl MercuryApp {
             chip = chip.on_hover_text(path.display().to_string());
         }
         popup_menu(ui, &chip, Layout::MENU_WIDTH, |ui| {
-            if menu_item(ui, Some(Icon::Folder), "Open folder…", "⌘ O") {
+            if menu_item(
+                ui,
+                Some(Icon::Folder),
+                "Open folder…",
+                keys(Action::OpenFolder),
+            ) {
                 self.pick_folder();
             }
             if open && menu_item(ui, Some(Icon::Plus), "New folder", "") {
@@ -1956,13 +1971,16 @@ impl MercuryApp {
     fn help_menu(&mut self, ui: &mut egui::Ui) {
         let trigger = icon_button(ui, Icon::Ellipsis, "More");
         popup_menu(ui, &trigger, Layout::MENU_WIDTH, |ui| {
-            if menu_item(ui, Some(Icon::Search), "Command palette", "⌘ K") {
+            let palette = keys(Action::Palette);
+            if menu_item(ui, Some(Icon::Search), "Command palette", palette) {
                 self.run(Action::Palette);
             }
-            if menu_item(ui, Some(Icon::Keyboard), "Keyboard shortcuts", "?") {
+            let help = keys(Action::Help);
+            if menu_item(ui, Some(Icon::Keyboard), "Keyboard shortcuts", help) {
                 self.dialog = Some(Dialog::Shortcuts);
             }
-            if menu_item(ui, Some(Icon::PanelLeft), "Hide / show sidebar", "⌘ ⇧ F") {
+            let sidebar = keys(Action::FocusMode);
+            if menu_item(ui, Some(Icon::PanelLeft), "Hide / show sidebar", sidebar) {
                 self.run(Action::FocusMode);
             }
             widgets::divider(ui);
@@ -2009,10 +2027,12 @@ impl MercuryApp {
                         {
                             self.run(Action::Palette);
                         }
-                        key_combo(ui, "⌘ K");
+                        key_combo(ui, keys(Action::Palette));
                         if self.focus_mode {
                             ui.add_space(Space::MD);
-                            ui.label(faint("Sidebar hidden · ⌘ ⇧ F to show").color(t.accent));
+                            let hint =
+                                format!("Sidebar hidden · {} to show", keys(Action::FocusMode));
+                            ui.label(faint(hint).color(t.accent));
                         }
                     });
                 });
@@ -2095,12 +2115,14 @@ fn missing_vars_message(missing: &[String], env: Option<&str>) -> String {
     }
 }
 
+/// "Imported 3 requests, 1 environment"; no ", 0 environments" for a
+/// collection that came without any.
 fn plural_import(requests: usize, envs: usize) -> String {
-    format!(
-        "Imported {}, {}",
-        plural(requests, "request", "requests"),
-        plural(envs, "environment", "environments")
-    )
+    let mut text = format!("Imported {}", plural(requests, "request", "requests"));
+    if envs > 0 {
+        text += &format!(", {}", plural(envs, "environment", "environments"));
+    }
+    text
 }
 
 /// A folder delete is `rm -rf`: say what goes with it, including files
@@ -2303,6 +2325,20 @@ mod tests {
             delete_message("list-users", false, (1, 0)),
             "Delete the request 'list-users'?"
         );
+    }
+
+    #[test]
+    fn import_summary_leaves_out_what_did_not_come() {
+        assert_eq!(plural_import(3, 0), "Imported 3 requests");
+        assert_eq!(plural_import(1, 2), "Imported 1 request, 2 environments");
+    }
+
+    /// Menu and status-bar hints are read from SHORTCUTS, not typed again.
+    #[test]
+    fn hints_come_from_the_shortcut_table() {
+        assert_eq!(keys(Action::Palette), "⌘ K");
+        assert_eq!(keys(Action::FocusMode), "⌘ ⇧ F");
+        assert_eq!(keys(Action::RenameRequest), "");
     }
 
     /// CLAUDE.md: a change to SHORTCUTS updates the README and the docs
