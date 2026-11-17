@@ -164,11 +164,16 @@ fn write_request(dir: &Path, name: &str, mut request: RequestFile) -> Result<(),
     // from someone else could otherwise post ~/.ssh/id_rsa. "Could" is
     // decided before variables: `Content-Type: {{CT}}`, or a header *named*
     // by a variable, can turn multipart at send time.
-    let maybe_multipart = request.headers.iter().any(|(k, v)| {
-        k.contains("{{")
-            || (k.eq_ignore_ascii_case("content-type")
-                && (v.contains("{{") || v.to_ascii_lowercase().contains("multipart")))
-    });
+    // disabled headers too: one switched back on can make the body multipart
+    let maybe_multipart = request
+        .headers
+        .iter()
+        .chain(&request.disabled_headers)
+        .any(|(k, v)| {
+            k.contains("{{")
+                || (k.eq_ignore_ascii_case("content-type")
+                    && (v.contains("{{") || v.to_ascii_lowercase().contains("multipart")))
+        });
     if maybe_multipart {
         let mut rows = kv::parse_lines(&request.body, "=");
         for row in &mut rows {
@@ -1757,6 +1762,21 @@ environments:
         // only environments were there: the requests go in the root
         assert_eq!((count.requests, count.folder), (1000, out.clone()));
         assert!(file(&out.join("get-1000.json")).url.ends_with("/999"));
+    }
+
+    /// A disabled multipart `Content-Type` is one tick away from sending
+    /// the body as Multipart: its `@file` lines must arrive switched off.
+    #[test]
+    fn a_disabled_multipart_header_still_disarms_file_lines() {
+        let export = r#"{"info": {"name": "X"}, "item": [{"name": "Up", "request": {
+            "method": "POST", "url": "https://x",
+            "header": [{"key": "Content-Type", "value": "multipart/form-data", "disabled": true},
+                       {"key": "X-{{h}}", "value": "1", "disabled": true}],
+            "body": {"mode": "raw", "raw": "f=@/home/me/.ssh/id_rsa"}}}]}"#;
+        let (dir, result) = import(import_postman, export);
+        result.unwrap();
+        let up = RequestFile::from_json(&read_out(&dir, "up.json")).unwrap();
+        assert_eq!(up.body, "# f=@/home/me/.ssh/id_rsa");
     }
 
     #[test]
