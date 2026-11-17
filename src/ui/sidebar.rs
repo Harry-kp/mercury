@@ -415,20 +415,6 @@ fn matches_search(item: &CollectionItem, search: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::HashSet;
-
-    fn depth(items: &[CollectionItem]) -> usize {
-        items
-            .iter()
-            .map(|item| match item {
-                CollectionItem::Folder {
-                    children: Some(c), ..
-                } => 1 + depth(c),
-                _ => 1,
-            })
-            .max()
-            .unwrap_or(0)
-    }
 
     /// Typing in the filter loads the whole tree. A link back up it used to
     /// be followed until the path got too long for the OS: ~100 levels that
@@ -436,6 +422,19 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn filtering_stops_at_a_symlink_loop() {
+        use std::collections::HashSet;
+        fn depth(items: &[CollectionItem]) -> usize {
+            items
+                .iter()
+                .map(|item| match item {
+                    CollectionItem::Folder {
+                        children: Some(c), ..
+                    } => 1 + depth(c),
+                    _ => 1,
+                })
+                .max()
+                .unwrap_or(0)
+        }
         let dir = tempfile::TempDir::new().unwrap();
         let root = dir.path();
         std::fs::create_dir(root.join("api")).unwrap();
