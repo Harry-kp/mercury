@@ -134,12 +134,37 @@ fn safe_name(name: &str) -> Result<&str, String> {
     Ok(name)
 }
 
+/// Whether anything is at `path`, a dangling symlink included (`exists()`
+/// follows links and says no for one).
+pub fn taken(path: &Path) -> bool {
+    fs::symlink_metadata(path).is_ok()
+}
+
 fn ensure_free(path: &Path) -> Result<(), String> {
-    if path.exists() {
+    if taken(path) {
         Err(format!("'{}' already exists", file_name(path)))
     } else {
         Ok(())
     }
+}
+
+/// Create a new file holding `content`, refusing anything already at
+/// `path`. Atomic (O_CREAT|O_EXCL), and it never writes through a symlink:
+/// a dangling `.env.staging -> ~/.zshenv` in a folder from someone else
+/// would otherwise make Mercury create the link's target.
+pub fn create_new(path: &Path, content: &str) -> Result<(), String> {
+    use std::io::Write;
+    let name = file_name(path);
+    let mut file = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(path)
+        .map_err(|e| match e.kind() {
+            std::io::ErrorKind::AlreadyExists => format!("'{name}' already exists"),
+            _ => format!("Could not create '{name}': {e}"),
+        })?;
+    file.write_all(content.as_bytes())
+        .map_err(|e| format!("Could not write '{name}': {e}"))
 }
 
 /// Create `<parent>/<name>.json` with `content`; returns the new path.
@@ -151,8 +176,7 @@ pub fn create_request(parent: &Path, name: &str, content: &str) -> Result<PathBu
         format!("{name}.json")
     };
     let path = parent.join(file);
-    ensure_free(&path)?;
-    fs::write(&path, content).map_err(|e| format!("Could not create '{name}': {e}"))?;
+    create_new(&path, content)?;
     Ok(path)
 }
 
@@ -181,11 +205,7 @@ pub fn create_env(root: &Path, name: &str, content: &str) -> Result<String, Stri
         .or_else(|| name.strip_prefix("env."))
         .unwrap_or(name);
     let file = format!(".env.{}", safe_name(name)?);
-    let path = root.join(&file);
-    if path.exists() {
-        return Err(format!("{file} already exists"));
-    }
-    fs::write(&path, content).map_err(|e| format!("Could not create {file}: {e}"))?;
+    create_new(&root.join(&file), content)?;
     Ok(file)
 }
 
@@ -246,9 +266,10 @@ pub fn duplicate(path: &Path) -> Result<PathBuf, String> {
     let ext = path.extension().unwrap_or_default().to_string_lossy();
     let new_path = (1..)
         .map(|n| path.with_file_name(format!("{stem}_copy{n}.{ext}")))
-        .find(|p| !p.exists())
+        .find(|p| !taken(p))
         .expect("an unused name exists");
-    fs::copy(path, &new_path).map_err(|e| format!("Could not duplicate: {e}"))?;
+    let content = fs::read_to_string(path).map_err(|e| format!("Could not duplicate: {e}"))?;
+    create_new(&new_path, &content)?;
     Ok(new_path)
 }
 
@@ -303,6 +324,43 @@ mod tests {
         }
         assert_eq!(count_contents(root), (3, 2));
         assert_eq!(count_contents(&root.join("a/b")), (1, 1));
+    }
+
+    /// A dangling link in a folder from someone else must not make Mercury
+    /// create the file it points to, wherever that is.
+    #[cfg(unix)]
+    #[test]
+    fn new_files_never_write_through_a_link() {
+        let dir = TempDir::new().unwrap();
+        let elsewhere = dir.path().join("elsewhere");
+        fs::create_dir(&elsewhere).unwrap();
+        let root = dir.path().join("ws");
+        fs::create_dir(&root).unwrap();
+        for (link, target) in [
+            (".env.staging", "a"),
+            ("get.json", "b"),
+            ("x_copy1.json", "c"),
+        ] {
+            std::os::unix::fs::symlink(elsewhere.join(target), root.join(link)).unwrap();
+        }
+        assert!(create_env(&root, "staging", "A=1")
+            .unwrap_err()
+            .contains("already exists"));
+        assert!(create_request(&root, "get", "{}")
+            .unwrap_err()
+            .contains("already exists"));
+        fs::write(root.join("x.json"), "{}").unwrap();
+        let copy = duplicate(&root.join("x.json")).unwrap();
+        assert_eq!(
+            copy,
+            root.join("x_copy2.json"),
+            "the dangling x_copy1 counts as taken"
+        );
+        assert_eq!(
+            fs::read_dir(&elsewhere).unwrap().count(),
+            0,
+            "nothing created through a link"
+        );
     }
 
     #[cfg(unix)]
