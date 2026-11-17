@@ -1,6 +1,6 @@
 //! cURL import (paste into the URL bar) and export (Copy as cURL).
 
-use crate::kv::basic_auth;
+use crate::kv::{basic_auth, url_encode};
 use crate::model::HttpMethod;
 use std::collections::BTreeMap;
 
@@ -19,9 +19,22 @@ fn tokenize(cmd: &str) -> Vec<String> {
     let mut tokens = Vec::new();
     let mut current = String::new();
     let mut quote: Option<char> = None;
-    let mut chars = cmd.chars();
+    let mut chars = cmd.chars().peekable();
     while let Some(ch) = chars.next() {
         match (quote, ch) {
+            // bash's $'…': like '…' but with C escapes
+            (None, '$') if chars.peek() == Some(&'\'') => {
+                chars.next();
+                quote = Some('$');
+            }
+            (Some('$'), '\'') => quote = None,
+            (Some('$'), '\\') => match chars.next() {
+                Some('n') => current.push('\n'),
+                Some('t') => current.push('\t'),
+                Some('r') => current.push('\r'),
+                Some(c) => current.push(c), // \\ \' \" and the rest: literal
+                None => {}
+            },
             (None, '\'' | '"') => quote = Some(ch),
             (Some(q), c) if c == q => quote = None,
             (None | Some('"'), '\\') => match chars.next() {
@@ -52,6 +65,16 @@ pub fn parse(cmd: &str) -> Result<CurlRequest, String> {
         headers: Vec::new(),
         body: None,
     };
+    // `-XPOST`, `-HAccept:x`: a short flag with its value glued on
+    let tokens = tokens.into_iter().flat_map(|t| match t.strip_prefix('-') {
+        Some(rest) if rest.len() > 1 && rest.starts_with(|c| "XHdubAF".contains(c)) => {
+            vec![format!("-{}", &rest[..1]), rest[1..].to_string()]
+        }
+        _ => vec![t],
+    });
+    let tokens: Vec<String> = tokens.collect();
+    let mut data: Vec<String> = Vec::new();
+    let mut get = false;
     let mut args = tokens.iter();
     while let Some(token) = args.next() {
         match token.as_str() {
@@ -66,17 +89,30 @@ pub fn parse(cmd: &str) -> Result<CurlRequest, String> {
                         .push((k.trim().to_string(), v.trim().to_string()));
                 }
             }
-            "-d" | "--data" | "--data-raw" | "--data-binary" | "--json" => {
+            "-d" | "--data" | "--data-raw" | "--data-binary" | "--data-ascii" | "--json" => {
                 if let Some(body) = args.next() {
-                    req.body = Some(body.clone());
-                    if req.method == HttpMethod::GET {
-                        req.method = HttpMethod::POST;
-                    }
+                    data.push(body.clone());
                     if token == "--json" {
                         req.headers
                             .push(("Content-Type".into(), "application/json".into()));
                     }
                 }
+            }
+            "--data-urlencode" => {
+                if let Some(arg) = args.next() {
+                    // `name=value` encodes only the value; `=value` and
+                    // `value` encode the whole thing
+                    data.push(match arg.split_once('=') {
+                        Some(("", v)) => url_encode(v),
+                        Some((k, v)) => format!("{k}={}", url_encode(v)),
+                        None => url_encode(arg),
+                    });
+                }
+            }
+            "-F" | "--form" | "--form-string" => {
+                return Err("Multipart forms (-F) aren't supported yet: \
+                    Mercury sends text bodies only"
+                    .into());
             }
             "-u" | "--user" => {
                 if let Some(creds) = args.next() {
@@ -96,7 +132,7 @@ pub fn parse(cmd: &str) -> Result<CurlRequest, String> {
                 }
             }
             "-I" | "--head" => req.method = HttpMethod::HEAD,
-            "-G" | "--get" => req.method = HttpMethod::GET,
+            "-G" | "--get" => get = true,
             // flags that take an argument we don't use
             "-o" | "--output" | "-x" | "--proxy" | "-c" | "--cookie-jar" | "--connect-timeout"
             | "--max-time" | "-m" | "-w" | "--write-out" | "--cacert" | "--cert" | "--key"
@@ -110,6 +146,22 @@ pub fn parse(cmd: &str) -> Result<CurlRequest, String> {
 
     if req.url.is_empty() {
         return Err("Invalid cURL command: no URL found".into());
+    }
+    // curl joins repeated data with `&`; -G sends it as the query string
+    if !data.is_empty() {
+        let data = data.join("&");
+        if get {
+            let sep = if req.url.contains('?') { '&' } else { '?' };
+            req.url = format!("{}{sep}{data}", req.url);
+        } else {
+            req.body = Some(data);
+            if req.method == HttpMethod::GET {
+                req.method = HttpMethod::POST;
+            }
+        }
+    }
+    if get {
+        req.method = HttpMethod::GET;
     }
     Ok(req)
 }
@@ -196,6 +248,38 @@ mod tests {
         // Chrome's "Copy as cURL" output: JSON with escaped quotes stays valid
         let r = parse(r#"curl 'https://a.com' --data-raw '{"a":"b\"c"}'"#).unwrap();
         assert_eq!(r.body.as_deref(), Some(r#"{"a":"b\"c"}"#));
+    }
+
+    /// Pastes from browsers and docs that used to come out wrong.
+    #[test]
+    fn real_world_spellings() {
+        // curl joins repeated data with &
+        let r = parse("curl https://a.com -d a=1 -d b=2").unwrap();
+        assert_eq!(r.body.as_deref(), Some("a=1&b=2"));
+        // --data-urlencode encodes the value, not the name
+        let r = parse("curl https://a.com --data-urlencode 'q=a b&c' --data-urlencode x").unwrap();
+        assert_eq!(r.body.as_deref(), Some("q=a%20b%26c&x"));
+        // a value glued to its flag
+        let r = parse("curl -XPUT -HAccept:text/plain https://a.com").unwrap();
+        assert_eq!(r.method, HttpMethod::PUT);
+        assert_eq!(r.headers, vec![("Accept".into(), "text/plain".into())]);
+        // -G sends the data as the query string, whatever order
+        let r = parse("curl -G https://a.com/s?x=1 -d q=rust -d n=2").unwrap();
+        assert_eq!(
+            (r.method, r.url.as_str()),
+            (HttpMethod::GET, "https://a.com/s?x=1&q=rust&n=2")
+        );
+        assert_eq!(r.body, None);
+        // bash's $'…' quoting (Chrome uses it when the body has a quote or newline)
+        let r = parse(r#"curl https://a.com --data-raw $'{\"a\":\"it\'s\n\"}'"#).unwrap();
+        assert_eq!(r.body.as_deref(), Some("{\"a\":\"it's\n\"}"));
+        // multipart isn't supported: say so, rather than take a field as the URL
+        assert!(
+            parse("curl -é https://a.com").is_ok(),
+            "no panic on odd flags"
+        );
+        let err = parse("curl -F file=@a.png https://a.com").unwrap_err();
+        assert!(err.contains("-F"), "{err}");
     }
 
     #[test]

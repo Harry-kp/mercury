@@ -46,6 +46,7 @@ EQUALS=a=b
 - Spaces around the key and value are trimmed.
 - A value wrapped in matching `"` or `'` has the quotes removed. No other escaping is done.
 - Blank lines and lines starting with `#` are ignored. Lines without `=` are ignored.
+- A shell-style `export ` before the name is ignored, so a file you also `source` works as is. So is a byte-order mark at the start of the file.
 - Keys are case-sensitive.
 - Values are used as they are. A value that contains `{{OTHER}}` is not expanded.
 
