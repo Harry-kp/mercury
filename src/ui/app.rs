@@ -1557,7 +1557,11 @@ impl MercuryApp {
             }
             Action::CopyCurl => self.copy_as_curl(),
             Action::FormatBody => {
-                self.body_text = http::format_json(&self.body_text);
+                // it used to do nothing at all for a body it couldn't parse
+                match serde_json::from_str::<serde::de::IgnoredAny>(&self.body_text) {
+                    Ok(_) => self.body_text = http::format_json(&self.body_text),
+                    Err(e) => self.notify(format!("Not valid JSON: {e}"), true),
+                }
                 self.tab = Tab::Body;
             }
             Action::FocusMode => self.focus_mode = !self.focus_mode,

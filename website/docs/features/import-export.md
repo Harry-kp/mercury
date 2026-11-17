@@ -98,7 +98,7 @@ curl -X POST https://api.example.com/users \
 |------|--------|
 | `-X`, `--request` | Method |
 | `-H`, `--header` | Header |
-| `-d`, `--data`, `--data-raw`, `--data-binary` | Body. Changes a `GET` to `POST`. Repeated flags are joined with `&`, as curl does. |
+| `-d`, `--data`, `--data-raw`, `--data-binary` | Body. Changes a `GET` to `POST`. Repeated flags are joined with `&`, as curl does. Without a `Content-Type` header, adds `application/x-www-form-urlencoded`, which is what curl sends. |
 | `--data-urlencode` | Body, percent-encoded: in `name=value` only the value is encoded. |
 | `--json` | Body plus `Content-Type: application/json`. Changes a `GET` to `POST`. |
 | `-u`, `--user` | `Authorization: Basic ...` |
@@ -110,7 +110,7 @@ curl -X POST https://api.example.com/users \
 | `-o`, `-x`, `-c`, `-m`, `-w`, `-e`, `--output`, `--proxy`, `--cookie-jar`, `--connect-timeout`, `--max-time`, `--write-out`, `--cacert`, `--cert`, `--key`, `--referer` | Ignored, along with their argument |
 | Other flags (`-s`, `-L`, `-k`, `-v`, `--compressed`, ...) | Ignored |
 
-The first argument that isn't a flag is used as the URL. If there isn't one, you get an error. A value glued to a short flag (`-XPOST`, `-HAccept:text/plain`) and bash's `$'…'` quoting, which Chrome uses when a body contains a quote or a newline, both work.
+The first argument that isn't a flag is used as the URL. If there isn't one, you get an error. A value glued to a short flag (`-XPOST`, `-HAccept:text/plain`), short flags sharing one dash (`-sX POST`, `-sI`) and bash's `$'…'` quoting, which Chrome uses when a body contains a quote or a newline, all work.
 
 ## Copy as cURL
 

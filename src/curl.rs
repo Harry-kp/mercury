@@ -65,34 +65,42 @@ pub fn parse(cmd: &str) -> Result<CurlRequest, String> {
         headers: Vec::new(),
         body: None,
     };
-    // `-XPOST`, `-HAccept:x`: a short flag with its value glued on
-    let tokens = tokens.into_iter().flat_map(|t| match t.strip_prefix('-') {
-        Some(rest) if rest.len() > 1 && rest.starts_with(|c| "XHdubAF".contains(c)) => {
-            vec![format!("-{}", &rest[..1]), rest[1..].to_string()]
-        }
-        _ => vec![t],
-    });
-    let tokens: Vec<String> = tokens.collect();
     let mut data: Vec<String> = Vec::new();
     let mut form: Vec<String> = Vec::new();
     let mut get = false;
-    let mut args = tokens.iter();
-    while let Some(token) = args.next() {
+    // a stack, so a word can be split and its rest read next
+    let mut args: Vec<String> = tokens.into_iter().rev().collect();
+    while let Some(mut token) = args.pop() {
+        // `-XPOST`, `-sSL`, `-sX POST`: short flags share one dash, and the
+        // first that takes a value takes the rest of the word
+        let short = token.strip_prefix('-').filter(|r| !r.starts_with('-'));
+        if let Some(c) = short
+            .filter(|r| r.chars().count() > 1)
+            .and_then(|r| r.chars().next())
+        {
+            let rest = token[1 + c.len_utf8()..].to_string();
+            args.push(if "XHdubAFeoxcmw".contains(c) {
+                rest
+            } else {
+                format!("-{rest}")
+            });
+            token = format!("-{c}");
+        }
         match token.as_str() {
             "-X" | "--request" => {
-                if let Some(m) = args.next() {
-                    req.method = HttpMethod::parse(m).unwrap_or_default();
+                if let Some(m) = args.pop() {
+                    req.method = HttpMethod::parse(&m).unwrap_or_default();
                 }
             }
             "-H" | "--header" => {
-                if let Some((k, v)) = args.next().and_then(|h| h.split_once(':')) {
+                if let Some((k, v)) = args.pop().as_deref().and_then(|h| h.split_once(':')) {
                     req.headers
                         .push((k.trim().to_string(), v.trim().to_string()));
                 }
             }
             "-d" | "--data" | "--data-raw" | "--data-binary" | "--data-ascii" | "--json" => {
-                if let Some(body) = args.next() {
-                    data.push(body.clone());
+                if let Some(body) = args.pop() {
+                    data.push(body);
                     if token == "--json" {
                         req.headers
                             .push(("Content-Type".into(), "application/json".into()));
@@ -100,20 +108,20 @@ pub fn parse(cmd: &str) -> Result<CurlRequest, String> {
                 }
             }
             "--data-urlencode" => {
-                if let Some(arg) = args.next() {
+                if let Some(arg) = args.pop() {
                     // `name=value` encodes only the value; `=value` and
                     // `value` encode the whole thing
                     data.push(match arg.split_once('=') {
                         Some(("", v)) => url_encode(v),
                         Some((k, v)) => format!("{k}={}", url_encode(v)),
-                        None => url_encode(arg),
+                        None => url_encode(&arg),
                     });
                 }
             }
             // Mercury's Multipart body is these lines as they are; drop
             // curl's `;type=…` / `;filename=…` modifiers on a file
             "-F" | "--form" | "--form-string" => {
-                if let Some(field) = args.next() {
+                if let Some(field) = args.pop() {
                     // one -F is one body line, even if `$'…'` hid a newline
                     let field = &field.replace(['\r', '\n'], " ");
                     let literal = token == "--form-string";
@@ -126,20 +134,20 @@ pub fn parse(cmd: &str) -> Result<CurlRequest, String> {
                 }
             }
             "-u" | "--user" => {
-                if let Some(creds) = args.next() {
-                    let (user, pass) = creds.split_once(':').unwrap_or((creds, ""));
+                if let Some(creds) = args.pop() {
+                    let (user, pass) = creds.split_once(':').unwrap_or((&creds, ""));
                     req.headers
                         .push(("Authorization".into(), basic_auth(user, pass)));
                 }
             }
             "-A" | "--user-agent" => {
-                if let Some(ua) = args.next() {
-                    req.headers.push(("User-Agent".into(), ua.clone()));
+                if let Some(ua) = args.pop() {
+                    req.headers.push(("User-Agent".into(), ua));
                 }
             }
             "-b" | "--cookie" => {
-                if let Some(c) = args.next() {
-                    req.headers.push(("Cookie".into(), c.clone()));
+                if let Some(c) = args.pop() {
+                    req.headers.push(("Cookie".into(), c));
                 }
             }
             "-I" | "--head" => req.method = HttpMethod::HEAD,
@@ -148,7 +156,7 @@ pub fn parse(cmd: &str) -> Result<CurlRequest, String> {
             "-o" | "--output" | "-x" | "--proxy" | "-c" | "--cookie-jar" | "--connect-timeout"
             | "--max-time" | "-m" | "-w" | "--write-out" | "--cacert" | "--cert" | "--key"
             | "-e" | "--referer" => {
-                args.next();
+                args.pop();
             }
             arg if !arg.starts_with('-') && req.url.is_empty() => req.url = arg.to_string(),
             _ => {} // boolean flags (-s, -L, -k, ...) and unknown flags
@@ -158,16 +166,19 @@ pub fn parse(cmd: &str) -> Result<CurlRequest, String> {
     if req.url.is_empty() {
         return Err("Invalid cURL command: no URL found".into());
     }
-    if !form.is_empty() {
-        req.body = Some(form.join("\n"));
+    // the Content-Type curl sends when the command doesn't set one
+    let default_type = |req: &mut CurlRequest, ct: &str| {
         if !req
             .headers
             .iter()
             .any(|(k, _)| k.eq_ignore_ascii_case("content-type"))
         {
-            req.headers
-                .push(("Content-Type".into(), "multipart/form-data".into()));
+            req.headers.push(("Content-Type".into(), ct.into()));
         }
+    };
+    if !form.is_empty() {
+        req.body = Some(form.join("\n"));
+        default_type(&mut req, "multipart/form-data");
         if req.method == HttpMethod::GET {
             req.method = HttpMethod::POST;
         }
@@ -180,6 +191,7 @@ pub fn parse(cmd: &str) -> Result<CurlRequest, String> {
             req.url = format!("{}{sep}{data}", req.url);
         } else {
             req.body = Some(data);
+            default_type(&mut req, "application/x-www-form-urlencoded");
             if req.method == HttpMethod::GET {
                 req.method = HttpMethod::POST;
             }
@@ -362,6 +374,37 @@ mod tests {
     }
 
     #[test]
+    fn short_flags_share_a_dash() {
+        let r = parse("curl -sX POST https://a.com -sSLd x=1").unwrap();
+        assert_eq!(
+            (r.method, r.url.as_str()),
+            (HttpMethod::POST, "https://a.com")
+        );
+        assert_eq!(r.body.as_deref(), Some("x=1"));
+        assert_eq!(
+            parse("curl -sI https://a.com").unwrap().method,
+            HttpMethod::HEAD
+        );
+        // a value is never split, even one that looks like flags
+        let r = parse("curl -H 'X: 1' -d -sX https://a.com").unwrap();
+        assert_eq!(r.body.as_deref(), Some("-sX"));
+    }
+
+    #[test]
+    fn data_without_a_type_is_sent_as_a_form_like_curl_does() {
+        let r = parse("curl https://a.com -d a=1").unwrap();
+        assert_eq!(
+            r.headers,
+            vec![(
+                "Content-Type".into(),
+                "application/x-www-form-urlencoded".into()
+            )]
+        );
+        let r = parse("curl https://a.com -H 'content-type: text/csv' -d a").unwrap();
+        assert_eq!(r.headers.len(), 1);
+    }
+
+    #[test]
     fn missing_url_is_error() {
         assert!(parse("curl -X POST").is_err());
     }
@@ -379,7 +422,7 @@ mod tests {
         let back = parse(&cmd).unwrap();
         assert_eq!(back.method, HttpMethod::POST);
         assert_eq!(back.url, "https://a.com/?q=1&x=2");
-        assert_eq!(back.headers, vec![("A".into(), "it's".into())]);
+        assert_eq!(back.headers[0], ("A".into(), "it's".into()));
         assert_eq!(back.body.as_deref(), Some("{\"a\":'b'}"));
     }
 }

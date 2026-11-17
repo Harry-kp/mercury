@@ -19,6 +19,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Sidebar filter:** a folder that matches by name shows its requests (it showed up empty), `json` no longer matches every request, and a filter that matches nothing says so instead of leaving the sidebar blank.
 - Filtering a folder with a symlink back up the tree no longer loads ~100 nested copies of it and widens the sidebar. Very deep trees stop indenting before their rows run out of room.
 - Clicking a request no longer rescans the whole workspace (re-reading every visible request file).
+- **A multi-line cURL pasted into the URL bar imports.** The one-line field turned its line breaks into spaces first, so a command continued with `\` came in with a URL of `" "`.
+- A pasted cURL with `-d` and no `Content-Type` gets `application/x-www-form-urlencoded`, which is what curl sends; short flags sharing one dash (`-sX POST`, `-sI`) are read as curl reads them.
+- Editing a param in the table keeps a `#fragment` at the end of the URL; the new query went after it and was never sent.
+- `localhost:3000/go?to=https://…` and `[::1]:8080` get `http://` like any other scheme-less local URL.
+- A line break typed or pasted into the Token field no longer splits the `Authorization` header and sends half a token.
+- **Format** on a body that isn't valid JSON says where it fails, instead of doing nothing.
+- A double-click on **Send** no longer cancels the request it just sent (the second click landed on Stop).
+- The Auth tab's **Sent as** line cuts a long token short instead of running past the panel and pushing its copy button out of sight.
 
 ### Changed
 - **History keeps response bodies up to 1 MB.** It rewrote up to 50 × 10 MB on every send; a bigger body is still shown in full when it arrives.
