@@ -144,13 +144,17 @@ fn write_request(
     headers: BTreeMap<String, String>,
     body: String,
 ) -> Result<(), String> {
-    // One header is one line: a newline in a name or value would become a
-    // second header once the file is loaded.
+    // The headers exactly as Mercury will load them: written as `name:
+    // value` lines and parsed back. A newline in a value, a name holding a
+    // `:` ("Content-Type: multipart/form-data;x"), padding around a name:
+    // each turns into something else once loaded, so the check below and
+    // the file both use the loaded form, never the imported one.
     let flat = |s: String| s.replace(['\r', '\n'], " ");
-    let headers: BTreeMap<String, String> = headers
+    let flattened: BTreeMap<String, String> = headers
         .into_iter()
         .map(|(k, v)| (flat(k), flat(v)))
         .collect();
+    let headers = kv::headers_to_map(&kv::map_to_headers(&flattened));
     // Whatever path the body took (a raw body under a multipart
     // Content-Type, an odd mimeType), if it could be sent as Multipart, no
     // line of it is a live file upload until the user ticks it: a collection
@@ -1448,9 +1452,15 @@ resources:
          {"_id":"e","_type":"request","name":"Newline","method":"POST","url":"https://x",
           "headers":[{"name":"X-A","value":"1\r\nContent-Type: multipart/form-data"}],
           "body":{"text":"f=@/etc/passwd"}}]}"#;
+        // a header *name* that holds the Content-Type once loaded
+        let sneaky = sneaky.replace(
+            r#"{"name":"X-A","value":"1\r\nContent-Type: multipart/form-data"}"#,
+            r#"{"name":" Content-Type: multipart/form-data;x","value":"y"}"#,
+        );
+        assert!(sneaky.contains("multipart/form-data;x"));
         let out = dir.path().join("ws-sneaky");
         fs::create_dir_all(&out).unwrap();
-        import_into(import_insomnia, sneaky, &out).unwrap();
+        import_into(import_insomnia, &sneaky, &out).unwrap();
         for name in ["var-type", "var-name", "newline"] {
             let req = file(&out.join(format!("{name}.json")));
             let text = kv::file_headers_text(&req.headers, &req.disabled_headers);
