@@ -58,7 +58,7 @@ Mercury is a native Rust + egui API client. Requests are plain JSON files in a f
 - TLS is rustls on `ring` (reqwest's `rustls-no-provider`); `http::client` installs the provider. Don't re-enable reqwest's default features: they bring back aws-lc (+1.4 MB).
 - `eframe` and `egui_kittest` versions move together; dependabot ignores their minor bumps.
 - `smoke_test` sets `MERCURY_HOME` for the whole process, so keep it the only test that touches storage on disk.
-- Disabled `# Header` lines are not saved to request files (the file stores a map). This is a known limitation, not a bug.
+- Disabled `# Header` lines are saved in `RequestFile::disabled_headers` and loaded back after the enabled ones (`kv::file_headers_text`). Their order relative to enabled lines isn't kept.
 - A gitleaks pre-commit hook may reject credential-looking literals in tests (`-u user:pass`). Build them with `format!`.
 - Linux builds need GTK/xcb dev packages (see `.github/workflows/ci.yml`).
 - CI uses the latest stable Rust, which rejects float literals passed as `impl Into<f32>` (write `Stroke::new(1.0_f32, …)`). If CI fails on lints you can't reproduce, run `rustup update stable`.

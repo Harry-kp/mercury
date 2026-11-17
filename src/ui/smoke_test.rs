@@ -763,6 +763,16 @@ fn open_send_edit_and_save() {
     assert_eq!(first.state().current_file, None);
     drop(first);
 
+    // a header switched off in the editor survives save + reopen (the file
+    // used to keep only enabled headers, so unchecking one deleted it)
+    harness.state_mut().open_file(&file);
+    harness.state_mut().headers_text.push_str("\n# X-Debug: 1");
+    harness.state_mut().run(super::app::Action::Save);
+    harness.run_steps(2);
+    harness.state_mut().open_file(&file);
+    assert!(harness.state().headers_text.contains("# X-Debug: 1"));
+    assert!(!kv::headers_to_map(&harness.state().headers_text).contains_key("X-Debug"));
+
     // opening a request from anywhere (⌘K, history, relaunch) reveals it in
     // the tree; it used to stay hidden inside collapsed folders
     harness

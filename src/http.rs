@@ -414,7 +414,7 @@ mod tests {
                 method: crate::model::HttpMethod::GET,
                 url: url.to_string(),
                 headers: map,
-                body: String::new(),
+                ..Default::default()
             },
         )
     }

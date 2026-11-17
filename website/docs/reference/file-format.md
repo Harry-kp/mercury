@@ -28,6 +28,7 @@ Each request is one `.json` file in the workspace that holds a single JSON objec
 | `url` | string | Yes | The full URL, including `http://` or `https://`. May contain `{{variables}}`. |
 | `headers` | object | No | Header name → value, both strings. Missing means no headers. |
 | `body` | string | No | The raw request body. Missing means no body. |
+| `disabled_headers` | object | No | Headers switched off in the editor (a `#` line), kept but not sent. Missing means none. Added in 0.4; older versions ignore it. |
 
 The smallest valid file:
 
@@ -41,8 +42,8 @@ If a file can't be parsed as a request, it still appears in the sidebar, without
 
 - The JSON is pretty-printed with 2-space indentation.
 - **Headers are sorted by name**, so saving the same request always produces the same file and Git diffs stay small.
-- **Empty `headers` and `body` are omitted.**
-- **Disabled headers (lines starting with `#` in the editor) aren't saved.** The file only has the headers that are sent.
+- **Empty `headers`, `body` and `disabled_headers` are omitted.**
+- **Disabled headers (lines starting with `#` in the editor) go in `disabled_headers`,** so switching one off doesn't delete it. They're never sent. Other `#` lines (notes without a `:`) aren't saved.
 - Header names are unique keys. A second header with the same name replaces the first.
 - The query string is part of `url`. There's no separate params field.
 - Auth is the `Authorization` entry in `headers`. There's no separate auth field.
