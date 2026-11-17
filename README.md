@@ -44,6 +44,7 @@
 ## Quick start
 
 ```bash
+brew trust --cask harry-kp/tap/mercury   # Homebrew 7+ asks before installing from a third-party tap
 brew install --cask harry-kp/tap/mercury
 ```
 

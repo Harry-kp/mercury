@@ -19,8 +19,11 @@ Mercury is a small desktop API client written in Rust with [egui](https://github
 ### macOS (Homebrew)
 
 ```bash
+brew trust --cask harry-kp/tap/mercury
 brew install --cask harry-kp/tap/mercury
 ```
+
+Homebrew 7 and later refuse casks from a third-party tap until you trust them, with "Refusing to load cask … from untrusted tap". The first line trusts just this cask. On older Homebrew, skip it.
 
 Then launch Mercury from **Applications**, or run `mercury` in a terminal.
 

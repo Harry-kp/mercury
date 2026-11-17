@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- The install instructions include `brew trust --cask harry-kp/tap/mercury`: Homebrew 7 refuses casks from untrusted taps, so the one-line install failed.
+
 ## [0.4.3] - 2026-11-17
 
 The first published build of the 0.4 line: everything below, and everything listed under 0.4.0.
