@@ -267,6 +267,18 @@ mod tests {
         );
     }
 
+    /// Entries are found by timestamp. Without serde_json's exact float
+    /// parsing, about one in eight came back from disk a hair off, so a
+    /// history row clicked after its write opened nothing.
+    #[test]
+    fn timestamps_survive_the_file_exactly() {
+        let base = now();
+        for t in (0..10_000).map(|i| base + i as f64 * 0.000_123_7) {
+            let back: f64 = serde_json::from_str(&serde_json::to_string(&t).unwrap()).unwrap();
+            assert_eq!(back, t);
+        }
+    }
+
     /// Flushes run on background threads; concurrent ones must not lose
     /// each other's entries.
     #[test]
