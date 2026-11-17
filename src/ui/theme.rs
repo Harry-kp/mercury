@@ -173,6 +173,12 @@ pub fn is_dark() -> bool {
     IS_DARK.load(Ordering::Relaxed)
 }
 
+/// An environment file that looks like production (`.env.prod`,
+/// `.env.production`). It turns the env chip red and labels the Send button.
+pub fn is_prod(env_name: &str) -> bool {
+    env_name.contains("prod")
+}
+
 impl Theme {
     pub fn method(&self, method: HttpMethod) -> Color32 {
         self.methods[method as usize]
@@ -189,7 +195,7 @@ impl Theme {
 
     /// Production envs are red, staging amber — a visual "careful".
     pub fn env(&self, name: &str) -> Color32 {
-        if name.contains("prod") {
+        if is_prod(name) {
             self.error
         } else if name.contains("stag") {
             self.warning

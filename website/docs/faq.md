@@ -46,7 +46,7 @@ Request files are plain JSON, so you can copy them, commit them or send them to 
 ### My request doesn't send
 
 - The URL needs to include `http://` or `https://`.
-- If a message says "Request timed out after 30s", "Connection failed" or "SSL/TLS error", check the network, VPN or proxy.
+- The failed-request panel names the cause (nothing listening, host not found, untrusted certificate, no reply after 30s) and shows the full error below it. For anything network-related, check the network, VPN or proxy.
 - Press `Esc` to cancel a request that is stuck.
 
 ### My `{{variable}}` is sent literally

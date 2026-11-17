@@ -12,7 +12,7 @@ Each saved request is a `.json` file in your workspace. The [File Format](/docs/
 
 - **Method.** Click the method name to choose one of `GET`, `POST`, `PUT`, `PATCH`, `DELETE`, `HEAD`, `OPTIONS`, `CONNECT` or `TRACE`.
 - **URL.** Type the full URL, including `http://` or `https://`. `⌘ L` moves focus to it.
-- **cURL.** Paste a command that starts with `curl ` and it replaces the method, URL, headers and body. See [Import from cURL](/docs/features/import-export#import-from-curl).
+- **cURL.** Paste a command that starts with `curl ` and it becomes the request: method, URL, headers and body. If a saved request is open, the cURL opens as a new unsaved request and the file is left alone. See [Import from cURL](/docs/features/import-export#import-from-curl).
 - **Send / Stop.** `⌘ Enter` or the button sends the request. While it's running, the button becomes Stop, and `Esc` cancels too.
 
 If the URL, headers or body use a `{{variable}}` that the selected environment doesn't define, the URL bar gets an amber border. Hover over it to see which variables are missing.
@@ -110,7 +110,7 @@ How the body is displayed depends on its type:
 
 If the server doesn't send a `Content-Type`, Mercury guesses the type from the body. Text bodies have a copy button. See [Performance](/docs/performance) for why the size limits exist.
 
-If a request fails, the panel shows the reason: timed out, SSL/TLS error, connection failed, or invalid URL.
+If a request fails, the panel says what happened and what to try (for example "Nothing is listening on localhost:3000. Is the server running?"), followed by the full underlying error.
 
 ## Defaults
 

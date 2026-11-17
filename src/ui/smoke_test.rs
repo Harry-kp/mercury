@@ -291,6 +291,84 @@ fn open_send_edit_and_save() {
         "the sent request was lost from history"
     );
 
+    harness.state_mut().dialog = None; // the shortcuts dialog from above
+                                       // Pasting a cURL into a *saved* request opens it as a new request. It
+                                       // used to replace the form and autosave it over the file, and ⌘Z only
+                                       // brought back the URL text.
+    harness.state_mut().open_file(&file);
+    harness.run_steps(2);
+    let on_disk = std::fs::read_to_string(&file).unwrap();
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::L);
+    harness.run_steps(2);
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::A);
+    harness.run_steps(1);
+    harness.event(egui::Event::Paste(format!(
+        "curl -X POST {server}/x -d 'a=1'"
+    )));
+    harness.run_steps(2);
+    assert!(
+        harness.state().current_file.is_none(),
+        "the cURL must open as a new request, not take over the saved one"
+    );
+    assert_eq!(harness.state().method, crate::model::HttpMethod::POST);
+    for _ in 0..400 {
+        harness.step(); // well past the autosave interval
+    }
+    assert_eq!(
+        std::fs::read_to_string(&file).unwrap(),
+        on_disk,
+        "a pasted cURL was written over the saved request"
+    );
+
+    // ⌘E announces where it landed, and a production environment names
+    // itself on the Send button: file-name order put prod one press from dev.
+    std::fs::write(ws.join(".env.prod"), "TOKEN=prod\n").unwrap();
+    for _ in 0..300 {
+        harness.step();
+        if harness.state().env_files.len() == 3 {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    while harness.state().env_name() != Some(".env.prod") {
+        harness.key_press_modifiers(Modifiers::COMMAND, Key::E);
+        harness.run_steps(2);
+        let toast = harness.state().toast.as_ref().map(|t| t.text.clone());
+        assert!(
+            toast.as_deref().is_some_and(|t| t.contains("nvironment")),
+            "an environment switch must be announced, got {toast:?}"
+        );
+    }
+    harness.get_by_role_and_label(accesskit::Role::Button, "Send · prod");
+    while harness.state().env_name() != Some(".env.dev") {
+        harness.key_press_modifiers(Modifiers::COMMAND, Key::E);
+        harness.run_steps(2);
+    }
+    harness.get_by_role_and_label(accesskit::Role::Button, "Send");
+
+    // Clearing history is instant but undoable: one mis-click next to the
+    // panel's close button used to wipe it for good.
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::H);
+    harness.run_steps(2);
+    let entries = harness.state().history.len();
+    assert!(entries > 0);
+    harness
+        .get_by_role_and_label(accesskit::Role::Button, "Clear all")
+        .click();
+    harness.run_steps(2);
+    assert!(harness.state().history.is_empty());
+    harness
+        .get_by_role_and_label(accesskit::Role::Link, "Undo")
+        .click();
+    harness.run_steps(2);
+    assert_eq!(
+        harness.state().history.len(),
+        entries,
+        "Undo must bring the cleared history back"
+    );
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::H);
+    harness.run_steps(2);
+
     // quitting and relaunching reopens the request that was open, instead of
     // orphaning it into an "Untitled" unsaved request
     harness.state_mut().open_file(&file);

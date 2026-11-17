@@ -641,10 +641,29 @@ pub fn copy_button(ui: &mut Ui, id: &str, text: impl FnOnce() -> String) {
     }
 }
 
+/// The Send button's label: "Send", or "Send · prod" when `target` names a
+/// production environment.
+pub fn send_label(target: Option<&str>) -> String {
+    target.map_or_else(|| "Send".to_string(), |t| format!("Send · {t}"))
+}
+
+/// Width [`button`] gives `text` with a leading icon, for laying out around it.
+pub fn button_width(ui: &Ui, text: &str) -> f32 {
+    let label =
+        ui.fonts_mut(|f| f.layout_no_wrap(text.to_owned(), semibold(Text::BODY), Color32::WHITE));
+    label.size().x + 15.0 + Space::SM + Space::XL * 2.0
+}
+
 /// Send / stop control. Shows a spinner while the request is in flight.
-pub fn send_button(ui: &mut Ui, executing: bool) -> Response {
+/// `target` (a production environment) turns it red and names it.
+pub fn send_button(ui: &mut Ui, executing: bool, target: Option<&str>) -> Response {
     if !executing {
-        return button(ui, Button::Primary, "Send", Some(Icon::Play))
+        let kind = if target.is_some() {
+            Button::Danger
+        } else {
+            Button::Primary
+        };
+        return button(ui, kind, &send_label(target), Some(Icon::Play))
             .on_hover_text("Send request (⌘ ⏎)");
     }
     let t = theme();
@@ -1160,14 +1179,32 @@ pub fn kv_section(ui: &mut Ui, title: &str, id: &str, items: &[(String, String)]
         });
 }
 
+/// What a [`toast`] reports back each frame.
+pub struct ToastState {
+    /// False once fully faded.
+    pub alive: bool,
+    /// The action link (e.g. "Undo") was clicked this frame.
+    pub acted: bool,
+}
+
 /// Status-bar / overlay message that fades out. Errors can be clicked to copy.
-/// Returns false once fully faded.
-pub fn toast(ui: &mut Ui, message: &str, shown_at: f64, is_error: bool) -> bool {
+/// `action` adds a link (e.g. "Undo") after the message.
+pub fn toast(
+    ui: &mut Ui,
+    message: &str,
+    shown_at: f64,
+    is_error: bool,
+    action: Option<&str>,
+) -> ToastState {
     let t = theme();
     let now = ui.input(|i| i.time);
     let elapsed = now - shown_at;
+    let mut acted = false;
     if !(0.0..TOAST_SECS).contains(&elapsed) {
-        return false;
+        return ToastState {
+            alive: false,
+            acted,
+        };
     }
     // hold full opacity, then fade over the last second
     let alpha = (((TOAST_SECS - elapsed) as f32).min(1.0) * 255.0) as u8;
@@ -1199,11 +1236,16 @@ pub fn toast(ui: &mut Ui, message: &str, shown_at: f64, is_error: bool) -> bool 
                 ui.spacing_mut().item_spacing.x = Space::MD;
                 glyph(ui, what, 15.0, fade(base));
                 ui.label(label(&text).color(fade(t.text)));
+                if let Some(action) = action {
+                    acted = link(ui, strong(action).color(fade(t.accent))).clicked();
+                }
             });
         })
         .response;
 
-    if is_error && !copied {
+    // an action toast is not click-to-copy: the frame's click area would sit
+    // on top of the link and swallow it
+    if is_error && !copied && action.is_none() {
         let response = response
             .interact(Sense::click())
             .on_hover_cursor(egui::CursorIcon::PointingHand)
@@ -1219,7 +1261,7 @@ pub fn toast(ui: &mut Ui, message: &str, shown_at: f64, is_error: bool) -> bool 
         response.on_hover_text(message);
     }
     ui.ctx().request_repaint();
-    true
+    ToastState { alive: true, acted }
 }
 
 // ---------------------------------------------------------------------------

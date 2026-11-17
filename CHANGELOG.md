@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Pasting a cURL into a saved request overwrote the file.** The cURL replaced the method, headers and body, autosave wrote that over the request file within seconds, and `⌘ Z` only brought back the URL. A cURL pasted over a saved request now opens as a new unsaved request. Typing `curl …` by hand no longer re-parses on every keystroke.
+- **Clearing History or Recent was one click with no way back.** The trash icon sits next to the panel's close button. Clearing is still instant, and the notification now has an **Undo** link.
+- **`⌘ E` could land on production silently.** Environments cycle in file-name order, so dev → prod was one press away, and the only sign was a chip in the corner. Every switch is now announced, and with a `prod` environment selected, the Send button turns red and reads **Send · prod**.
+- **Deleting a folder didn't say what it would take with it.** The confirmation now counts the requests inside and any other files (fixtures, READMEs), which are deleted too.
+- **Network errors said what failed but not why.** "error sending request for url (…)" now leads with the cause and a next step, e.g. "Nothing is listening on localhost:3000. Is the server running?", followed by the full error.
+
 ## [0.3.1] - 2026-09-29
 
 ### Fixed

@@ -51,7 +51,7 @@ Right-click a **folder**:
 | **New Request** | Saves the current editor contents as `<name>.json` in this folder |
 | **New Folder** | Creates a subfolder |
 | **Rename** | Renames the folder in place |
-| **Delete** | Deletes the folder and everything in it, after you confirm |
+| **Delete** | Deletes the folder and everything in it, after you confirm. The confirmation counts the requests inside and any other files, such as fixtures or a README, that will go with it. Deleted files skip the Trash. |
 | **Copy Path** | Copies the folder's full path |
 
 Requests have **Duplicate**, **Rename**, **Delete** and **Copy Path**. See [Sidebar actions](/docs/features/requests#sidebar-actions).

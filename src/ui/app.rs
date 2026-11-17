@@ -172,7 +172,8 @@ pub enum Dialog {
     NewRequest(PathBuf, bool),
     NewFolder(PathBuf),
     Rename(PathBuf),
-    Delete(PathBuf),
+    /// The path, and the confirmation text (counted once, when opened).
+    Delete(PathBuf, String),
     Shortcuts,
 }
 
@@ -180,6 +181,15 @@ pub struct Toast {
     pub text: String,
     pub shown_at: f64,
     pub is_error: bool,
+    /// What the toast's "Undo" puts back. Clearing a list is instant and
+    /// undoable rather than confirmed: a confirm on every clear is noise, and
+    /// no confirm at all lost whole histories to one mis-click.
+    pub undo: Option<Undo>,
+}
+
+pub enum Undo {
+    History(Vec<HistoryEntry>),
+    Recent(Vec<RecentRequest>),
 }
 
 /// Results from background threads, drained once per frame.
@@ -379,7 +389,33 @@ impl MercuryApp {
             text: text.into(),
             shown_at: self.time,
             is_error,
+            undo: None,
         });
+    }
+
+    fn notify_undo(&mut self, text: String, undo: Undo) {
+        self.notify(text, false);
+        if let Some(toast) = &mut self.toast {
+            toast.undo = Some(undo);
+        }
+    }
+
+    fn undo(&mut self, undo: Undo) {
+        match undo {
+            Undo::History(entries) => {
+                storage::restore_history(entries);
+                self.history = storage::load_history_summaries();
+                self.history_loaded = true;
+            }
+            Undo::Recent(mut old) => {
+                // anything sent since the clear stays, after the old ones
+                old.append(&mut self.recent);
+                let excess = old.len().saturating_sub(storage::MAX_RECENT);
+                old.drain(..excess);
+                self.recent = old;
+                storage::save_recent(&self.recent);
+            }
+        }
     }
 
     /// Run `job` on a thread; its event (if any) is handled next frame.
@@ -523,9 +559,25 @@ impl MercuryApp {
             .map(String::as_str)
     }
 
+    /// A user-chosen switch (menu or ⌘E). It is announced: the only other
+    /// signal is a chip in the corner, and ⌘E cycles in file-name order, so
+    /// one press from dev can land on prod.
     pub fn select_env(&mut self, index: Option<usize>) {
         self.selected_env = index;
         self.load_env();
+        let text = match self.env_name() {
+            Some(name) => format!("Environment: {name}"),
+            None => "No environment".to_string(),
+        };
+        self.notify(text, false);
+    }
+
+    /// "prod" when a production-looking environment is selected, so the Send
+    /// button can say where the request is going.
+    pub fn prod_target(&self) -> Option<&str> {
+        self.env_name()
+            .filter(|n| theme::is_prod(n))
+            .map(|n| n.trim_start_matches(".env."))
     }
 
     fn load_env(&mut self) {
@@ -804,8 +856,18 @@ impl MercuryApp {
     }
 
     pub fn clear_history(&mut self) {
+        let count = self.history.len();
         self.history.clear();
-        storage::clear_history();
+        let entries = storage::take_history();
+        let what = plural(count, "history entry", "history entries");
+        self.notify_undo(format!("Cleared {what}"), Undo::History(entries));
+    }
+
+    pub fn clear_recent(&mut self) {
+        let old = std::mem::take(&mut self.recent);
+        storage::save_recent(&self.recent);
+        let what = plural(old.len(), "recent request", "recent requests");
+        self.notify_undo(format!("Cleared {what}"), Undo::Recent(old));
     }
 
     fn copy_as_curl(&mut self) {
@@ -923,11 +985,23 @@ impl MercuryApp {
     pub fn open_dialog(&mut self, dialog: Dialog, text: &str) {
         // otherwise focus stays wherever it was (the URL bar, after ⌘N) and
         // the name field silently swallows nothing
-        if !matches!(dialog, Dialog::Delete(_) | Dialog::Shortcuts) {
+        if !matches!(dialog, Dialog::Delete(..) | Dialog::Shortcuts) {
             self.focus("modal_input");
         }
         self.dialog = Some(dialog);
         self.dialog_text = text.to_string();
+    }
+
+    pub fn ask_delete(&mut self, path: &Path) {
+        let name = path.file_stem().unwrap_or_default().to_string_lossy();
+        let is_dir = path.is_dir();
+        let counts = if is_dir {
+            workspace::count_contents(path)
+        } else {
+            (1, 0)
+        };
+        let message = delete_message(&name, is_dir, counts);
+        self.open_dialog(Dialog::Delete(path.to_path_buf(), message), "");
     }
 
     /// "New request" vs "New request in users" — the destination matters.
@@ -968,19 +1042,13 @@ impl MercuryApp {
             ),
             Dialog::NewFolder(_) => input_modal(ctx, &titles, "Folder name", "Create", text),
             Dialog::Rename(_) => input_modal(ctx, "Rename", "New name", "Rename", text),
-            Dialog::Delete(path) => {
-                let name = path.file_stem().unwrap_or_default().to_string_lossy();
-                let (title, what) = if path.is_dir() {
-                    ("Delete folder", "folder")
+            Dialog::Delete(path, message) => {
+                let title = if path.is_dir() {
+                    "Delete folder"
                 } else {
-                    ("Delete request", "request")
+                    "Delete request"
                 };
-                confirm_modal(
-                    ctx,
-                    title,
-                    &format!("Delete the {what} '{name}'?"),
-                    "Delete",
-                )
+                confirm_modal(ctx, title, message, title)
             }
             Dialog::Shortcuts => shortcuts_modal(ctx),
         };
@@ -1033,7 +1101,7 @@ impl MercuryApp {
                 self.rebuild_tree();
                 Ok("Renamed")
             }
-            Dialog::Delete(path) => {
+            Dialog::Delete(path, _) => {
                 workspace::delete(&path)?;
                 if self
                     .current_file
@@ -1362,15 +1430,22 @@ impl MercuryApp {
             return;
         }
         let (text, shown_at, is_error) = (toast.text.clone(), toast.shown_at, toast.is_error);
-        let alive = egui::Area::new(egui::Id::new("toast"))
+        let action = toast.undo.as_ref().map(|_| "Undo");
+        let state = egui::Area::new(egui::Id::new("toast"))
             .anchor(
                 egui::Align2::RIGHT_BOTTOM,
                 Vec2::new(-Space::XL, -(Layout::STATUS_BAR_HEIGHT + Space::LG)),
             )
             .order(egui::Order::Tooltip)
-            .show(ctx, |ui| widgets::toast(ui, &text, shown_at, is_error))
+            .show(ctx, |ui| {
+                widgets::toast(ui, &text, shown_at, is_error, action)
+            })
             .inner;
-        if !alive {
+        if state.acted {
+            if let Some(undo) = self.toast.take().and_then(|t| t.undo) {
+                self.undo(undo);
+            }
+        } else if !state.alive {
             self.toast = None;
         }
     }
@@ -1415,15 +1490,40 @@ fn chip(
     response.on_hover_cursor(egui::CursorIcon::PointingHand)
 }
 
-/// "1 request, 1 environment" — an import that says "1 environments" reads
-/// like a bug in the thing that just read your collection.
+/// "1 request" / "3 requests" — "1 requests" reads like a bug.
+fn plural(n: usize, one: &str, many: &str) -> String {
+    format!("{n} {}", if n == 1 { one } else { many })
+}
+
 fn plural_import(requests: usize, envs: usize) -> String {
-    let s = |n: usize| if n == 1 { "" } else { "s" };
     format!(
-        "Imported {requests} request{}, {envs} environment{}",
-        s(requests),
-        s(envs)
+        "Imported {}, {}",
+        plural(requests, "request", "requests"),
+        plural(envs, "environment", "environments")
     )
+}
+
+/// A folder delete is `rm -rf`: say what goes with it, including files
+/// that aren't requests (fixtures, READMEs) and that the user may not expect.
+fn delete_message(name: &str, is_dir: bool, (requests, others): (usize, usize)) -> String {
+    if !is_dir {
+        return format!("Delete the request '{name}'?");
+    }
+    let mut message = if requests == 0 {
+        format!("Delete the folder '{name}'?")
+    } else {
+        format!(
+            "Delete '{name}' and the {} in it?",
+            plural(requests, "request", "requests")
+        )
+    };
+    if others > 0 {
+        message += &format!(
+            " It also holds {}.",
+            plural(others, "other file", "other files")
+        );
+    }
+    message
 }
 
 fn shortcuts_modal(ctx: &egui::Context) -> ModalAction {
@@ -1540,6 +1640,28 @@ mod tests {
                 assert_ne!(a.action, b.action);
             }
         }
+    }
+
+    /// A folder delete is permanent and takes everything inside with it, so
+    /// the confirmation has to say what that is.
+    #[test]
+    fn delete_message_counts_what_goes() {
+        assert_eq!(
+            delete_message("users", true, (3, 2)),
+            "Delete 'users' and the 3 requests in it? It also holds 2 other files."
+        );
+        assert_eq!(
+            delete_message("users", true, (1, 0)),
+            "Delete 'users' and the 1 request in it?"
+        );
+        assert_eq!(
+            delete_message("empty", true, (0, 1)),
+            "Delete the folder 'empty'? It also holds 1 other file."
+        );
+        assert_eq!(
+            delete_message("list-users", false, (1, 0)),
+            "Delete the request 'list-users'?"
+        );
     }
 
     /// The help modal and the palette render `keys` as one cap per space-run.

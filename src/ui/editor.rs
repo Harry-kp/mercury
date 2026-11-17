@@ -8,7 +8,23 @@ use super::widgets::{
     popup_menu, section_label, send_button, tab_button,
 };
 use crate::kv::{self, AuthMode, BodyKind};
-use crate::model::HttpMethod;
+use crate::model::{HttpMethod, Request};
+
+/// How many characters one edit inserted: what is left of `after` once the
+/// prefix and suffix it shares with `before` are taken away. A keystroke
+/// inserts one; a paste inserts many.
+fn inserted_chars(before: &str, after: &str) -> usize {
+    let (b, a): (Vec<char>, Vec<char>) = (before.chars().collect(), after.chars().collect());
+    let prefix = b.iter().zip(&a).take_while(|(x, y)| x == y).count();
+    let suffix = b[prefix..]
+        .iter()
+        .rev()
+        .zip(a[prefix..].iter().rev())
+        .take_while(|(x, y)| x == y)
+        .count();
+    a.len() - prefix - suffix
+}
+
 use crate::{curl, vars};
 use eframe::egui::{self, Align, Margin, RichText, ScrollArea, Sense, Stroke, Ui, Vec2};
 use std::collections::BTreeSet;
@@ -52,7 +68,13 @@ impl MercuryApp {
                     ui.add_space(Space::SM);
 
                     let executing = self.in_flight.is_some();
-                    let send_width = if executing { 86.0 } else { 104.0 };
+                    let target = self.prod_target().map(str::to_owned);
+                    let send_width = if executing {
+                        86.0
+                    } else {
+                        widgets::button_width(ui, &widgets::send_label(target.as_deref()))
+                    };
+                    let before = self.url.clone();
                     let url = ui.add(
                         egui::TextEdit::singleline(&mut self.url)
                             .hint_text(muted("https://api.example.com/users"))
@@ -64,10 +86,10 @@ impl MercuryApp {
                             .id(egui::Id::new("url_bar")),
                     );
                     if url.changed() {
-                        self.on_url_edited();
+                        self.on_url_edited(&before);
                     }
                     ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
-                        if send_button(ui, executing).clicked() {
+                        if send_button(ui, executing, target.as_deref()).clicked() {
                             if executing {
                                 self.cancel_request();
                             } else {
@@ -139,21 +161,44 @@ impl MercuryApp {
         });
     }
 
-    /// A pasted cURL command replaces the whole request; otherwise re-sync params.
-    fn on_url_edited(&mut self) {
-        if self.url.trim_start().starts_with("curl ") {
+    /// A pasted cURL command becomes the request; otherwise re-sync params.
+    ///
+    /// Only a paste counts: typing "curl …" by hand would otherwise re-parse
+    /// on every keystroke. And a saved request is never overwritten: autosave
+    /// would write the cURL over the file within seconds, and ⌘Z only knows
+    /// about the URL text, so the headers and body were simply gone.
+    fn on_url_edited(&mut self, before: &str) {
+        let pasted = inserted_chars(before, &self.url) > 1;
+        if pasted && self.url.trim_start().starts_with("curl ") {
             match curl::parse(&self.url) {
                 Ok(req) => {
-                    self.method = req.method;
-                    self.url = req.url;
-                    self.headers_text = req
+                    let saved = self.current_file.is_some();
+                    self.url = before.to_string(); // the open file keeps its URL
+                    self.autosave();
+                    let headers = req
                         .headers
                         .iter()
                         .map(|(k, v)| format!("{k}: {v}"))
                         .collect::<Vec<_>>()
                         .join("\n");
-                    self.body_text = req.body.unwrap_or_default();
-                    self.notify("Imported cURL command", false);
+                    self.load_request(
+                        Request {
+                            method: req.method,
+                            url: req.url,
+                            headers,
+                            body: req.body.unwrap_or_default(),
+                        },
+                        None,
+                    );
+                    self.notify(
+                        if saved {
+                            "Opened the cURL command as a new request"
+                        } else {
+                            "Imported cURL command"
+                        },
+                        false,
+                    );
+                    return;
                 }
                 Err(e) => self.notify(e, true),
             }
@@ -506,5 +551,24 @@ impl MercuryApp {
                 });
             });
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::inserted_chars;
+
+    #[test]
+    fn inserted_chars_tells_a_keystroke_from_a_paste() {
+        assert_eq!(inserted_chars("curl", "curl "), 1);
+        assert_eq!(inserted_chars("ab", "aXb"), 1);
+        assert_eq!(
+            inserted_chars("{{BASE}}/users", "curl x.y"),
+            8,
+            "replacing a selection"
+        );
+        assert_eq!(inserted_chars("aaa", "aaaa"), 1, "repeated characters");
+        assert_eq!(inserted_chars("abc", "ab"), 0, "deleting");
+        assert_eq!(inserted_chars("", "curl https://a.b"), 16);
     }
 }

@@ -34,7 +34,7 @@ Bodies of images and binary responses aren't stored in history. A restored binar
 | File | `~/.mercury/history.json` (one list for all workspaces) |
 | Entries kept | The newest 50 |
 | Age | Entries older than 7 days are dropped |
-| Clearing | The trash icon in the history header deletes the file immediately, with no confirmation |
+| Clearing | The trash icon in the history header clears it at once. The notification that follows has an **Undo** link for a few seconds |
 
 History stores full request headers and response bodies, including any tokens they contain, in plain text. Clear it if that's a concern.
 

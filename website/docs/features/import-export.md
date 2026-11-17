@@ -79,7 +79,7 @@ workspace/
 
 ## Import from cURL
 
-Paste a command that starts with `curl ` into the **URL bar**. Mercury parses it and replaces the method, URL, headers and body. This works with commands copied from browser DevTools or API docs, including multi-line commands that use `\` continuations.
+Paste a command that starts with `curl ` into the **URL bar**. Mercury parses it into the method, URL, headers and body. Pasted over a saved request, it opens as a new unsaved request instead, so the file is never overwritten. Typing `curl …` by hand is left alone; only a paste converts. This works with commands copied from browser DevTools or API docs, including multi-line commands that use `\` continuations.
 
 ```bash
 curl -X POST https://api.example.com/users \

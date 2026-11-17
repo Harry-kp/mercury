@@ -97,8 +97,17 @@ pub fn append_history(entry: HistoryEntry) {
     save("history.json", &prune(entries, now()));
 }
 
-pub fn clear_history() {
+/// Delete the history file, returning what it held so the clear can be undone.
+pub fn take_history() -> Vec<HistoryEntry> {
+    let entries = load_history();
     let _ = fs::remove_file(dir().join("history.json"));
+    entries
+}
+
+/// Undo [`take_history`]: put `old` back in front of anything sent since.
+pub fn restore_history(mut old: Vec<HistoryEntry>) {
+    old.extend(load_history());
+    save("history.json", &prune(old, now()));
 }
 
 #[cfg(test)]

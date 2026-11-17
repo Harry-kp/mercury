@@ -71,8 +71,7 @@ impl MercuryApp {
         }
         // clearing 50 unsaved requests one × at a time is not a workflow
         if widgets::row_action(ui, &header, Icon::Trash, "Clear recent").clicked() {
-            self.recent.clear();
-            storage::save_recent(&self.recent);
+            self.clear_recent();
             return;
         }
         if !self.recent_expanded {
@@ -277,7 +276,7 @@ impl MercuryApp {
             self.open_dialog(Dialog::Rename(path.to_path_buf()), name);
         }
         if menu_item(ui, Some(Icon::Trash), "Delete", "") {
-            self.open_dialog(Dialog::Delete(path.to_path_buf()), "");
+            self.ask_delete(path);
         }
         widgets::divider(ui);
         if menu_item(ui, Some(Icon::Copy), "Copy path", "") {
