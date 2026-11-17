@@ -237,15 +237,19 @@ struct PostmanBody {
 /// One imported Multipart field as one body line, never more and never a
 /// live upload: a collection from someone else could otherwise smuggle in an
 /// enabled `name=@~/.ssh/id_rsa` through a newline, an `=` in a key, or a
-/// text value starting with `@`. Any line that reads back as a file is
-/// switched off until the user ticks it.
-fn multipart_line(key: &str, value: &str) -> String {
+/// text value starting with `@` (written `@@`, Mercury's literal `@`). File
+/// fields arrive switched off until the user ticks them. (Variables are
+/// filled in per field at send time: [`crate::http::substitute_multipart`].)
+fn multipart_line(key: &str, value: &str, file: bool) -> String {
     let flat = |s: &str| s.replace(['\r', '\n'], " ");
-    let line = format!("{}={}", flat(key).replace('=', "%3D"), flat(value));
-    if value.starts_with('@') {
-        format!("# {line}")
+    let key = flat(key).replace('=', "%3D");
+    let value = flat(value);
+    if file {
+        format!("# {key}=@{value}")
+    } else if value.starts_with('@') {
+        format!("{key}=@{value}")
     } else {
-        line
+        format!("{key}={value}")
     }
 }
 
@@ -286,9 +290,9 @@ fn postman_body(body: &PostmanBody) -> Option<(String, Option<&'static str>)> {
                             None => None,
                         }
                         .unwrap_or_default();
-                        multipart_line(&r.key, &format!("@{src}"))
+                        multipart_line(&r.key, &src, true)
                     }
-                    _ => multipart_line(&r.key, &r.value()),
+                    _ => multipart_line(&r.key, &r.value(), false),
                 })
                 .collect();
             Some((lines.join("\n"), Some("multipart/form-data")))
@@ -743,11 +747,11 @@ mod tests {
         assert_eq!(
             upload.body,
             "# file=@\n# key=@/home/me/.ssh/id_rsa\nnote=hi\na=x b=@/etc/passwd\n\
-             c%3D@/etc/hosts=1\n# d=@/etc/shadow"
+             c%3D@/etc/hosts=1\nd=@@/etc/shadow"
         );
         let live: Vec<_> = kv::parse_lines(&upload.body, "=")
             .into_iter()
-            .filter(|r| r.enabled && r.value.starts_with('@'))
+            .filter(|r| r.enabled && r.value.starts_with('@') && !r.value.starts_with("@@"))
             .collect();
         assert!(live.is_empty(), "{live:?}");
         assert_eq!(

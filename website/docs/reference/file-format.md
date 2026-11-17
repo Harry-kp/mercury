@@ -63,7 +63,7 @@ The body is always a string, whatever its content type. A JSON body is stored as
 
 Mercury doesn't add a `Content-Type` header, so include one yourself.
 
-A `multipart/form-data` body is one field per line, `name=value`, with `name=@/path/to/file` for a file. Lines starting with `#` are switched off. The boundary is added when the request is sent:
+A `multipart/form-data` body is one field per line, `name=value`, with `name=@/path/to/file` for a file and `name=@@text` for text that starts with `@`. Lines starting with `#` are switched off. The boundary is added when the request is sent:
 
 ```json
 {

@@ -424,7 +424,7 @@ impl MercuryApp {
             ui.horizontal_wrapped(|ui| {
                 ui.spacing_mut().item_spacing.x = Space::SM;
                 ui.label(widgets::faint(
-                    "A value starting with @ is a file, sent as an upload.",
+                    "A value starting with @ is a file, sent as an upload (@@ for text that starts with @).",
                 ));
                 if widgets::link(ui, muted("Attach file…").color(t.accent)).clicked() {
                     self.attach_file();
