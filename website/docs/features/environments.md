@@ -65,6 +65,7 @@ Authorization: Bearer {{API_TOKEN}}
 
 ## Seeing what's missing
 
+- Postman's built-ins `{{$guid}}`, `{{$timestamp}}`, `{{$isoTimestamp}}` and `{{$randomInt}}` get a fresh value at every send, so imported collections that use them work. A variable of the same name in your `.env` wins.
 - In the URL bar, `{{variables}}` are coloured: violet when the selected environment defines them, amber when it doesn't.
 - If any variable in the request is undefined, a line under the URL bar names it and the environment it's missing from, and the tab that holds it shows a warning.
 - The **Params** and **Headers** tabs show a chip for each variable they use: ✓ if it's defined, ✗ if it isn't.
