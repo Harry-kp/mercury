@@ -19,7 +19,12 @@ fn echo_server() -> String {
             let mut buf = [0; 8192];
             let n = stream.read(&mut buf).unwrap_or(0);
             let request = String::from_utf8_lossy(&buf[..n]).to_string();
-            let body = serde_json::json!({ "echo": request }).to_string();
+            // `/big` replies with a body over history's limit
+            let body = if request.starts_with("GET /big") {
+                serde_json::json!({ "big": "x".repeat(1_100_000) }).to_string()
+            } else {
+                serde_json::json!({ "echo": request }).to_string()
+            };
             // `/status/404` replies 404, so failing statuses can be exercised
             let code = request
                 .split_whitespace()
@@ -241,6 +246,88 @@ fn open_send_edit_and_save() {
     }
     assert_eq!(harness.state().env_name(), Some(".env.dev"));
     assert_eq!(harness.state().env_vars["TOKEN"], "rotated");
+
+    // `.env` is shared: its variables apply under `.env.dev`, which wins on a clash
+    std::fs::write(ws.join(".env"), "SHARED=yes\nTOKEN=base\n").unwrap();
+    for _ in 0..300 {
+        harness.step();
+        if harness.state().env_vars.contains_key("SHARED") {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    assert_eq!(harness.state().env_name(), Some(".env.dev"));
+    assert_eq!(harness.state().env_vars["SHARED"], "yes");
+    assert_eq!(harness.state().env_vars["TOKEN"], "rotated");
+    std::fs::remove_file(ws.join(".env")).unwrap();
+    for _ in 0..300 {
+        harness.step();
+        if !harness.state().env_vars.contains_key("SHARED") {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    assert!(!harness.state().env_vars.contains_key("SHARED"));
+
+    // A value in a JSON response goes into the environment with a right-click.
+    let token = r#"{"access_token": "eyJ.abc"}"#;
+    harness.state_mut().response = Some(std::sync::Arc::new(crate::http::HttpResponse {
+        status: 200,
+        status_text: "200 OK".into(),
+        size_bytes: token.len(),
+        pretty: Some(crate::http::format_json(token)),
+        body: token.into(),
+        content_type: "application/json".into(),
+        response_type: crate::http::ResponseType::Json,
+        ..crate::http::HttpResponse::failed()
+    }));
+    harness.state_mut().formatted_body = None;
+    harness.run_steps(3);
+    harness
+        .get_by_label_contains("\"eyJ.abc\"")
+        .click_secondary();
+    harness.run_steps(2);
+    harness
+        .get_by_role_and_label(
+            accesskit::Role::Button,
+            "Save as {{access_token}} in .env.dev",
+        )
+        .click();
+    harness.run_steps(2);
+    assert_eq!(harness.state().env_vars["access_token"], "eyJ.abc");
+    let dev = std::fs::read_to_string(ws.join(".env.dev")).unwrap();
+    assert!(
+        dev.contains("TOKEN=rotated\naccess_token=eyJ.abc\n"),
+        "{dev}"
+    );
+    std::fs::write(
+        ws.join(".env.dev"),
+        dev.replace("access_token=eyJ.abc\n", ""),
+    )
+    .unwrap();
+    harness.state_mut().response = None;
+    harness.run_steps(2);
+
+    // A body over 1 MB is shown in full, but history keeps only its status:
+    // the whole history file is rewritten on every send.
+    let before = harness.state().url.clone();
+    harness.state_mut().url = format!("{server}/big");
+    harness.state_mut().send_request();
+    wait_for_response(&mut harness);
+    assert!(harness.state().response.as_ref().unwrap().body.len() > 1_000_000);
+    let latest = crate::storage::load_history_summaries()
+        .last()
+        .unwrap()
+        .timestamp;
+    let kept = crate::storage::load_history_entry(latest).unwrap();
+    assert!(kept.response.body.is_empty());
+    assert_eq!(
+        kept.response.response_type,
+        crate::http::ResponseType::TooLarge
+    );
+    harness.state_mut().url = before;
+    harness.state_mut().response = None;
+    harness.run_steps(2);
 
     // typing "?" in the URL bar must not open the shortcuts dialog
     harness.key_press_modifiers(Modifiers::COMMAND, Key::L); // focus URL bar

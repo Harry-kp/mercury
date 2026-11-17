@@ -11,6 +11,9 @@ use std::sync::Mutex;
 
 pub const MAX_HISTORY: usize = 50;
 pub const MAX_RECENT: usize = 50;
+/// A body bigger than this keeps only its status and headers in history:
+/// the whole file is rewritten on every send, and 50 × 10 MB made that slow.
+pub const HISTORY_BODY_LIMIT: usize = 1024 * 1024;
 const HISTORY_TTL_SECS: f64 = 7.0 * 24.0 * 60.0 * 60.0;
 
 /// Seconds since the Unix epoch (what all stored timestamps use).

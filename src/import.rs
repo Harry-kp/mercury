@@ -66,35 +66,6 @@ fn sanitize_filename(name: &str) -> String {
     }
 }
 
-/// Keep keys as-is (requests reference them as `{{api-key}}`); only replace
-/// characters that would break a `KEY=VALUE` line.
-fn sanitize_env_key(key: &str) -> String {
-    let key: String = key
-        .trim()
-        .chars()
-        .map(|c| {
-            if c == '=' || c.is_whitespace() {
-                '_'
-            } else {
-                c
-            }
-        })
-        .collect();
-    if key.starts_with('#') {
-        format!("_{key}")
-    } else {
-        key
-    }
-}
-
-fn escape_env_value(value: &str) -> String {
-    if value.contains(['=', '\n', '"', ' ']) {
-        format!("\"{}\"", value.replace('"', "\\\""))
-    } else {
-        value.to_string()
-    }
-}
-
 fn value_to_string(value: &Value) -> String {
     match value {
         Value::String(s) => s.clone(),
@@ -218,8 +189,8 @@ fn write_env<'a>(
         .map(|(k, v)| {
             format!(
                 "{}={}\n",
-                sanitize_env_key(k),
-                escape_env_value(&value_to_string(v))
+                crate::vars::env_key(k),
+                crate::vars::env_value(&value_to_string(v))
             )
         })
         .collect();
@@ -1581,7 +1552,7 @@ environments:
     #[test]
     fn env_values_roundtrip_through_parse_env() {
         for value in ["plain", "has space", r#"{"a":1}"#, "a=b"] {
-            let line = format!("K={}", escape_env_value(value));
+            let line = format!("K={}", crate::vars::env_value(value));
             assert_eq!(crate::vars::parse_env(&line)["K"], value);
         }
     }
