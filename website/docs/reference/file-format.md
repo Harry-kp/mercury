@@ -45,6 +45,8 @@ If a file can't be parsed as a request, it still appears in the sidebar, without
 - **Empty `headers`, `body` and `disabled_headers` are omitted.**
 - **Disabled headers (lines starting with `#` in the editor) go in `disabled_headers`,** so switching one off doesn't delete it. They're never sent. Other `#` lines (notes without a `:`) aren't saved.
 - Header names are unique keys. A second header with the same name replaces the first.
+- **Fields Mercury doesn't know are kept.** Add a `"description"` by hand and saving from Mercury writes it back unchanged, after Mercury's own fields.
+- The file ends with a newline. A file that starts with a UTF-8 byte order mark (Notepad adds one) opens normally.
 - The query string is part of `url`. There's no separate params field.
 - Auth is the `Authorization` entry in `headers`. There's no separate auth field.
 

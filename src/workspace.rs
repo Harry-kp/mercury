@@ -127,7 +127,7 @@ fn safe_name(name: &str) -> Result<&str, String> {
         return Err("Name cannot be empty".into());
     }
     // the path check comes first: "../x" is a path, not a dot-file
-    if name.contains(['/', '\\']) || name.contains("..") {
+    if name.contains(['/', '\\']) || name == ".." {
         return Err("Name cannot contain a path".into());
     }
     if name.starts_with('.') {
@@ -225,9 +225,33 @@ pub fn rename(path: &Path, new_name: &str) -> Result<PathBuf, String> {
         name.push_str(".json");
     }
     let new_path = path.with_file_name(name);
-    ensure_free(&new_path)?;
+    if new_path == path {
+        return Ok(new_path);
+    }
+    // a case-only change finds the file itself on macOS and Windows
+    if !same_file(path, &new_path) {
+        ensure_free(&new_path)?;
+    }
     fs::rename(path, &new_path).map_err(|e| format!("Could not rename: {e}"))?;
     Ok(new_path)
+}
+
+/// Whether `a` and `b` name one file (`b` differing only in case on a
+/// case-insensitive disk).
+fn same_file(a: &Path, b: &Path) -> bool {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        match (fs::symlink_metadata(a), fs::symlink_metadata(b)) {
+            (Ok(a), Ok(b)) => (a.dev(), a.ino()) == (b.dev(), b.ino()),
+            _ => false,
+        }
+    }
+    // Windows disks are case-insensitive
+    #[cfg(not(unix))]
+    {
+        file_name(a).to_lowercase() == file_name(b).to_lowercase()
+    }
 }
 
 /// What deleting `dir` takes with it: `(requests, other files)`, counted
@@ -281,10 +305,27 @@ pub fn watch(
     root: &Path,
     on_change: impl Fn(Result<(), String>) + Send + 'static,
 ) -> Result<Watcher, String> {
+    // events name the path as watched, or the real one (/private/var/… for
+    // /var/… on macOS)
+    let roots = [
+        root.to_path_buf(),
+        fs::canonicalize(root).unwrap_or_else(|_| root.to_path_buf()),
+    ];
+    // inside a hidden folder (.git, .idea), which `scan` never shows
+    let hidden = move |path: &Path| {
+        let dir = path.parent().unwrap_or(path);
+        roots
+            .iter()
+            .find_map(|root| dir.strip_prefix(root).ok())
+            .is_some_and(|dir| {
+                dir.components()
+                    .any(|c| c.as_os_str().to_string_lossy().starts_with('.'))
+            })
+    };
     let mut debouncer = new_debouncer(
         Duration::from_millis(500),
         move |result: DebounceEventResult| match result {
-            Ok(events) if !events.is_empty() => on_change(Ok(())),
+            Ok(events) if events.iter().any(|e| !hidden(&e.path)) => on_change(Ok(())),
             Ok(_) => {}
             Err(e) => on_change(Err(format!("File watcher error: {e}"))),
         },
@@ -425,6 +466,8 @@ mod tests {
         }
         assert!(!dir.path().join("escaped.json").exists());
 
+        // dots inside a name are not a path ("compare v1..v2")
+        assert!(create_request(&inside, "v1..v2", "{}").is_ok());
         let file = create_request(&inside, "ok", "{}").unwrap();
         assert!(rename(&file, "../escaped").is_err());
         assert!(!dir.path().join("escaped.json").exists());
@@ -433,6 +476,22 @@ mod tests {
 
     use super::*;
     use tempfile::TempDir;
+
+    /// `git status` (an IDE runs it every few seconds) rewrites `.git/index`;
+    /// that rescanned the tree and repeated any "changed on disk" warning.
+    #[test]
+    fn the_watcher_ignores_hidden_folders() {
+        let dir = TempDir::new().unwrap();
+        fs::create_dir(dir.path().join(".git")).unwrap();
+        let (tx, rx) = std::sync::mpsc::channel();
+        let _watcher = watch(dir.path(), move |r| tx.send(r).unwrap()).unwrap();
+        // the temp folder's own creation can still be on its way
+        while rx.recv_timeout(Duration::from_millis(800)).is_ok() {}
+        fs::write(dir.path().join(".git/index"), "x").unwrap();
+        assert!(rx.recv_timeout(Duration::from_millis(1500)).is_err());
+        fs::write(dir.path().join(".env.dev"), "A=1").unwrap();
+        assert!(rx.recv_timeout(Duration::from_secs(5)).is_ok());
+    }
 
     #[test]
     fn scan_orders_folders_first_and_loads_lazily() {
@@ -525,6 +584,17 @@ mod tests {
         assert_eq!(renamed, root.join("signin.json"));
         assert!(renamed.exists() && !path.exists());
         assert!(rename(&renamed, "login_copy1.json").is_err());
+
+        // Rename opens on the current name: confirming it unchanged, or
+        // changing only its case (one file on macOS and Windows), said
+        // "already exists"
+        assert_eq!(rename(&renamed, "signin.json").unwrap(), renamed);
+        let cased = rename(&renamed, "SignIn").unwrap();
+        assert_eq!(cased, root.join("SignIn.json"));
+        assert!(fs::read_dir(root)
+            .unwrap()
+            .any(|e| e.unwrap().file_name() == "SignIn.json"));
+        let renamed = rename(&cased, "signin").unwrap();
 
         create_folder(root, "auth").unwrap();
         assert!(create_folder(root, "auth").is_err());
