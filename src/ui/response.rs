@@ -5,10 +5,10 @@ use super::icon::{self, Icon};
 use super::theme::{mono, theme, Layout, Space, Text};
 use super::widgets::{
     self, clear_button, copy_button, empty_state, error_state, faint, format_bytes, icon_button,
-    json_job, key_combo, kv_section, label, method_text, muted, relative_time, response_time,
-    search_input, status_badge, tab_button, xml_job,
+    key_combo, kv_section, label, method_text, muted, relative_time, response_time, search_input,
+    status_badge, tab_button, xml_job,
 };
-use crate::http::{self, ResponseType, MAX_INLINE_SIZE, MAX_RESPONSE_SIZE};
+use crate::http::{self, ResponseType, MAX_RESPONSE_SIZE};
 use crate::storage;
 use eframe::egui::{self, Align, Margin, ScrollArea, Ui, Vec2};
 
@@ -368,21 +368,6 @@ impl MercuryApp {
                     &[&size, "Not downloaded, to keep Mercury responsive"],
                 );
             }
-            ResponseType::LargeText => {
-                let size = format_bytes(response.size_bytes);
-                let why = format!(
-                    "Over the {} inline limit for showing a body",
-                    format_bytes(MAX_INLINE_SIZE)
-                );
-                empty_state(
-                    ui,
-                    Icon::File,
-                    None,
-                    "Large response",
-                    &[&response.content_type, &size, &why],
-                );
-                save_button(ui, &mut save);
-            }
             ResponseType::Binary | ResponseType::Image => {
                 let (what, title) = content_kind(&response.content_type);
                 empty_state(
@@ -397,79 +382,81 @@ impl MercuryApp {
             ResponseType::Json
             | ResponseType::Xml
             | ResponseType::Html
-            | ResponseType::PlainText => {
+            | ResponseType::PlainText
+            | ResponseType::LargeText => {
                 let body = &response.body;
-                let formatted = self.formatted_body.get_or_insert_with(|| match kind {
-                    ResponseType::Json => http::format_json(body),
-                    ResponseType::Xml => http::format_xml(body),
-                    _ => body.clone(),
+                let formatted = self.formatted_body.get_or_insert_with(|| {
+                    // usually made on the request thread (`HttpResponse::pretty`);
+                    // history entries don't carry it
+                    response.pretty.clone().unwrap_or_else(|| match kind {
+                        ResponseType::Json => http::format_json(body),
+                        ResponseType::Xml => http::format_xml(body),
+                        _ => body.clone(),
+                    })
                 });
-                let text = if self.raw_view { body } else { &*formatted };
-                let hits = self
-                    .find
-                    .as_deref()
-                    .map(|q| widgets::find_all(text, q))
-                    .unwrap_or_default();
-                let scroll_to = find_bar(ui, &mut self.find, &mut self.find_at, text, &hits);
+                let text: &str = if self.raw_view { body } else { formatted };
+                let char_w = ui.fonts_mut(|f| f.glyph_width(&mono(Text::SMALL), '0'));
+                // Formatted JSON/XML keeps its own lines. Everything else
+                // (raw bodies, HTML, text) soft-wraps at the panel width;
+                // rows must all be one line high to be virtualised.
+                let formatted_lines =
+                    !self.raw_view && matches!(kind, ResponseType::Json | ResponseType::Xml);
+                let row_bytes = if formatted_lines {
+                    ROW_BYTES
+                } else {
+                    (((ui.available_width() - Space::LG * 2.0 - 14.0) / char_w) as usize).max(40)
+                };
+                let rows = BodyRows::cached(&mut self.body_rows, text, row_bytes);
+                rows.search(text, self.find.as_deref());
+                let jump = find_bar(ui, &mut self.find, &mut self.find_at, rows.hits());
+                // again: the query may have changed in the field just now,
+                // and the jump must land on its first match, not the old one's
+                rows.search(text, self.find.as_deref());
+                let rows: &BodyRows = rows;
+                let hits = rows.hits();
+                let scroll_to = jump
+                    .filter(|_| !hits.is_empty())
+                    .map(|at| hits[at % hits.len()].start);
+                let highlight = !self.raw_view;
+                let row_h = ui.fonts_mut(|f| f.row_height(&mono(Text::SMALL)));
+                let tint = t.tint(t.warning, 0.45);
                 widgets::code_frame().show(ui, |ui| {
+                    // show_rows sizes rows with *this* ui's spacing; rows
+                    // are drawn without any, so it must be zero here too
+                    ui.spacing_mut().item_spacing.y = 0.0;
                     let mut area = ScrollArea::both()
                         .id_salt("response_body")
                         .auto_shrink([false, false]);
-                    if let Some(offset) = scroll_to {
-                        area = area.vertical_scroll_offset(offset);
+                    if let Some(at) = scroll_to {
+                        area = area.vertical_scroll_offset(rows.row_of(at) as f32 * row_h);
                     }
-                    area.show(ui, |ui| {
-                        // formatting can push a body over the limit;
-                        // skip highlighting then
-                        let highlight = !self.raw_view && text.len() <= MAX_INLINE_SIZE;
-                        // Extend only pays off once the text has real
-                        // lines to keep: wrapping formatted JSON restarts
-                        // every line at column 0 and destroys the indent.
-                        // Everything else arrives as the server sent it —
-                        // minified HTML is one line thousands of pixels
-                        // wide, and Extend turns reading it into a
-                        // horizontal scroll through the whole document.
-                        let formatted = !self.raw_view
-                            && matches!(kind, ResponseType::Json | ResponseType::Xml);
-                        let width = if formatted {
-                            f32::INFINITY
-                        } else {
-                            ui.available_width()
-                        };
-                        let code = |ui: &mut Ui, mut job: egui::text::LayoutJob| {
-                            widgets::highlight_ranges(
-                                &mut job,
-                                &hits,
-                                theme().tint(theme().warning, 0.45),
-                            );
+                    // Only the rows on screen are laid out, so a 10 MB body
+                    // costs what a screenful does. (It used to be laid out
+                    // whole, every frame, which is why anything over 100 KB
+                    // was refused.)
+                    area.show_rows(ui, row_h, rows.rows.len(), |ui, visible| {
+                        // a stable scroll width: the widest row, not the
+                        // widest one that happens to be on screen
+                        ui.set_min_width(rows.widest as f32 * char_w);
+                        for row in &rows.rows[visible] {
+                            let line = &text[row.clone()];
+                            let mut job = match kind {
+                                ResponseType::Json if highlight => {
+                                    widgets::json_line_job(line, f32::INFINITY)
+                                }
+                                ResponseType::Xml | ResponseType::Html if highlight => {
+                                    xml_job(line, f32::INFINITY)
+                                }
+                                _ => widgets::plain_job(line, f32::INFINITY),
+                            };
+                            widgets::highlight_ranges(&mut job, &hits_in(hits, row), tint);
                             ui.add(
                                 egui::Label::new(job)
                                     // you often want one field's value,
                                     // not the whole body
                                     .selectable(true)
-                                    .wrap_mode(if formatted {
-                                        egui::TextWrapMode::Extend
-                                    } else {
-                                        egui::TextWrapMode::Wrap
-                                    }),
+                                    .wrap_mode(egui::TextWrapMode::Extend),
                             );
-                        };
-                        match kind {
-                            ResponseType::Json if highlight => {
-                                code(ui, json_job(text, width));
-                            }
-                            ResponseType::Xml | ResponseType::Html if highlight => {
-                                code(ui, xml_job(text, width));
-                            }
-                            _ => {
-                                let body = ui.add(
-                                    egui::TextEdit::multiline(&mut text.as_str())
-                                        .desired_width(width)
-                                        .frame(false)
-                                        .font(mono(Text::SMALL)),
-                                );
-                                widgets::name(&body, "Response body");
-                            }
                         }
                     });
                 });
@@ -512,8 +499,8 @@ fn save_button(ui: &mut Ui, save: &mut bool) {
     });
 }
 
-/// The find bar, shown only once ⌘F has opened it. Returns the scroll offset
-/// to jump to when the current match moved.
+/// The find bar, shown only once ⌘F has opened it. Returns the index of the
+/// match to jump to when the current match moved.
 ///
 /// Takes its two fields rather than `&mut self`: the body text it searches is
 /// itself borrowed out of the app.
@@ -521,9 +508,8 @@ fn find_bar(
     ui: &mut Ui,
     find: &mut Option<String>,
     find_at: &mut usize,
-    text: &str,
     hits: &[std::ops::Range<usize>],
-) -> Option<f32> {
+) -> Option<usize> {
     let mut query = find.take()?;
     let t = theme();
     let (mut at, mut jump, mut close) = (*find_at, false, false);
@@ -567,34 +553,137 @@ fn find_bar(
         return None;
     }
     *find = Some(query);
-    // ponytail: the offset is the match's line times the row height, which
-    // is exact while the body does not wrap (formatted JSON, the common
-    // case) and approximate when it does. Measure the galley if that ever
-    // starts to matter.
-    let hit = (jump && !hits.is_empty()).then(|| hits[at % hits.len()].clone())?;
-    let row = ui.fonts_mut(|f| f.row_height(&mono(Text::SMALL)));
-    Some(line_of(text, hit.start) as f32 * row)
+    jump.then_some(at)
 }
 
-/// The 0-based line that byte `at` falls on. Counting lines is not the same
-/// as counting newlines: `"a\nb\n".lines()` yields two, but a match just past
-/// that second newline sits on line *two*, and scrolling to line one puts it
-/// off the top of the view.
-fn line_of(text: &str, at: usize) -> usize {
-    text[..at].matches('\n').count()
+/// A body as drawn: one row per line, with very long lines (minified JSON
+/// is often one line of megabytes) cut into pieces so no row is huge. Built
+/// once per body, not per frame, with the find matches cached per query.
+pub struct BodyRows {
+    /// The text it was built from (address, length) and the row width.
+    key: (usize, usize, usize),
+    pub rows: Vec<std::ops::Range<usize>>,
+    /// Bytes in the longest row, for a scroll width that doesn't jump.
+    pub widest: usize,
+    found: Option<(String, Vec<std::ops::Range<usize>>)>,
+}
+
+/// Longest row, in bytes, of formatted JSON/XML before a line is continued
+/// on the next row (minified bodies can be one line of megabytes).
+const ROW_BYTES: usize = 2000;
+
+impl BodyRows {
+    fn new(text: &str, row_bytes: usize) -> Self {
+        let mut rows = Vec::new();
+        let mut start = 0;
+        for line in text.split_inclusive('\n') {
+            let end = start + line.trim_end_matches('\n').len();
+            let mut from = start;
+            loop {
+                let mut to = (from + row_bytes).min(end);
+                while !text.is_char_boundary(to) {
+                    to -= 1;
+                }
+                rows.push(from..to);
+                if to >= end {
+                    break;
+                }
+                from = to;
+            }
+            start += line.len();
+        }
+        if rows.is_empty() {
+            rows.push(0..0);
+        }
+        let widest = rows.iter().map(|r| r.len()).max().unwrap_or(0);
+        Self {
+            key: (text.as_ptr() as usize, text.len(), row_bytes),
+            rows,
+            widest,
+            found: None,
+        }
+    }
+
+    /// The rows for `text`, rebuilt only when the text or width changed.
+    pub fn cached<'a>(
+        slot: &'a mut Option<BodyRows>,
+        text: &str,
+        row_bytes: usize,
+    ) -> &'a mut BodyRows {
+        let key = (text.as_ptr() as usize, text.len(), row_bytes);
+        if slot.as_ref().is_none_or(|r| r.key != key) {
+            *slot = Some(BodyRows::new(text, row_bytes));
+        }
+        slot.as_mut().expect("just filled")
+    }
+
+    /// Find `query` in `text`, only when the query changed.
+    pub fn search(&mut self, text: &str, query: Option<&str>) {
+        let query = query.unwrap_or("");
+        if self.found.as_ref().is_none_or(|(q, _)| q != query) {
+            self.found = Some((query.to_string(), widgets::find_all(text, query)));
+        }
+    }
+
+    /// The matches from the last [`Self::search`].
+    pub fn hits(&self) -> &[std::ops::Range<usize>] {
+        self.found.as_ref().map_or(&[], |(_, hits)| hits)
+    }
+
+    /// The row that byte `at` falls on.
+    pub fn row_of(&self, at: usize) -> usize {
+        self.rows
+            .partition_point(|r| r.start <= at)
+            .saturating_sub(1)
+    }
+}
+
+/// The matches that overlap `row`, shifted to start at the row. `hits` is
+/// sorted, so this is a binary search, not a scan of every match.
+fn hits_in(
+    hits: &[std::ops::Range<usize>],
+    row: &std::ops::Range<usize>,
+) -> Vec<std::ops::Range<usize>> {
+    let first = hits.partition_point(|h| h.end <= row.start);
+    hits[first..]
+        .iter()
+        .take_while(|h| h.start < row.end)
+        .map(|h| h.start.max(row.start) - row.start..h.end.min(row.end) - row.start)
+        .collect()
 }
 
 #[cfg(test)]
 mod tests {
-    use super::line_of;
+    use super::{hits_in, BodyRows, ROW_BYTES};
 
     #[test]
-    fn line_of_counts_from_zero_past_every_newline() {
-        let text = "a\nb\nX\n";
-        assert_eq!(line_of(text, 0), 0);
-        assert_eq!(line_of(text, 1), 0, "still on the first line");
-        assert_eq!(line_of(text, 2), 1, "just past the first newline");
-        assert_eq!(line_of(text, 4), 2, "X is on the third line");
-        assert_eq!(line_of(text, text.len()), 3);
+    fn rows_follow_lines_and_cut_long_ones() {
+        let text = format!("a\n\n{}\nz", "é".repeat(ROW_BYTES));
+        let rows = BodyRows::new(&text, ROW_BYTES);
+        let shown: Vec<&str> = rows.rows.iter().map(|r| &text[r.clone()]).collect();
+        assert_eq!(shown[0], "a");
+        assert_eq!(shown[1], "", "empty lines keep their row");
+        assert!(shown[2..shown.len() - 1]
+            .iter()
+            .all(|r| r.len() <= ROW_BYTES));
+        assert_eq!(
+            shown[2..shown.len() - 1].concat(),
+            "é".repeat(ROW_BYTES),
+            "cut on char boundaries, nothing lost"
+        );
+        assert_eq!(*shown.last().unwrap(), "z");
+        assert_eq!(rows.row_of(text.find('z').unwrap()), shown.len() - 1);
+        assert_eq!(rows.row_of(0), 0);
+    }
+
+    #[test]
+    fn hits_are_clipped_to_their_row() {
+        let hits = [0..2, 5..9, 20..22];
+        assert_eq!(hits_in(&hits, &(4..8)), vec![1..4]);
+        assert_eq!(
+            hits_in(&hits, &(10..15)),
+            Vec::<std::ops::Range<usize>>::new()
+        );
+        assert_eq!(hits_in(&hits, &(0..30)), vec![0..2, 5..9, 20..22]);
     }
 }

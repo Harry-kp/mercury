@@ -211,6 +211,7 @@ mod tests {
                 size_bytes: 8,
                 content_type: "application/json".into(),
                 response_type: ResponseType::Json,
+                pretty: None,
             },
             env: Some(".env.dev".into()),
             file: None,

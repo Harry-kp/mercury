@@ -267,9 +267,12 @@ pub struct MercuryApp {
     last_save: f64,
 
     // Response
-    pub response: Option<HttpResponse>,
+    /// Shared, so drawing a frame never copies a multi-megabyte body.
+    pub response: Option<std::sync::Arc<HttpResponse>>,
     pub request_error: Option<String>,
     pub formatted_body: Option<String>,
+    /// Row index of the body on screen (see `response::BodyRows`).
+    pub body_rows: Option<super::response::BodyRows>,
     pub raw_view: bool,
     /// What to find in the response body, and which match is current. Empty
     /// while the find bar is closed.
@@ -353,6 +356,7 @@ impl MercuryApp {
             response: None,
             request_error: None,
             formatted_body: None,
+            body_rows: None,
             raw_view: false,
             find: None,
             find_at: 0,
@@ -709,6 +713,7 @@ impl MercuryApp {
         self.response_env = None;
         self.request_error = None;
         self.formatted_body = None;
+        self.body_rows = None;
         self.response_tab = ResponseTab::Body;
     }
 
@@ -930,7 +935,7 @@ impl MercuryApp {
                 // a green tick next to "404 Not Found" reads as success
                 let failed = response.status >= 400;
                 if self.sent_file.take() == self.current_file {
-                    self.response = Some(response);
+                    self.response = Some(std::sync::Arc::new(response));
                     self.response_env = self.sent_env.take();
                     self.request_error = None;
                     // the pane puts the status badge at the top of the
@@ -964,6 +969,7 @@ impl MercuryApp {
             }
         }
         self.formatted_body = None;
+        self.body_rows = None;
     }
 
     pub fn ensure_history_loaded(&mut self) {
@@ -988,7 +994,7 @@ impl MercuryApp {
                         self.load_request(entry.request, None);
                     }
                 }
-                self.response = Some(entry.response);
+                self.response = Some(std::sync::Arc::new(entry.response));
                 self.response_env = entry.env;
                 self.show_history = false;
             }

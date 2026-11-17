@@ -237,28 +237,32 @@ fn json_value_color(token: &str) -> Color32 {
 
 /// Highlight JSON. Text that doesn't start with `{`/`[` is returned plain.
 pub fn json_job(text: &str, wrap_width: f32) -> LayoutJob {
+    let trimmed = text.trim_start();
+    if !trimmed.starts_with('{') && !trimmed.starts_with('[') {
+        let mut job = LayoutJob::default();
+        job.wrap.max_width = wrap_width;
+        push(&mut job, text, theme().text);
+        return job;
+    }
+    json_line_job(text, wrap_width)
+}
+
+/// JSON colouring that needs no surrounding context, so it works on a
+/// single line of a pretty-printed body (the response view colours only the
+/// rows on screen): a string followed by `:` is a key.
+pub fn json_line_job(text: &str, wrap_width: f32) -> LayoutJob {
     let t = theme();
     let mut job = LayoutJob::default();
     job.wrap.max_width = wrap_width;
-    let trimmed = text.trim_start();
-    if !trimmed.starts_with('{') && !trimmed.starts_with('[') {
-        push(&mut job, text, t.text);
-        return job;
-    }
-
     let mut token = String::new();
-    let mut in_string = false;
-    let mut escaped = false;
-    let mut containers: Vec<char> = Vec::new(); // '{' or '['
-    let mut is_key = false;
+    let (mut in_string, mut escaped) = (false, false);
     let flush = |job: &mut LayoutJob, token: &mut String| {
         if !token.is_empty() {
             push(job, token, json_value_color(token));
             token.clear();
         }
     };
-
-    for ch in text.chars() {
+    for (i, ch) in text.char_indices() {
         if in_string {
             token.push(ch);
             if escaped {
@@ -266,6 +270,7 @@ pub fn json_job(text: &str, wrap_width: f32) -> LayoutJob {
             } else if ch == '\\' {
                 escaped = true;
             } else if ch == '"' {
+                let is_key = text[i + 1..].trim_start().starts_with(':');
                 let color = if is_key {
                     t.syntax.key
                 } else {
@@ -285,17 +290,6 @@ pub fn json_job(text: &str, wrap_width: f32) -> LayoutJob {
             }
             '{' | '[' | '}' | ']' | ':' | ',' => {
                 flush(&mut job, &mut token);
-                match ch {
-                    '{' | '[' => containers.push(ch),
-                    '}' | ']' => {
-                        containers.pop();
-                    }
-                    _ => {}
-                }
-                is_key = match ch {
-                    ':' => false,
-                    _ => containers.last() == Some(&'{'),
-                };
                 push(&mut job, ch.encode_utf8(&mut [0; 4]), t.syntax.punct);
             }
             c if c.is_whitespace() => {
@@ -1743,6 +1737,20 @@ mod tests {
         );
         assert!(runs.contains(&("1", syntax.number)));
         assert!(runs.contains(&("true", syntax.boolean)));
+    }
+
+    #[test]
+    fn json_lines_are_coloured_without_the_rest_of_the_document() {
+        // one row of a pretty-printed body, as the response view draws it
+        let syntax = &theme().syntax;
+        let job = json_line_job(r#"    "id": 1042, "name": "Ada","#, f32::INFINITY);
+        let runs = colored_runs(&job);
+        assert!(runs.contains(&("\"id\"", syntax.key)), "{runs:?}");
+        assert!(runs.contains(&("1042", syntax.number)));
+        assert!(runs.contains(&("\"name\"", syntax.key)));
+        assert!(runs.contains(&("\"Ada\"", syntax.string)));
+        let value_only = json_line_job(r#"      "platform","#, f32::INFINITY);
+        assert!(colored_runs(&value_only).contains(&("\"platform\"", syntax.string)));
     }
 
     #[test]

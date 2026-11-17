@@ -99,7 +99,7 @@ Mercury reloads the open request when its file changes, **unless you have unsave
 
 ### A large response isn't displayed
 
-Text bodies over 100 KB aren't shown inline. Click **Save** and open the file in an editor. Responses that declare a `Content-Length` over 10 MB aren't downloaded. See [Performance](/docs/performance#response-size-limits).
+Text bodies of any size are shown inline and scroll smoothly. Responses that declare a `Content-Length` over 10 MB aren't downloaded. See [Performance](/docs/performance#response-size-limits).
 
 ## Contributing
 
