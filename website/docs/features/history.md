@@ -6,7 +6,7 @@ sidebar_position: 5
 
 # Request History
 
-Every request that gets a response is saved to history together with that response. Requests that fail (timeouts, connection errors) aren't recorded.
+Every request you send is saved to history together with its response. A request that gets no response (a timeout, a refused connection, a bad URL) is saved too, marked **Failed**; opening it shows the error again, with **Retry**.
 
 ## Opening history
 

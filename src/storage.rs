@@ -215,6 +215,7 @@ mod tests {
             },
             env: Some(".env.dev".into()),
             file: None,
+            error: None,
         }
     }
 
@@ -241,6 +242,7 @@ mod tests {
         // 0.4 added which environment and file a send came from
         assert_eq!(entries[0].env, None);
         assert_eq!(entries[0].file, None);
+        assert_eq!(entries[0].error, None);
     }
 
     fn history() -> History {

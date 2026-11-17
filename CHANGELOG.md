@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Failed sends are in History**, marked **Failed**: timeouts, refused connections and bad URLs used to leave no trace, though they're the attempts you most want to look at again. Opening one shows the error with **Retry**. Older history files load as before.
 - `{{variables}}` in the URL bar are coloured by whether the selected environment defines them, as in Bruno and Postman.
 - **Send a sample request** under **Try this**, before you've sent anything: one click opens a new request to a free public JSON API and sends it, so a first run shows a real response without needing an API of your own (Bruno ships a sample collection for the same reason).
 - **Revert to saved** (URL-bar `⋯`, `⌘ K`) puts the open file back the way it was when you opened it. Autosave writes every edit within seconds, so this was the missing undo.

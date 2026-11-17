@@ -117,6 +117,10 @@ pub struct HistoryEntry {
     /// that file instead of a detached copy. `None` for unsaved requests.
     #[serde(default)]
     pub file: Option<String>,
+    /// Why the send failed (no response: connection refused, timeout, bad
+    /// URL). `response` is then [`HttpResponse::failed`]. Added in 0.4.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
 }
 
 /// What the history list needs in memory; full entries load on click.

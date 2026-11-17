@@ -241,11 +241,16 @@ impl MercuryApp {
                                     if let Some(env) = &entry.env {
                                         ui.label(faint(env).color(t.env(env)));
                                     }
-                                    ui.label(faint(format!("{} ms", entry.duration_ms)));
-                                    ui.label(
-                                        muted(entry.status.to_string())
-                                            .color(t.status(entry.status)),
-                                    );
+                                    if entry.status == 0 {
+                                        // no response at all (see HttpResponse::failed)
+                                        ui.label(muted("Failed").color(t.error));
+                                    } else {
+                                        ui.label(faint(format!("{} ms", entry.duration_ms)));
+                                        ui.label(
+                                            muted(entry.status.to_string())
+                                                .color(t.status(entry.status)),
+                                        );
+                                    }
                                 },
                             );
                         },

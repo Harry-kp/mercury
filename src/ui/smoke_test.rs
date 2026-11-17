@@ -763,6 +763,21 @@ fn open_send_edit_and_save() {
     assert_eq!(first.state().current_file, None);
     drop(first);
 
+    // a send that gets no response is in history too, and reopening it
+    // shows the error again (failed sends used to vanish)
+    harness.state_mut().load_request(Default::default(), None);
+    harness.state_mut().url = "http://127.0.0.1:1/down".into();
+    harness.state_mut().send_request();
+    wait_for_response(&mut harness);
+    let failed = harness.state().history.last().unwrap().clone();
+    assert_eq!(
+        (failed.status, failed.url.as_str()),
+        (0, "http://127.0.0.1:1/down")
+    );
+    harness.state_mut().request_error = None;
+    harness.state_mut().open_history_entry(failed.timestamp);
+    assert!(harness.state().request_error.is_some());
+
     // a header switched off in the editor survives save + reopen (the file
     // used to keep only enabled headers, so unchecking one deleted it)
     harness.state_mut().open_file(&file);
