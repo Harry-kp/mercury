@@ -680,7 +680,9 @@ impl MercuryApp {
         let (Some(root), Some(name)) = (&self.workspace, self.env_name()) else {
             return;
         };
-        match fs::read_to_string(root.join(name)) {
+        match workspace::env_path(root, name)
+            .and_then(|p| fs::read_to_string(p).map_err(|e| e.to_string()))
+        {
             Ok(content) => self.env_vars = vars::parse_env(&content),
             Err(e) => self.notify(format!("Could not read {name}: {e}"), true),
         }
@@ -1395,7 +1397,7 @@ impl MercuryApp {
             Dialog::EditEnv(file) => {
                 let root = self.workspace.clone().ok_or("No folder is open")?;
                 let text = kv::format_lines(&kv::parse_lines(&self.env_edit_text, "="), "=");
-                fs::write(root.join(&file), format!("{text}\n"))
+                fs::write(workspace::env_path(&root, &file)?, format!("{text}\n"))
                     .map_err(|e| format!("Could not save {file}: {e}"))?;
                 self.refresh_env_files();
                 self.request_error = None;
@@ -1426,7 +1428,12 @@ impl MercuryApp {
         let Some(root) = &self.workspace else {
             return;
         };
-        self.env_edit_text = fs::read_to_string(root.join(file)).unwrap_or_default();
+        match workspace::env_path(root, file)
+            .and_then(|p| fs::read_to_string(p).map_err(|e| e.to_string()))
+        {
+            Ok(text) => self.env_edit_text = text,
+            Err(e) => return self.notify(e, true),
+        }
         self.env_edit_bulk = false;
         self.dialog = Some(Dialog::EditEnv(file.to_string()));
     }

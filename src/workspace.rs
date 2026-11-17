@@ -99,12 +99,16 @@ pub fn all_requests(root: &Path) -> Vec<CollectionItem> {
 }
 
 /// `.env*` files in the workspace root, sorted.
+/// Symlinks are left out: a folder from someone else could link `.env.dev`
+/// to `~/.aws/credentials` (whose `key = value` lines parse as variables a
+/// request could then send), or to a file that editing it would overwrite.
 pub fn env_files(root: &Path) -> Vec<String> {
     let mut names: Vec<String> = fs::read_dir(root)
         .into_iter()
         .flatten()
         .flatten()
-        .filter(|e| e.path().is_file())
+        // the entry's own type: not followed through a link
+        .filter(|e| e.file_type().is_ok_and(|t| t.is_file()))
         .map(|e| file_name(&e.path()))
         .filter(|n| n.starts_with(".env"))
         .collect();
@@ -150,6 +154,21 @@ pub fn create_request(parent: &Path, name: &str, content: &str) -> Result<PathBu
     ensure_free(&path)?;
     fs::write(&path, content).map_err(|e| format!("Could not create '{name}': {e}"))?;
     Ok(path)
+}
+
+/// The path of environment `name`, refusing a symlink (see [`env_files`]);
+/// checked at every read and write, not only when listing.
+pub fn env_path(root: &Path, name: &str) -> Result<std::path::PathBuf, String> {
+    if !name.starts_with(".env") || name.contains(['/', '\\']) || name.contains("..") {
+        return Err(format!("{name} isn't an environment file name"));
+    }
+    let path = root.join(name);
+    match fs::symlink_metadata(&path) {
+        Ok(meta) if meta.file_type().is_symlink() => Err(format!(
+            "{name} is a link to another file, so Mercury won't use it"
+        )),
+        _ => Ok(path),
+    }
 }
 
 /// A new `.env.<name>` in the workspace root, holding `content`. Accepts
@@ -284,6 +303,21 @@ mod tests {
         }
         assert_eq!(count_contents(root), (3, 2));
         assert_eq!(count_contents(&root.join("a/b")), (1, 1));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn environment_files_are_never_symlinks() {
+        let dir = TempDir::new().unwrap();
+        let secret = dir.path().join("credentials");
+        fs::write(&secret, "aws_secret_access_key = abc\n").unwrap();
+        fs::write(dir.path().join(".env.dev"), "A=1").unwrap();
+        std::os::unix::fs::symlink(&secret, dir.path().join(".env.prod")).unwrap();
+        assert_eq!(env_files(dir.path()), vec![".env.dev"]);
+        assert!(env_path(dir.path(), ".env.prod")
+            .unwrap_err()
+            .contains("link"));
+        assert!(env_path(dir.path(), ".env.dev").is_ok());
     }
 
     #[test]
