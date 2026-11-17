@@ -507,7 +507,7 @@ fn icon_button_colored(ui: &mut Ui, what: Icon, tooltip: &str, color: Color32) -
 pub enum Button {
     /// Filled accent. Exactly one is on screen at a time (Send, Create).
     Primary,
-    /// Bordered, low emphasis (Cancel, Retry, Open a folder).
+    /// Bordered, low emphasis (Cancel, Retry, Open folder…).
     Ghost,
     /// Filled error, for a destructive confirm.
     Danger,
@@ -1611,7 +1611,8 @@ pub fn panel_header(ui: &mut Ui, title: &str, trailing: impl FnOnce(&mut Ui)) {
     egui::containers::Sides::new().show(
         ui,
         |ui| {
-            ui.add_space(Space::MD + 11.0 + Space::SM - ui.spacing().item_spacing.x);
+            // the left edge of a row's contents (its padding)
+            ui.add_space(Space::MD);
             ui.label(section_label(title));
         },
         |ui| {

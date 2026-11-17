@@ -24,7 +24,7 @@ my-api/                 ← workspace (the folder you open)
 
 ## Opening a workspace
 
-Press `⌘ O`, choose **Open folder…** from the workspace menu, or click **Open a folder** in the empty sidebar. Names you type are file names, not paths: `/` and `..` are rejected so nothing is written outside the folder you picked. If the workspace folder is deleted while Mercury has it open, it closes the workspace and keeps whatever you were editing as an unsaved request. Mercury remembers the workspace and reopens it on the next launch.
+Press `⌘ O`, choose **Open folder…** from the workspace menu, or click **Open folder…** in the empty sidebar. Names you type are file names, not paths: `/` and `..` are rejected so nothing is written outside the folder you picked. If the workspace folder is deleted while Mercury has it open, it closes the workspace and keeps whatever you were editing as an unsaved request. Mercury remembers the workspace and reopens it on the next launch.
 
 ## The sidebar tree
 

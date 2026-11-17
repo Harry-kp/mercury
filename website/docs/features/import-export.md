@@ -10,7 +10,7 @@ Mercury imports Postman and Insomnia exports and cURL commands, and it can copy 
 
 ## Where imports go
 
-Choose **Import from Postman…** or **Import from Insomnia…** from the workspace menu in the top bar. The empty sidebar also has **Import from ...** links. Pick the export file, and then:
+Choose **Import from Postman…** or **Import from Insomnia…** from the workspace menu in the top bar. With no folder open, the sidebar also lists **Postman collection** and **Insomnia export** under **Import**. Pick the export file, and then:
 
 - if a workspace is open, the requests are written **into that workspace**
 - if no workspace is open, Mercury asks for a folder to write to, then opens it as the workspace
