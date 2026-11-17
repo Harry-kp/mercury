@@ -40,7 +40,8 @@ fn scan_dir(dir: &Path, expanded: &HashSet<PathBuf>, methods: bool) -> Vec<Colle
             (path, dir)
         })
         .collect();
-    paths.sort();
+    // the way a file manager lists them: "alpha" before "Zeta"
+    paths.sort_by_cached_key(|(path, _)| (file_name(path).to_lowercase(), path.clone()));
 
     let mut folders = Vec::new();
     let mut requests = Vec::new();
@@ -73,14 +74,14 @@ pub fn request_method(path: &Path) -> Option<crate::model::HttpMethod> {
     RequestFile::from_json(&content).ok().map(|r| r.method)
 }
 
+/// Deep enough for any real collection; stops runaway symlink loops.
+pub const MAX_DEPTH: usize = 16;
+
 /// Every request in the workspace, depth-first — what the command palette
 /// searches. Unlike [`scan`] this does not stop at collapsed folders, and it
 /// leaves `method` as `None`: reading every file took ~50 ms at 2,000
 /// requests. Use [`request_method`] for the few on screen.
 pub fn all_requests(root: &Path) -> Vec<CollectionItem> {
-    /// Deep enough for any real collection; stops runaway symlink loops.
-    const MAX_DEPTH: usize = 16;
-
     fn walk(dir: &Path, depth: usize, out: &mut Vec<CollectionItem>) {
         if depth == 0 {
             return;
@@ -478,6 +479,22 @@ mod tests {
             ));
             assert_eq!(all_requests(root).len(), 4, "a.json, broken, both get.json");
         }
+    }
+
+    /// Byte order put every capitalised name above every lower-case one.
+    #[test]
+    fn scan_sorts_names_ignoring_case() {
+        let dir = TempDir::new().unwrap();
+        for name in ["Zeta.json", "alpha.json", "Beta.json"] {
+            fs::write(dir.path().join(name), "").unwrap();
+        }
+        let names: Vec<String> = scan(dir.path(), &HashSet::new())
+            .into_iter()
+            .map(|item| match item {
+                CollectionItem::Request { name, .. } | CollectionItem::Folder { name, .. } => name,
+            })
+            .collect();
+        assert_eq!(names, ["alpha.json", "Beta.json", "Zeta.json"]);
     }
 
     #[test]

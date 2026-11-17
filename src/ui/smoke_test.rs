@@ -272,7 +272,33 @@ fn open_send_edit_and_save() {
             .is_some(),
         "the sidebar filter must search the whole workspace, not just open folders"
     );
+    // a folder found by its name shows what is in it, not an empty folder
+    harness.state_mut().search = "invoices".into();
+    harness.run_steps(3);
+    assert!(
+        harness
+            .query_by_role_and_label(accesskit::Role::Button, "get-invoice")
+            .is_some(),
+        "a folder that matches the filter must show its requests"
+    );
+    // nothing matching says so, instead of an empty sidebar
+    harness.state_mut().search = "nothing-here".into();
+    harness.run_steps(3);
+    harness.get_by_label("No requests match \"nothing-here\"");
     harness.state_mut().search.clear();
+    harness.run_steps(2);
+
+    // Opening a request whose folder is already open must not rescan the
+    // workspace, which reads every visible request file: on every click.
+    let unseen = ws.join("users/unseen.json");
+    std::fs::write(&unseen, r#"{"method":"GET","url":"u"}"#).unwrap();
+    harness.state_mut().open_file(&file);
+    let listed = |tree: &[crate::model::CollectionItem]| format!("{tree:?}").contains("unseen");
+    assert!(
+        !listed(&harness.state().tree),
+        "opening a request rescanned the workspace"
+    );
+    std::fs::remove_file(&unseen).unwrap();
     harness.run_steps(2);
 
     // history records the request that was sent, even if the form changes

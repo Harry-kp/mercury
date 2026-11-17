@@ -28,7 +28,7 @@ Press `⌘ O`, choose **Open folder…** from the workspace menu, or click **Ope
 
 ## The sidebar tree
 
-- Folders come first, then requests, each sorted by name.
+- Folders come first, then requests, each sorted by name, ignoring case.
 - Only `.json` files are listed. Other files are ignored.
 - Hidden files and folders (names starting with `.`) are skipped.
 - Each request shows its method. If a `.json` file isn't a valid request, it's listed without a method and shows an error when you open it.
@@ -38,7 +38,7 @@ Unsaved requests you've sent appear above the tree under **Unsaved** (up to 50).
 
 ## Searching
 
-The filter box at the top of the sidebar narrows the tree by file and folder name. It searches the whole workspace, including folders you have never opened, and matching folders expand while you type. It is case-insensitive; `Esc` clears it.
+The filter box at the top of the sidebar narrows the tree by file and folder name. It searches the whole workspace, including folders you have never opened, and matching folders expand while you type. A folder that matches by name shows everything in it. It is case-insensitive; `Esc` clears it.
 
 To jump straight to a request without touching the tree, press `⌘ K` and type its name. The command palette searches every request in the workspace, however deeply nested, plus every command Mercury has.
 
