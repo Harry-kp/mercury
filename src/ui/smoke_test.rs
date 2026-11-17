@@ -419,6 +419,28 @@ fn open_send_edit_and_save() {
     // (the warning line goes with it, so the tabs move up: draw that first)
     harness.run_steps(2);
 
+    // Hovering a {{variable}} in the URL shows its value, even while typing there.
+    let typed = harness.state().url.clone();
+    harness.state_mut().url = "{{BASE}}/x".into();
+    harness.run_steps(2);
+    let url_rect = harness
+        .get_by_role_and_label(accesskit::Role::TextInput, "URL")
+        .rect();
+    harness.event(egui::Event::PointerMoved(
+        url_rect.left_center() + egui::vec2(12.0, 0.0),
+    ));
+    harness.run_steps(60);
+    assert!(
+        harness
+            .query_all_by_label_contains("{{BASE}} = http://")
+            .next()
+            .is_some(),
+        "hovering {{{{BASE}}}} must show its value"
+    );
+    harness.event(egui::Event::PointerGone);
+    harness.state_mut().url = typed;
+    harness.run_steps(2);
+
     // The auth type is picked inside the Auth tab, from visible options.
     harness
         .get_by_role_and_label(accesskit::Role::Button, "Auth")
@@ -455,20 +477,6 @@ fn open_send_edit_and_save() {
             .contains("Authorization: Bearer tok-123"),
         "switching auth type and back lost the token: {}",
         harness.state().headers_text
-    );
-
-    // Copy as cURL has a visible door: the request's "…" menu.
-    harness
-        .get_by_role_and_label(accesskit::Role::Button, "Request actions")
-        .click();
-    harness.run_steps(2);
-    harness
-        .get_by_role_and_label(accesskit::Role::Button, "Copy as cURL")
-        .click();
-    harness.run_steps(2);
-    assert_eq!(
-        harness.state().toast.as_ref().map(|t| t.text.as_str()),
-        Some("Copied as cURL")
     );
 
     // ⌘⇧C as the real app receives it: egui-winit turns any ⌘C, with or
@@ -617,8 +625,11 @@ fn open_send_edit_and_save() {
         harness.step();
     }
     assert!(std::fs::read_to_string(&file).unwrap().contains("oops"));
+    // the open request's actions are on its sidebar row
     harness
-        .get_by_role_and_label(accesskit::Role::Button, "Request actions")
+        .query_all_by_role_and_label(accesskit::Role::Button, "More actions")
+        .last()
+        .expect("the open request's row shows its actions")
         .click();
     harness.run_steps(2);
     harness

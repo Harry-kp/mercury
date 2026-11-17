@@ -69,7 +69,7 @@ Authorization: Bearer {{API_TOKEN}}
 - In the URL bar, `{{variables}}` are coloured: violet when the selected environment defines them, amber when it doesn't.
 - If any variable in the request is undefined, a line under the URL bar names it and the environment it's missing from, and the tab that holds it shows a warning.
 - The **Params** and **Headers** tabs show a chip for each variable they use: ✓ if it's defined, ✗ if it isn't. Hover a chip to see its value.
-- Hover the URL bar to see the URL with every variable filled in.
+- Hover a `{{variable}}` in the URL bar to see its value and which environment it comes from. Hover anywhere else in the URL to see it with every variable filled in.
 
 ## Creating and editing environments
 

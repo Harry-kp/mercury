@@ -76,8 +76,7 @@ impl MercuryApp {
                         86.0
                     } else {
                         widgets::button_width(ui, &widgets::send_label(target.as_deref()))
-                    } + Layout::ICON_BUTTON
-                        + Space::SM;
+                    };
                     let before = self.url.clone();
                     // {{variables}} stand out: accent when the environment
                     // defines them, warning when it doesn't
@@ -104,21 +103,41 @@ impl MercuryApp {
                         put(&mut job, &text[at..], t.text);
                         ui.fonts_mut(|f| f.layout_job(job))
                     };
-                    let url = ui.add(
-                        egui::TextEdit::singleline(&mut self.url)
-                            .layouter(&mut layouter)
-                            .hint_text(muted("https://api.example.com/users"))
-                            .desired_width(
-                                (ui.available_width() - send_width - Space::MD).max(72.0),
-                            )
-                            .frame(false)
-                            .font(mono(Text::BODY))
-                            .id(egui::Id::new("url_bar")),
-                    );
+                    let out = egui::TextEdit::singleline(&mut self.url)
+                        .layouter(&mut layouter)
+                        .hint_text(muted("https://api.example.com/users"))
+                        .desired_width((ui.available_width() - send_width - Space::MD).max(72.0))
+                        .frame(false)
+                        .font(mono(Text::BODY))
+                        .id(egui::Id::new("url_bar"))
+                        .show(ui);
+                    let url = out.response;
                     widgets::name(&url, "URL");
-                    // what {{variables}} resolve to, without sending
+                    // hovering a {{variable}} shows its value; elsewhere, the resolved URL
+                    let hovered_var = url.hover_pos().and_then(|p| {
+                        let rel = p - out.galley_pos;
+                        out.galley.rect.contains(rel.to_pos2()).then(|| {
+                            vars::var_at(&self.url, out.galley.cursor_from_pos(rel).index)
+                        })?
+                    });
                     let resolved = vars::substitute(&self.url, &self.env_vars);
-                    let url = if resolved != self.url && !url.has_focus() {
+                    let url = if let Some(name) = hovered_var {
+                        let tip = match (self.env_vars.get(&name), self.env_name()) {
+                            (None, _) if vars::dynamic(&name).is_some() => {
+                                format!("{{{{{name}}}}}: a fresh value at every send")
+                            }
+                            (Some(v), Some(env)) if v.is_empty() => {
+                                format!("{{{{{name}}}}} is empty in {env}")
+                            }
+                            (Some(v), Some(env)) => format!(
+                                "{{{{{name}}}}} = {}\nfrom {env}",
+                                widgets::truncate(v, 200)
+                            ),
+                            (_, Some(env)) => format!("{{{{{name}}}}} isn't defined in {env}"),
+                            _ => format!("{{{{{name}}}}}: no environment is selected"),
+                        };
+                        url.on_hover_text_at_pointer(tip)
+                    } else if resolved != self.url && !url.has_focus() {
                         url.on_hover_text(resolved)
                     } else {
                         url
@@ -127,7 +146,6 @@ impl MercuryApp {
                         self.on_url_edited(&before);
                     }
                     ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
-                        self.request_actions(ui);
                         if send_button(ui, executing, target.as_deref()).clicked() {
                             if executing {
                                 self.cancel_request();
@@ -139,34 +157,6 @@ impl MercuryApp {
                 });
             });
         self.undefined_line(ui);
-    }
-
-    /// "…" at the end of the URL bar: the request's own actions, so none of
-    /// them is reachable only through a shortcut.
-    fn request_actions(&mut self, ui: &mut Ui) {
-        let trigger = icon_button(ui, Icon::Ellipsis, "Request actions");
-        let saved = self.current_file.is_some();
-        let mut picked = None;
-        popup_menu(ui, &trigger, Layout::MENU_WIDTH, |ui| {
-            if menu_item(ui, Some(Icon::Terminal), "Copy as cURL", "⌘ ⇧ C") {
-                picked = Some(Action::CopyCurl);
-            }
-            if menu_item(ui, Some(Icon::Sparkle), "Format body", "") {
-                picked = Some(Action::FormatBody);
-            }
-            if saved {
-                widgets::divider(ui);
-                if menu_item(ui, Some(Icon::File), "Duplicate request", "") {
-                    picked = Some(Action::DuplicateRequest);
-                }
-                if menu_item(ui, Some(Icon::Clock), "Revert to saved", "") {
-                    picked = Some(Action::RevertFile);
-                }
-            }
-        });
-        if let Some(action) = picked {
-            self.run(action);
-        }
     }
 
     /// Undefined variables, said in words under the URL bar. An amber border

@@ -7,7 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Hover a `{{variable}}` in the URL bar to see its value** and the environment it comes from, even while you type. Before, only the Headers and Body chips showed values, so you opened the `.env` file to check.
+- **Import several exports at once.** The Postman and Insomnia pickers take more than one file, so a collection and its environment exports come in together.
+
 ### Changed
+- **The `⋯` beside Send is gone.** Copy as cURL and Revert to saved are on the open request's `⋯` in the sidebar (and in `⌘ K`); Format is in the Body tab, where it already was.
 - The install instructions include `brew trust --cask harry-kp/tap/mercury`: Homebrew 7 refuses casks from untrusted taps, so the one-line install failed.
 
 ## [0.4.3] - 2026-11-17

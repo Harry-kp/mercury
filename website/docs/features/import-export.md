@@ -10,7 +10,7 @@ Mercury imports Postman and Insomnia exports and cURL commands, and it can copy 
 
 ## Where imports go
 
-Choose **Import from Postman…** or **Import from Insomnia…** from the workspace menu in the top bar. With no folder open, the sidebar also lists **Postman collection** and **Insomnia export** under **Import**. Pick the export file, and then:
+Choose **Import from Postman…** or **Import from Insomnia…** from the workspace menu in the top bar. With no folder open, the sidebar also lists **Postman collection** and **Insomnia export** under **Import**. Pick the export file (or several at once: a Postman collection and its environment exports), and then:
 
 - if a workspace is open, the requests are written into it, in a **new folder named after the collection** (`acme-api/`), so they can't mix with or replace your own
 - if no workspace is open, Mercury asks for a folder to write to and opens it as the workspace; an empty folder gets the requests directly
@@ -21,7 +21,7 @@ File and folder names are sanitized: they're lowercased, and spaces and characte
 
 ## Postman
 
-Export the collection from Postman as **Collection v2.1** (JSON). Your environments are separate exports in Postman (**Environments → ⋯ → Export**): import each one the same way and it becomes `.env.<name>`. Disabled variables are left out.
+Export the collection from Postman as **Collection v2.1** (JSON). Your environments are separate exports in Postman (**Environments → ⋯ → Export**): select them together with the collection, or import each one later, and each becomes `.env.<name>`. Disabled variables are left out.
 
 | Postman | Mercury |
 |---------|---------|

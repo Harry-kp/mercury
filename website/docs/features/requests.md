@@ -78,7 +78,7 @@ The Auth tab edits the `Authorization` header. See [Authentication](/docs/featur
 - `⌘ S`, or **Save…** next to the breadcrumb, saves the request. If it isn't saved yet, Mercury asks for a name and creates `<name>.json` in the folder of the request you opened last (or the folder you clicked last, whichever came later), else in the workspace root. If no workspace is open, it asks you to open a folder first.
 - Right-click a folder and choose **New Request** to save the current editor contents into that folder.
 - Once a request has a file, Mercury saves it automatically every 5 seconds while there are unsaved changes, when you switch to another request, and when you quit. A dot after the name in the breadcrumb, and **Unsaved changes** in the status bar, mean the latest edits aren't on disk yet; the status bar says **Saved** once they are.
-- **Revert to saved** (in the `⋯` at the end of the URL bar, or `⌘ K`) puts the file back the way it was when you opened it, undoing edits that autosave has already written.
+- **Revert to saved** (in the open request's `⋯` in the sidebar, or `⌘ K`) puts the file back the way it was when you opened it, undoing edits that autosave has already written.
 - `⌘ N` starts a new, empty, unsaved request.
 
 If a response arrives after you have opened a different request, it is recorded in [history](/docs/features/history) rather than shown under the request you are now looking at.
@@ -97,7 +97,7 @@ Below that are three tabs:
 
 On the Body tab, the **Pretty / Raw** switch chooses between the formatted body and the exact bytes (`⌘ R`), and the copy icon copies the whole body. The search icon (or `⌘ F`) opens a find bar over the body: every match is highlighted, the bar counts them, `⏎` steps to the next and `Esc` closes it. You can also select part of the body and copy that. For images and other binary content, the panel offers a **Save response…** button instead. Text bodies of any size up to the 10 MB download limit are shown; long lines of raw text wrap to the panel. In the top row, the download icon saves the body to a file and the clock icon opens the [history list](/docs/features/history). The clock is there before anything has been sent, too.
 
-The `⋯` at the end of the URL bar holds **Copy as cURL** (`⌘ Shift C`) and **Format body**.
+**Copy as cURL** is `⌘ Shift C`, `⌘ K`, or the open request's `⋯` in the sidebar. **Format** is in the Body tab.
 
 How the body is displayed depends on its type:
 
@@ -139,7 +139,9 @@ Hover a request in the sidebar and click `⋯` (it stays visible on the open req
 
 | Action | What it does |
 |--------|--------------|
+| **Copy as cURL** | The open request, as a `curl` command (`⌘ Shift C`) |
 | **Duplicate** | Copies `name.json` to `name_copy1.json` (or the next free number) |
+| **Revert to saved** | The open request only: undoes edits autosave has written since you opened it |
 | **Rename** | Renames the file; `.json` is added if you leave it off. |
 | **Delete** | Deletes the file permanently, after you confirm |
 | **Copy Path** | Copies the file's full path |

@@ -43,6 +43,18 @@ pub fn for_each_var(text: &str, mut f: impl FnMut(&str, std::ops::Range<usize>))
     }
 }
 
+/// The `{{name}}` under character `char_index` (what a text galley's cursor counts).
+pub fn var_at(text: &str, char_index: usize) -> Option<String> {
+    let byte = text.char_indices().nth(char_index)?.0;
+    let mut hit = None;
+    for_each_var(text, |name, range| {
+        if range.contains(&byte) {
+            hit = Some(name.to_string());
+        }
+    });
+    hit
+}
+
 /// Postman's built-in variables, which imported collections use as they
 /// are: a fresh value at every send. `None` for any other name.
 pub fn dynamic(name: &str) -> Option<String> {
@@ -132,6 +144,17 @@ mod tests {
 
     fn vars() -> HashMap<String, String> {
         parse_env("host=api.example.com\ntoken=abc123")
+    }
+
+    #[test]
+    fn var_at_finds_the_variable_under_a_character() {
+        let url = "é{{ host }}/x/{{id}}";
+        assert_eq!(var_at(url, 0), None);
+        assert_eq!(var_at(url, 1).as_deref(), Some("host"));
+        assert_eq!(var_at(url, 10).as_deref(), Some("host"));
+        assert_eq!(var_at(url, 11), None);
+        assert_eq!(var_at(url, 16).as_deref(), Some("id"));
+        assert_eq!(var_at(url, 99), None);
     }
 
     #[test]

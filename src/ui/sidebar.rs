@@ -309,8 +309,16 @@ impl MercuryApp {
 
     fn request_menu(&mut self, ui: &mut Ui, name: &str, path: &Path) {
         ui.set_max_width(Layout::MENU_WIDTH);
+        // the open request's actions live on its row, not beside Send
+        let open = self.current_file.as_deref() == Some(path);
+        if open && menu_item(ui, Some(Icon::Terminal), "Copy as cURL", "⌘ ⇧ C") {
+            self.run(Action::CopyCurl);
+        }
         if menu_item(ui, Some(Icon::File), "Duplicate", "") {
             self.duplicate(path);
+        }
+        if open && menu_item(ui, Some(Icon::Clock), "Revert to saved", "") {
+            self.run(Action::RevertFile);
         }
         self.common_menu(ui, name, path);
     }
