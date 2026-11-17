@@ -53,6 +53,8 @@ pub struct Theme {
     pub error: Color32,
 
     pub shadow: Color32,
+    /// The dimming behind a modal.
+    pub backdrop: Color32,
     pub methods: [Color32; 9],
     pub syntax: Syntax,
 }
@@ -90,6 +92,7 @@ pub const DARK: Theme = Theme {
     error: rgb(0xFB7185),
 
     shadow: Color32::from_black_alpha(140),
+    backdrop: Color32::from_black_alpha(110),
     methods: [
         rgb(0x4ADE80), // GET
         rgb(0x818CF8), // POST
@@ -139,6 +142,7 @@ pub const LIGHT: Theme = Theme {
     error: rgb(0xBE123C),
 
     shadow: Color32::from_black_alpha(30),
+    backdrop: Color32::from_black_alpha(45),
     methods: [
         rgb(0x15803D), // GET
         rgb(0x4338CA), // POST
@@ -297,7 +301,7 @@ impl Layout {
     pub const TREE_INDENT: f32 = 14.0;
     pub const MODAL_WIDTH: f32 = 440.0;
     pub const PALETTE_WIDTH: f32 = 560.0;
-    pub const MENU_WIDTH: f32 = 200.0;
+    pub const MENU_WIDTH: f32 = 224.0;
     /// Square hit area of an icon button.
     pub const ICON_BUTTON: f32 = 24.0;
     pub const CHIP_HEIGHT: f32 = 26.0;
@@ -305,6 +309,8 @@ impl Layout {
     /// line instead of being drawn on top of the tabs.
     pub const REQUEST_TABS_MIN: f32 = 470.0;
     pub const RESPONSE_TABS_MIN: f32 = 400.0;
+    /// Below this a History row shows only status and time beside the URL.
+    pub const HISTORY_DETAILS_MIN: f32 = 360.0;
     pub const KEY_FIELD_WIDTH: f32 = 148.0;
     pub const FIND_FIELD_WIDTH: f32 = 180.0;
 }

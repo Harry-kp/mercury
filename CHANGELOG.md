@@ -58,6 +58,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Sending an **Unsaved** request again moves it to the top of the list instead of leaving it where it was.
 - Saving an unsaved request removed every **Unsaved** entry with the same URL, including other methods (`POST /users` took `GET /users` with it).
 - A history search that matches nothing says so, instead of an empty panel.
+- At the minimum window a History row gave its URL about five characters. A narrow row now shows URL, status and time; the response time and environment are in its tooltip.
+- At the minimum window the Params and Headers tabs started 30 px lower than at other sizes, below an empty line.
+- The method, body type and environment menus line up: only the current choice has a check, and the other names sat an icon's width to the left of it. **No environment** gets the check when it's the current choice.
+- **Keyboard shortcuts** ran off the top and bottom of the window at its minimum size, Close included; the list scrolls now.
+- In the `⋯` menu, **Hide / show sidebar** ran into its shortcut.
 
 ### Changed
 - **History keeps response bodies up to 1 MB.** It rewrote up to 50 × 10 MB on every send; a bigger body is still shown in full when it arrives.

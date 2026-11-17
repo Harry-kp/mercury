@@ -1901,7 +1901,8 @@ impl MercuryApp {
         let chip = widgets::chip(ui, Icon::Layers, &name, color, self.workspace.is_some());
         let (mut picked, mut edit, mut create) = (None, None, false);
         popup_menu(ui, &chip, Layout::MENU_WIDTH, |ui| {
-            if menu_item(ui, None, "No environment", "") {
+            let check = self.selected_env.is_none().then_some(Icon::Check);
+            if menu_item(ui, check, "No environment", "") {
                 picked = Some(None);
             }
             // scrolls: two dozen files ran off the window, taking Edit and
@@ -2121,15 +2122,22 @@ fn shortcuts_modal(ctx: &egui::Context) -> ModalAction {
             .iter()
             .map(|s| (s.keys, s.label))
             .chain([ESCAPE_HELP]);
-        for (keys, text) in rows {
-            ui.horizontal(|ui| {
-                ui.set_min_height(28.0);
-                ui.label(label(text));
-                ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
-                    key_combo(ui, keys);
-                });
+        // scrolls: at the minimum window the list pushed the title and Close
+        // off the screen
+        let max_height = ui.ctx().content_rect().height() - 240.0;
+        egui::ScrollArea::vertical()
+            .max_height(max_height)
+            .show(ui, |ui| {
+                for (keys, text) in rows {
+                    ui.horizontal(|ui| {
+                        ui.set_min_height(Layout::ROW_HEIGHT);
+                        ui.label(label(text));
+                        ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
+                            key_combo(ui, keys);
+                        });
+                    });
+                }
             });
-        }
         ui.add_space(Space::LG);
         ui.label(faint("On Windows and Linux, ⌘ is Ctrl."));
         ui.add_space(Space::XL);

@@ -906,11 +906,21 @@ pub fn tab_row(
             .show(ui, left, right);
     } else {
         ui.horizontal(left);
-        ui.allocate_ui_with_layout(
+        // the second line only takes room when there is something on it: an
+        // empty one pushed the Params tab's content 20px down
+        let rect = Rect::from_min_size(
+            ui.cursor().min,
             Vec2::new(ui.available_width(), Layout::CONTROL_HEIGHT),
-            egui::Layout::right_to_left(Align::Center),
-            right,
         );
+        let mut line = ui.new_child(
+            egui::UiBuilder::new()
+                .max_rect(rect)
+                .layout(egui::Layout::right_to_left(Align::Center)),
+        );
+        right(&mut line);
+        if line.min_rect().width() > 0.0 {
+            ui.advance_cursor_after_rect(rect);
+        }
     }
 }
 
@@ -939,12 +949,15 @@ pub fn popup_menu(ui: &Ui, trigger: &Response, width: f32, add_contents: impl Fn
 }
 
 /// One row in a [`popup_menu`]: optional icon, label, optional trailing hint.
+/// Without an icon the icon's room is still kept, so a pick list (only the
+/// current choice has a check) lines its labels up.
 pub fn menu_item(ui: &mut Ui, what: Option<Icon>, text: &str, trailing: &str) -> bool {
     let t = theme();
     let response = row(ui, text, text, false, |ui| {
         ui.spacing_mut().item_spacing.x = Space::MD;
+        let (rect, _) = ui.allocate_exact_size(Vec2::splat(14.0), Sense::hover());
         if let Some(what) = what {
-            glyph(ui, what, 14.0, t.text_muted);
+            icon::paint(ui.painter(), what, rect, t.text_muted);
         }
         ui.label(label(text));
         if !trailing.is_empty() {
@@ -1518,11 +1531,6 @@ pub fn modal_frame(margin: f32) -> egui::Frame {
         .inner_margin(Margin::same(margin as i8))
 }
 
-/// The dimming behind a modal.
-pub fn backdrop() -> Color32 {
-    Color32::from_black_alpha(if super::theme::is_dark() { 110 } else { 45 })
-}
-
 /// Centered modal with a dimming backdrop. Esc or a backdrop click closes it.
 pub fn modal(
     ctx: &egui::Context,
@@ -1533,7 +1541,7 @@ pub fn modal(
     // records the top modal layer at end of frame), so check it ourselves.
     let escape = ctx.input(|i| i.key_pressed(egui::Key::Escape));
     let response = egui::Modal::new(egui::Id::new(("mercury_modal", title)))
-        .backdrop_color(backdrop())
+        .backdrop_color(theme().backdrop)
         .frame(modal_frame(Space::XXL))
         .show(ctx, |ui| {
             ui.set_width(Layout::MODAL_WIDTH);
@@ -2014,5 +2022,63 @@ mod tests {
                 ModalAction::Open
             );
         });
+    }
+
+    /// A narrow tab row puts its right-hand controls on a second line. With
+    /// none (the Params tab) the empty line still took 30px, so Params' content
+    /// sat lower at the minimum window than at any other size.
+    #[test]
+    fn a_tab_row_with_nothing_on_the_right_takes_one_line() {
+        use egui_kittest::Harness;
+
+        let mut harness = Harness::builder()
+            .with_size(egui::vec2(200.0, 200.0))
+            .build_ui_state(
+                |ui, heights: &mut [f32; 2]| {
+                    for (i, right) in [false, true].into_iter().enumerate() {
+                        let top = ui.cursor().min.y;
+                        tab_row(
+                            ui,
+                            Layout::REQUEST_TABS_MIN,
+                            |ui| {
+                                ui.label("Params");
+                            },
+                            |ui| {
+                                if right {
+                                    ui.label("Bulk edit");
+                                }
+                            },
+                        );
+                        heights[i] = ui.cursor().min.y - top;
+                    }
+                },
+                [0.0; 2],
+            );
+        harness.run_steps(2);
+        let [empty, full] = *harness.state();
+        assert!(empty < Layout::CONTROL_HEIGHT, "empty second line: {empty}");
+        assert!(full > empty + Layout::CONTROL_HEIGHT / 2.0);
+    }
+
+    /// In a pick list only the current choice has a check; the others have
+    /// to keep its room, or their labels sit an icon to the left of it.
+    #[test]
+    fn menu_items_line_up_with_and_without_an_icon() {
+        use egui_kittest::{kittest::Queryable, Harness};
+
+        let mut harness = Harness::builder()
+            .with_size(egui::vec2(220.0, 80.0))
+            .build_ui(|ui| {
+                menu_item(ui, Some(Icon::Check), "picked", "");
+                menu_item(ui, None, "other", "");
+            });
+        harness.run_steps(2);
+        let left = |name: &str| {
+            harness
+                .query_all_by_label(name)
+                .map(|n| n.rect().left())
+                .fold(f32::MIN, f32::max)
+        };
+        assert_eq!(left("picked"), left("other"));
     }
 }
