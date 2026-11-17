@@ -290,7 +290,7 @@ jobs:
       - plan
       - host
     if: ${{ needs.host.result == 'success' && needs.plan.outputs.publishing == 'true' }}
-    runs-on: "macos-14" # Apple Silicon runner
+    runs-on: "macos-15" # Apple Silicon runner (macos-14 is retired)
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
