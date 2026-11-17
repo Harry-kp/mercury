@@ -71,6 +71,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Sending an **Unsaved** request again moves it to the top of the list instead of leaving it where it was.
 - Saving an unsaved request removed every **Unsaved** entry with the same URL, including other methods (`POST /users` took `GET /users` with it).
 - A history search that matches nothing says so, instead of an empty panel.
+- A big request body no longer slows every frame: a 1 MB JSON body was re-highlighted and re-measured ~30 times a second (35 ms a frame, even just moving the mouse). It is laid out again only when it changes.
+- Opening History, the first send of a session, and clicking a history entry no longer freeze the window while the history file is read (40 ms for 10 MB of saved responses). It is read in the background.
 - At the minimum window a History row gave its URL about five characters. A narrow row now shows URL, status and time; the response time and environment are in its tooltip.
 - At the minimum window the Params and Headers tabs started 30 px lower than at other sizes, below an empty line.
 - The method, body type and environment menus line up: only the current choice has a check, and the other names sat an icon's width to the left of it. **No environment** gets the check when it's the current choice.

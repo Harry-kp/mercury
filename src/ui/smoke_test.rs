@@ -55,6 +55,18 @@ fn wait_for_response(harness: &mut Harness<'_, MercuryApp>) {
     panic!("request did not finish");
 }
 
+/// History is read off the UI thread: step until it has arrived.
+fn step_until(harness: &mut Harness<'_, MercuryApp>, done: impl Fn(&MercuryApp) -> bool) {
+    for _ in 0..200 {
+        harness.step();
+        if done(harness.state()) {
+            return;
+        }
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    panic!("never happened");
+}
+
 #[test]
 fn open_send_edit_and_save() {
     let dir = tempfile::TempDir::new().unwrap();
@@ -785,7 +797,7 @@ fn open_send_edit_and_save() {
         .next()
         .expect("history row")
         .click();
-    harness.run_steps(3);
+    step_until(&mut harness, |app| app.current_file.as_ref() == Some(&file));
     assert_eq!(
         harness.state().current_file.as_deref(),
         Some(file.as_path()),
@@ -799,7 +811,7 @@ fn open_send_edit_and_save() {
     let invoice = ws.join("billing/invoices/get-invoice.json");
     harness.state_mut().open_file(&invoice);
     harness.state_mut().open_history_entry(sent.timestamp);
-    assert_eq!(harness.state().current_file, None);
+    step_until(&mut harness, |app| app.current_file.is_none());
     assert_eq!(harness.state().url, sent.url);
     std::fs::write(&file, original).unwrap();
     harness.state_mut().open_file(&file);
@@ -997,7 +1009,7 @@ fn open_send_edit_and_save() {
     );
     harness.state_mut().request_error = None;
     harness.state_mut().open_history_entry(failed.timestamp);
-    assert!(harness.state().request_error.is_some());
+    step_until(&mut harness, |app| app.request_error.is_some());
 
     // a Multipart body goes out with the boundary curl would add (the bare
     // `multipart/form-data` the editor stores isn't enough for a server)
@@ -1326,6 +1338,15 @@ fn open_send_edit_and_save() {
     let restarted = MercuryApp::new(&egui::Context::default());
     assert_eq!(restarted.current_file.as_deref(), Some(file.as_path()));
     assert!(!restarted.has_unsaved_changes());
+    // history is read off the UI thread: parsing a history of big responses
+    // froze the window on the first ⌘H or send (40 ms for 10 MB of it)
+    let mut relaunched =
+        Harness::builder().build_state(|ctx, app: &mut MercuryApp| app.frame(ctx), restarted);
+    relaunched.state_mut().ensure_history_loaded();
+    assert!(!relaunched.state().history_loaded, "read on the UI thread");
+    step_until(&mut relaunched, |app| app.history_loaded);
+    assert!(!relaunched.state().history.is_empty());
+    drop(relaunched);
 
     // an unsaved GET comes back on Params too: restoring the last tab used
     // to override the per-request rule, so it reopened on an empty Body
@@ -1462,4 +1483,28 @@ fn open_send_edit_and_save() {
     sync.key_press(Key::Escape);
     sync.run_steps(2);
     assert_eq!(sync.state().search, "x");
+
+    // the body's layout is kept between frames: finding egui's cached copy
+    // meant re-highlighting and hashing it, 35 ms a frame for a 1 MB body
+    sync.state_mut().tab = Tab::Body;
+    sync.state_mut().body_text = r#"{"a": 1}"#.into();
+    sync.run_steps(2);
+    let galley = |h: &Harness<'_, MercuryApp>| {
+        let layout = h.state().body_layout.as_ref().expect("body laid out");
+        layout.galley.clone()
+    };
+    // a stand-in egui never made: laid out again, it would be replaced
+    let marker = sync
+        .ctx
+        .fonts_mut(|f| f.layout_no_wrap("x".into(), egui::FontId::default(), egui::Color32::RED));
+    sync.state_mut().body_layout.as_mut().unwrap().galley = marker.clone();
+    sync.run_steps(2);
+    assert!(std::sync::Arc::ptr_eq(&marker, &galley(&sync)));
+    sync.state_mut().body_text.push(' ');
+    sync.run_steps(1);
+    assert!(!std::sync::Arc::ptr_eq(&marker, &galley(&sync)));
+    // and not kept while another tab is showing
+    sync.state_mut().tab = Tab::Headers;
+    sync.run_steps(1);
+    assert!(sync.state().body_layout.is_none());
 }

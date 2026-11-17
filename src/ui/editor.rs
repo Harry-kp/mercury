@@ -2,7 +2,7 @@
 
 use super::app::{Action, MercuryApp, Tab};
 use super::icon::Icon;
-use super::theme::{mono, semibold, theme, Layout, Radius, Space, Text};
+use super::theme::{self, mono, semibold, theme, Layout, Radius, Space, Text};
 use super::widgets::{
     self, copy_button, icon_button, json_job, key_value_editor, link, menu_item, muted, plain_job,
     popup_menu, section_label, send_button, tab_button,
@@ -13,6 +13,17 @@ use crate::model::{HttpMethod, Request};
 use crate::{curl, vars};
 use eframe::egui::{self, Align, Margin, RichText, ScrollArea, Sense, Stroke, Ui, Vec2};
 use std::collections::BTreeSet;
+
+/// The request body's last layout. egui keeps galleys too, but finds one
+/// by re-highlighting the body and hashing the result, which cost 35 ms a
+/// frame for a 1 MB body while nothing changed.
+pub struct BodyLayout {
+    text: String,
+    /// Wrap width, JSON or not, dark or not, pixels per point.
+    key: (f32, bool, bool, f32),
+    atlas: f32,
+    pub galley: std::sync::Arc<egui::Galley>,
+}
 
 impl MercuryApp {
     pub fn editor(&mut self, ui: &mut Ui) {
@@ -163,9 +174,10 @@ impl MercuryApp {
     fn undefined_line(&self, ui: &mut Ui) {
         // each text on its own: joined, an unclosed `{{x` in the URL ran
         // on into the headers and named a variable "x Authorization: …"
-        let undefined: BTreeSet<String> = [&self.url, &self.headers_text, &self.body_text]
+        let undefined: BTreeSet<String> = [&self.url, &self.headers_text]
             .into_iter()
             .flat_map(|t| vars::extract(t))
+            .chain(self.body_vars())
             .filter(|v| !self.env_vars.contains_key(v))
             .collect();
         if undefined.is_empty() {
@@ -299,13 +311,9 @@ impl MercuryApp {
         // an undefined variable is worth flagging on the tab that holds it:
         // outlining the URL bar for a `{{token}}` that lives in the headers
         // sends the user looking in the wrong place
-        let missing = |text: &str| {
-            vars::extract(text)
-                .iter()
-                .any(|v| !self.env_vars.contains_key(v))
-        };
+        let missing = |names: Vec<String>| names.iter().any(|v| !self.env_vars.contains_key(v));
         let tabs = [
-            (Tab::Body, "Body", 0, missing(&self.body_text)),
+            (Tab::Body, "Body", 0, missing(self.body_vars())),
             (
                 Tab::Params,
                 "Params",
@@ -316,7 +324,7 @@ impl MercuryApp {
                 Tab::Headers,
                 "Headers",
                 kv::count_enabled(&kv::parse_lines(&self.headers_text, ":")),
-                missing(&self.headers_text),
+                missing(vars::extract(&self.headers_text)),
             ),
             // always "Auth": a tab that renamed itself to "Bearer" or "Basic"
             // moved under the user's cursor from one request to the next
@@ -376,6 +384,9 @@ impl MercuryApp {
         widgets::divider(ui);
         ui.add_space(Space::LG);
 
+        if self.tab != Tab::Body {
+            self.body_layout = None; // ~150 bytes a character: not kept off screen
+        }
         ScrollArea::vertical()
             .id_salt("request_content")
             .auto_shrink([false, false])
@@ -404,8 +415,7 @@ impl MercuryApp {
             if changed {
                 self.body_text = kv::build_form(&kv::parse_lines(&self.form_text, "="));
             }
-            let text = self.body_text.clone();
-            self.variable_chips(ui, &text);
+            self.variable_chips(ui, self.body_vars());
             return;
         }
 
@@ -435,19 +445,38 @@ impl MercuryApp {
                     self.attach_file();
                 }
             });
-            let text = self.body_text.clone();
-            self.variable_chips(ui, &text);
+            self.variable_chips(ui, self.body_vars());
             return;
         }
 
         let json = kind == BodyKind::Json;
+        let last = &mut self.body_layout;
         let mut layouter = |ui: &Ui, text: &dyn egui::TextBuffer, wrap_width: f32| {
+            let text = text.as_str();
+            let key = (wrap_width, json, theme::is_dark(), ui.pixels_per_point());
+            // a full font atlas is rebuilt, emptier, and an older galley
+            // points into the old one. ponytail: fill ratio as the rebuild
+            // signal; key on an atlas generation if egui ever exposes one
+            let atlas = ui.fonts(|f| f.font_atlas_fill_ratio());
+            if let Some(last) = last
+                .as_ref()
+                .filter(|l| l.key == key && atlas >= l.atlas && l.text == text)
+            {
+                return last.galley.clone();
+            }
             let job = if json {
-                json_job(text.as_str(), wrap_width)
+                json_job(text, wrap_width)
             } else {
-                plain_job(text.as_str(), wrap_width)
+                plain_job(text, wrap_width)
             };
-            ui.fonts_mut(|f| f.layout_job(job))
+            let galley = ui.fonts_mut(|f| f.layout_job(job));
+            *last = Some(BodyLayout {
+                text: text.to_owned(),
+                key,
+                atlas: ui.fonts(|f| f.font_atlas_fill_ratio()),
+                galley: galley.clone(),
+            });
+            galley
         };
         widgets::code_frame().show(ui, |ui| {
             let rows = widgets::fill_rows(ui, Space::XXL, 12);
@@ -470,8 +499,7 @@ impl MercuryApp {
             // not where anyone looks while typing a body
             self.missing_content_type(ui);
         }
-        let text = self.body_text.clone();
-        self.variable_chips(ui, &text);
+        self.variable_chips(ui, self.body_vars());
     }
 
     /// Most APIs reject a body with no `Content-Type`, and the failure comes
@@ -517,7 +545,7 @@ impl MercuryApp {
             .iter()
             .map(|p| format!("{} {} ", p.key, p.value))
             .collect();
-        self.variable_chips(ui, &text);
+        self.variable_chips(ui, vars::extract(&text));
     }
 
     fn headers_tab(&mut self, ui: &mut Ui) {
@@ -528,12 +556,11 @@ impl MercuryApp {
             &mut self.headers_bulk_edit,
             "Content-Type: application/json\nAuthorization: Bearer {{token}}",
         );
-        let text = self.headers_text.clone();
-        self.variable_chips(ui, &text);
+        self.variable_chips(ui, vars::extract(&self.headers_text));
     }
 
-    fn variable_chips(&self, ui: &mut Ui, text: &str) {
-        let names: BTreeSet<String> = vars::extract(text).into_iter().collect();
+    fn variable_chips(&self, ui: &mut Ui, names: Vec<String>) {
+        let names: BTreeSet<String> = names.into_iter().collect();
         if names.is_empty() {
             return;
         }
