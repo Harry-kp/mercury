@@ -36,6 +36,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The body type reads **Body type: none / JSON / Form / Text**.
 
 ### Fixed
+- **Pasted cURL commands that came out wrong:** repeated `-d` kept only the last one (curl joins them with `&`); `--data-urlencode` was ignored; `-XPOST` and other values glued to their flag were ignored; `-G` sent the data as a POST body instead of the query string; bash's `$'…'` quoting (Chrome's Copy as cURL for bodies with quotes or newlines) kept the `$` and the backslashes; and `-F` took the form field as the URL. `-F` now says multipart isn't supported.
+- `.env` files with `export KEY=value` lines or a byte-order mark (some Windows editors add one) lost those variables.
 - **Security:** updated the TLS stack (`rustls` 0.23.46, `rustls-webpki` 0.103.17, `webpki-root-certs` 1.0.12) for six advisories, including a ServerHello downgrade (RUSTSEC-2026-0349) and acceptance of distrusted intermediates (RUSTSEC-2026-0382).
 - **The Pretty view re-sorted JSON keys and rewrote numbers.** It re-serialised the body, so keys came out alphabetical, integers too large for 64 bits turned into floats, `1.10` became `1.1`, and duplicate keys disappeared. **Format body** did the same to the request you were about to send. Both now only re-indent: the text is exactly what was sent.
 - **`⌘ ⇧ C` copied the selected text instead of the request** whenever any text was selected: the selection answered the same copy event after Mercury and won the clipboard. `⌘ ⇧ C` now always copies the request as cURL; plain `⌘ C` still copies a selection.

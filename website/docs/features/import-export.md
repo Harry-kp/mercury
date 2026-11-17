@@ -91,17 +91,19 @@ curl -X POST https://api.example.com/users \
 |------|--------|
 | `-X`, `--request` | Method |
 | `-H`, `--header` | Header |
-| `-d`, `--data`, `--data-raw`, `--data-binary` | Body. Changes a `GET` to `POST`. |
+| `-d`, `--data`, `--data-raw`, `--data-binary` | Body. Changes a `GET` to `POST`. Repeated flags are joined with `&`, as curl does. |
+| `--data-urlencode` | Body, percent-encoded: in `name=value` only the value is encoded. |
 | `--json` | Body plus `Content-Type: application/json`. Changes a `GET` to `POST`. |
 | `-u`, `--user` | `Authorization: Basic ...` |
 | `-A`, `--user-agent` | `User-Agent` header |
 | `-b`, `--cookie` | `Cookie` header |
 | `-I`, `--head` | `HEAD` |
-| `-G`, `--get` | `GET` |
+| `-G`, `--get` | `GET`, with any `-d` data appended to the URL as the query string |
+| `-F`, `--form` | Not supported: multipart bodies can't be sent yet, so the paste is refused with a message |
 | `-o`, `-x`, `-c`, `-m`, `-w`, `-e`, `--output`, `--proxy`, `--cookie-jar`, `--connect-timeout`, `--max-time`, `--write-out`, `--cacert`, `--cert`, `--key`, `--referer` | Ignored, along with their argument |
 | Other flags (`-s`, `-L`, `-k`, `-v`, `--compressed`, ...) | Ignored |
 
-The first argument that isn't a flag is used as the URL. If there isn't one, you get an error.
+The first argument that isn't a flag is used as the URL. If there isn't one, you get an error. A value glued to a short flag (`-XPOST`, `-HAccept:text/plain`) and bash's `$'…'` quoting, which Chrome uses when a body contains a quote or a newline, both work.
 
 ## Copy as cURL
 

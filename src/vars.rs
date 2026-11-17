@@ -2,11 +2,16 @@
 
 use std::collections::HashMap;
 
-/// Parse dotenv content: `KEY=VALUE` lines, `#` comments, matching quotes stripped.
+/// Parse dotenv content: `KEY=VALUE` lines, `#` comments, matching quotes
+/// stripped, a shell-style `export ` prefix and a byte-order mark ignored.
 pub fn parse_env(content: &str) -> HashMap<String, String> {
     content
+        .trim_start_matches('\u{feff}')
         .lines()
-        .map(str::trim)
+        .map(|l| {
+            let l = l.trim();
+            l.strip_prefix("export ").unwrap_or(l)
+        })
         .filter(|l| !l.is_empty() && !l.starts_with('#'))
         .filter_map(|l| l.split_once('='))
         .map(|(k, v)| {
@@ -81,6 +86,12 @@ mod tests {
         assert_eq!(v["D"], "\"unbalanced");
         assert_eq!(v["E"], "a=b");
         assert_eq!(parse_env(r#"J="{\"a\":1}""#)["J"], r#"{"a":1}"#);
+        // shell-style files and Windows editors
+        let v = parse_env("\u{feff}A=1\nexport B=2\n  export C = 3");
+        assert_eq!(
+            (v["A"].as_str(), v["B"].as_str(), v["C"].as_str()),
+            ("1", "2", "3")
+        );
     }
 
     #[test]
