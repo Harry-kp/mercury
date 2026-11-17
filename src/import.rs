@@ -144,6 +144,21 @@ fn write_request(
     headers: BTreeMap<String, String>,
     body: String,
 ) -> Result<(), String> {
+    // Whatever path the body took (a raw body under a multipart
+    // Content-Type, an odd mimeType), if the sender will treat it as
+    // Multipart, no line of it is a live file upload until the user ticks it:
+    // a collection from someone else could otherwise post ~/.ssh/id_rsa.
+    let body = if crate::http::is_multipart(&headers) {
+        let mut rows = kv::parse_lines(&body, "=");
+        for row in &mut rows {
+            if row.value.starts_with('@') && !row.value.starts_with("@@") {
+                row.enabled = false;
+            }
+        }
+        kv::format_lines(&rows, "=")
+    } else {
+        body
+    };
     let request = RequestFile {
         method: HttpMethod::parse(method).unwrap_or_default(),
         url,
@@ -767,7 +782,14 @@ fn insomnia_request(req: &Value, dir: &Path, skipped: &mut Vec<String>) -> Resul
 
     // body
     let body = req.get("body").cloned().unwrap_or(Value::Null);
-    let mime = str_of(&body, "mimeType").to_string();
+    // the media type alone, as the sender compares it ("Multipart/Form-Data;
+    // boundary=x" is multipart too)
+    let mime = str_of(&body, "mimeType")
+        .split(';')
+        .next()
+        .unwrap_or("")
+        .trim()
+        .to_ascii_lowercase();
     let params: Vec<&Value> = body
         .get("params")
         .and_then(Value::as_array)
@@ -1364,6 +1386,45 @@ resources:
         );
         assert!(!out.join(".env.base-environment").exists());
         assert_eq!(count.env.as_deref(), Some(".env.dev"));
+    }
+
+    /// However a body arrives (an unusual mimeType, a raw body under a
+    /// multipart Content-Type), if it will be sent as Multipart no line of it
+    /// is a live upload.
+    #[test]
+    fn no_import_path_yields_a_live_file_upload() {
+        let insomnia = r#"{"resources":[
+         {"_id":"a","_type":"request","name":"Odd mime","method":"POST","url":"https://x",
+          "body":{"mimeType":"Multipart/Form-Data; boundary=x","params":[{"name":"f","type":"file","fileName":"/etc/passwd"}]}},
+         {"_id":"b","_type":"request","name":"Raw under multipart","method":"POST","url":"https://x",
+          "headers":[{"name":"content-type","value":"multipart/form-data"}],
+          "body":{"mimeType":"text/plain","text":"note=hi\nf=@/etc/passwd\nt=@@literal"}}]}"#;
+        let postman = r#"{"info":{"name":"P"},"item":[{"name":"Raw","request":{"method":"POST",
+          "header":[{"key":"Content-Type","value":"multipart/form-data"}],
+          "body":{"mode":"raw","raw":"f=@/etc/passwd"},"url":"https://x"}}]}"#;
+        let dir = TempDir::new().unwrap();
+        for (i, (f, content)) in [
+            (import_insomnia as fn(&Path, &Path) -> _, insomnia),
+            (import_postman, postman),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let out = dir.path().join(format!("ws{i}"));
+            fs::create_dir_all(&out).unwrap();
+            import_into(f, content, &out).unwrap();
+            for entry in fs::read_dir(&out).unwrap().flatten() {
+                let body = file(&entry.path()).body;
+                let live: Vec<_> = kv::parse_lines(&body, "=")
+                    .into_iter()
+                    .filter(|r| r.enabled && r.value.starts_with('@') && !r.value.starts_with("@@"))
+                    .collect();
+                assert!(live.is_empty(), "{}: {body:?}", entry.path().display());
+            }
+        }
+        // the odd mime type still counts as multipart
+        let odd = file(&dir.path().join("ws0/odd-mime.json"));
+        assert_eq!(odd.body, "# f=@/etc/passwd");
     }
 
     /// Insomnia 10+ exports v5 YAML, which used to fail outright.
