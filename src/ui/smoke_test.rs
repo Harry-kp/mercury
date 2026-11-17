@@ -462,16 +462,58 @@ fn open_send_edit_and_save() {
     );
 
     // ⌘⇧C as the real app receives it: egui-winit turns any ⌘C, with or
-    // without ⇧, into Event::Copy and never reports the C key, so a shortcut
-    // waiting for the key never fired outside tests.
-    harness.state_mut().toast = None;
-    harness.event_modifiers(egui::Event::Copy, Modifiers::COMMAND | Modifiers::SHIFT);
-    harness.step(); // (kittest keeps only the last of the frames it runs here,
-                    // so the clipboard write itself isn't visible; the toast is)
-    assert_eq!(
-        harness.state().toast.as_ref().map(|t| t.text.as_str()),
-        Some("Copied as cURL"),
-        "⌘⇧C arrives as Event::Copy and must still copy the request"
+    // without ⇧, into Event::Copy and never reports the C key. Modifiers and
+    // event go in one frame (kittest's helpers spread them over three and
+    // keep only the last frame's output), and the cURL must be the *only*
+    // thing copied: a selected label used to answer the same event and win.
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::Enter);
+    wait_for_response(&mut harness);
+    // select some of the response body first, by dragging across it
+    let body = harness
+        .query_all_by_label_contains("echo")
+        .next()
+        .expect("response body on screen")
+        .rect();
+    let (from, to) = (
+        body.min + egui::vec2(4.0, 6.0),
+        body.min + egui::vec2(120.0, 6.0),
+    );
+    for event in [
+        egui::Event::PointerMoved(from),
+        egui::Event::PointerButton {
+            pos: from,
+            button: egui::PointerButton::Primary,
+            pressed: true,
+            modifiers: Modifiers::NONE,
+        },
+        egui::Event::PointerMoved(to),
+        egui::Event::PointerButton {
+            pos: to,
+            button: egui::PointerButton::Primary,
+            pressed: false,
+            modifiers: Modifiers::NONE,
+        },
+    ] {
+        harness.event(event);
+        harness.step();
+    }
+    harness.input_mut().modifiers = Modifiers::COMMAND | Modifiers::SHIFT;
+    harness.input_mut().events.push(egui::Event::Copy);
+    harness.step();
+    let copies: Vec<String> = harness
+        .output()
+        .platform_output
+        .commands
+        .iter()
+        .filter_map(|c| match c {
+            egui::OutputCommand::CopyText(t) => Some(t.clone()),
+            _ => None,
+        })
+        .collect();
+    harness.input_mut().modifiers = Modifiers::NONE;
+    assert!(
+        copies.len() == 1 && copies[0].starts_with("curl "),
+        "⌘⇧C must put exactly the cURL on the clipboard, got {copies:?}"
     );
     harness.run_steps(2);
     for _ in 0..400 {
@@ -635,4 +677,13 @@ fn open_send_edit_and_save() {
     let restarted = MercuryApp::new(&egui::Context::default());
     assert_eq!(restarted.current_file.as_deref(), Some(file.as_path()));
     assert!(!restarted.has_unsaved_changes());
+
+    // an unsaved GET comes back on Params too: restoring the last tab used
+    // to override the per-request rule, so it reopened on an empty Body
+    let mut scratch = MercuryApp::new(&egui::Context::default());
+    scratch.load_request(Default::default(), None);
+    scratch.url = "http://example.com/x".into();
+    scratch.tab = Tab::Body;
+    eframe::App::on_exit(&mut scratch, None);
+    assert_eq!(MercuryApp::new(&egui::Context::default()).tab, Tab::Params);
 }

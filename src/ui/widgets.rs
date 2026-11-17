@@ -1198,7 +1198,11 @@ pub fn error_state(ui: &mut Ui, error: &str) {
                 ui.set_width(ui.available_width());
                 // must wrap: egui grows a side panel to fit its content, and
                 // a long single-line error dragged the whole layout wider
-                ui.add(egui::Label::new(code(error).color(t.error)).wrap());
+                ui.add(
+                    egui::Label::new(code(error).color(t.error))
+                        .wrap()
+                        .selectable(true),
+                );
             });
     });
 }
@@ -1240,15 +1244,21 @@ pub fn kv_section(ui: &mut Ui, title: &str, id: &str, items: &[(String, String)]
                 }
                 ui.horizontal_wrapped(|ui| {
                     ui.spacing_mut().item_spacing = Vec2::new(Space::SM, Space::XS);
-                    ui.label(
-                        RichText::new(format!("{key}{sep}"))
-                            .font(mono(Text::SMALL))
-                            .color(t.syntax.key),
+                    ui.add(
+                        egui::Label::new(
+                            RichText::new(format!("{key}{sep}"))
+                                .font(mono(Text::SMALL))
+                                .color(t.syntax.key),
+                        )
+                        .selectable(true),
                     );
-                    ui.label(
-                        RichText::new(value)
-                            .font(mono(Text::SMALL))
-                            .color(t.text_muted),
+                    ui.add(
+                        egui::Label::new(
+                            RichText::new(value)
+                                .font(mono(Text::SMALL))
+                                .color(t.text_muted),
+                        )
+                        .selectable(true),
                     );
                 });
                 ui.add_space(Space::XS);
