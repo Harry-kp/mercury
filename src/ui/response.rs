@@ -5,8 +5,8 @@ use super::icon::{self, Icon};
 use super::theme::{mono, theme, Layout, Space, Text};
 use super::widgets::{
     self, clear_button, copy_button, empty_state, error_state, faint, format_bytes, icon_button,
-    json_job, key_combo, kv_section, label, method_text, muted, relative_time, response_time,
-    search_input, status_badge, tab_button, xml_job,
+    key_combo, kv_section, label, method_text, muted, relative_time, response_time, search_input,
+    status_badge, tab_button, xml_job,
 };
 use crate::http::{self, ResponseType, MAX_RESPONSE_SIZE};
 use crate::storage;
@@ -408,13 +408,22 @@ impl MercuryApp {
                 };
                 let rows = BodyRows::cached(&mut self.body_rows, text, row_bytes);
                 rows.search(text, self.find.as_deref());
+                let jump = find_bar(ui, &mut self.find, &mut self.find_at, rows.hits());
+                // again: the query may have changed in the field just now,
+                // and the jump must land on its first match, not the old one's
+                rows.search(text, self.find.as_deref());
                 let rows: &BodyRows = rows;
                 let hits = rows.hits();
-                let scroll_to = find_bar(ui, &mut self.find, &mut self.find_at, hits);
+                let scroll_to = jump
+                    .filter(|_| !hits.is_empty())
+                    .map(|at| hits[at % hits.len()].start);
                 let highlight = !self.raw_view;
                 let row_h = ui.fonts_mut(|f| f.row_height(&mono(Text::SMALL)));
                 let tint = t.tint(t.warning, 0.45);
                 widgets::code_frame().show(ui, |ui| {
+                    // show_rows sizes rows with *this* ui's spacing; rows
+                    // are drawn without any, so it must be zero here too
+                    ui.spacing_mut().item_spacing.y = 0.0;
                     let mut area = ScrollArea::both()
                         .id_salt("response_body")
                         .auto_shrink([false, false]);
@@ -426,14 +435,15 @@ impl MercuryApp {
                     // whole, every frame, which is why anything over 100 KB
                     // was refused.)
                     area.show_rows(ui, row_h, rows.rows.len(), |ui, visible| {
-                        ui.spacing_mut().item_spacing.y = 0.0;
                         // a stable scroll width: the widest row, not the
                         // widest one that happens to be on screen
                         ui.set_min_width(rows.widest as f32 * char_w);
                         for row in &rows.rows[visible] {
                             let line = &text[row.clone()];
                             let mut job = match kind {
-                                ResponseType::Json if highlight => json_job(line, f32::INFINITY),
+                                ResponseType::Json if highlight => {
+                                    widgets::json_line_job(line, f32::INFINITY)
+                                }
                                 ResponseType::Xml | ResponseType::Html if highlight => {
                                     xml_job(line, f32::INFINITY)
                                 }
@@ -489,8 +499,8 @@ fn save_button(ui: &mut Ui, save: &mut bool) {
     });
 }
 
-/// The find bar, shown only once ⌘F has opened it. Returns the scroll offset
-/// to jump to when the current match moved.
+/// The find bar, shown only once ⌘F has opened it. Returns the index of the
+/// match to jump to when the current match moved.
 ///
 /// Takes its two fields rather than `&mut self`: the body text it searches is
 /// itself borrowed out of the app.
@@ -543,7 +553,7 @@ fn find_bar(
         return None;
     }
     *find = Some(query);
-    (jump && !hits.is_empty()).then(|| hits[at % hits.len()].start)
+    jump.then_some(at)
 }
 
 /// A body as drawn: one row per line, with very long lines (minified JSON

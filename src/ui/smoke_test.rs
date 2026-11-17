@@ -669,6 +669,46 @@ fn open_send_edit_and_save() {
     );
     drop(small);
 
+    // A big body is drawn a screenful at a time; typing in find must jump
+    // to a match far down (the jump was checked against the previous
+    // query's matches, so it never happened).
+    let body = format!(
+        r#"{{"data":[{}]}}"#,
+        (0..20_000)
+            .map(|i| format!(r#"{{"id":{i},"email":"u{i}@acme.dev"}}"#))
+            .collect::<Vec<_>>()
+            .join(",")
+    );
+    let mut big = Harness::builder()
+        .with_size(egui::vec2(1200.0, 800.0))
+        .build_state(
+            |ctx, app: &mut MercuryApp| app.frame(ctx),
+            MercuryApp::new(&egui::Context::default()),
+        );
+    big.state_mut().response = Some(std::sync::Arc::new(crate::http::HttpResponse {
+        status: 200,
+        status_text: "200 OK".into(),
+        headers: vec![],
+        cookies: vec![],
+        size_bytes: body.len(),
+        pretty: Some(crate::http::format_json(&body)),
+        body,
+        raw_bytes: None,
+        duration_ms: 1,
+        content_type: "application/json".into(),
+        response_type: crate::http::ResponseType::Json,
+    }));
+    big.run_steps(3);
+    big.key_press_modifiers(Modifiers::COMMAND, Key::F);
+    big.run_steps(2);
+    big.event(egui::Event::Text("u15000@".into()));
+    big.run_steps(3);
+    assert!(
+        big.query_by_label_contains("u15000@acme.dev").is_some(),
+        "find scrolls to the match"
+    );
+    drop(big);
+
     // quitting and relaunching reopens the request that was open, instead of
     // orphaning it into an "Untitled" unsaved request
     harness.state_mut().open_file(&file);
