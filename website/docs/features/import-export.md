@@ -12,16 +12,16 @@ Mercury imports Postman and Insomnia exports and cURL commands, and it can copy 
 
 Choose **Import from Postman…** or **Import from Insomnia…** from the workspace menu in the top bar. With no folder open, the sidebar also lists **Postman collection** and **Insomnia export** under **Import**. Pick the export file, and then:
 
-- if a workspace is open, the requests are written **into that workspace**
-- if no workspace is open, Mercury asks for a folder to write to, then opens it as the workspace
+- if a workspace is open, the requests are written into it, in a **new folder named after the collection** (`acme-api/`), so they can't mix with or replace your own
+- if no workspace is open, Mercury asks for a folder to write to and opens it as the workspace; an empty folder gets the requests directly
 
-A notification reports how many requests and environments were imported.
+Environments go in the workspace root as `.env.<name>`, where Mercury looks for them. When the import is done, its first request is open and its environment selected, and a notification says what was imported and where.
 
-File and folder names are sanitized: they're lowercased, and spaces and characters such as `/ \ : * ? " < > |` become `-`. For example, "Get User" becomes `get-user.json`. Existing files with the same name are **overwritten**.
+File and folder names are sanitized: they're lowercased, and spaces and characters such as `/ \ : * ? " < > |` become `-`. For example, "Get User" becomes `get-user.json`. **Nothing is ever overwritten**: a name that's taken gets a suffix (`.env.acme-api-2`, `list-users-2.json`).
 
 ## Postman
 
-Export the collection from Postman as **Collection v2.1** (JSON).
+Export the collection from Postman as **Collection v2.1** (JSON). Your environments are separate exports in Postman (**Environments → ⋯ → Export**): import each one the same way and it becomes `.env.<name>`. Disabled variables are left out.
 
 | Postman | Mercury |
 |---------|---------|
@@ -37,7 +37,7 @@ Export the collection from Postman as **Collection v2.1** (JSON).
 
 Auth set on the collection or a folder applies to every request under it, and a request's own auth wins over it.
 
-Postman `{{variables}}` stay as they are in URLs, headers and bodies, so they work with the generated `.env` file. Scripts and tests aren't imported.
+Postman `{{variables}}` stay as they are in URLs, headers and bodies, so they work with the generated `.env` file. Path variables are filled in (`/users/:userId` with value 42 becomes `/users/42`), or become `{{userId}}` when the collection has no value for them. A raw body's language (JSON, XML, text) sets the `Content-Type` Postman would have sent. Postman's built-in `{{$guid}}`, `{{$timestamp}}`, `{{$isoTimestamp}}` and `{{$randomInt}}` work as they are. Scripts and tests aren't imported.
 
 What Mercury can't express is **named in the notification** rather than dropped quietly: OAuth 2 and other token-exchange auth, binary-file bodies, and GraphQL bodies. Anything listed there needs finishing by hand on the [Auth tab](/docs/features/auth) or the Body tab.
 
@@ -56,26 +56,32 @@ workspace/
 
 ## Insomnia
 
-Export from Insomnia as JSON or YAML.
+In Insomnia, use **Export** on a collection (v5 YAML, Insomnia 10 and later) or **Export Data** (v4 JSON or YAML, older versions). Both work.
 
 | Insomnia | Mercury |
 |----------|---------|
-| Request inside a request group | `<group-name>/<name>.json` |
-| Request not in a group | `imported/<name>.json` |
-| Environment (non-empty) | `.env.<environment-name>` |
+| Folder (any depth) | Folder, with the same nesting |
+| Request outside any folder | `<name>.json` at the top |
+| Sub-environment (Dev, Production…) | `.env.<name>`, **including the base environment's values** (Insomnia merges them the same way) |
+| Base environment with no sub-environments | `.env.<collection-name>` |
+| `{{ _.base_url }}` | `{{base_url}}`; nested values (`_.api.url`) become `api.url` |
+| Bearer, API key and Basic auth | The `Authorization` (or API key) header, or a query parameter |
+| JSON / text body | Body, with its `Content-Type` |
+| Form URL-encoded / Multipart body | A Form / Multipart body. File fields arrive switched off |
 | Headers | Headers (disabled ones are skipped) |
-| Body text | Body |
 
-Each request goes into a folder named after its **direct parent** group. Nested groups aren't recreated as nested folders. Auth settings aren't imported.
+Named in the notification, because Mercury can't express them: OAuth 2 and other token-exchange auth, Basic auth whose username or password is a variable (the header is base64, which would hide it), GraphQL bodies, and template tags such as `{% response %}` or `{% uuid %}`.
 
 ```
 workspace/
-├── .env.base-environment
+├── .env.dev
+├── .env.production
 ├── users/
+│   ├── admin/
+│   │   └── ban-user.json
 │   ├── get-user.json
 │   └── list-users.json
-└── imported/
-    └── health.json
+└── health.json
 ```
 
 ## Import from cURL

@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Postman environment exports** import as `.env` files, the same way as collections.
+- **Insomnia 10+ exports (v5 YAML)** import. They used to fail with "missing field `resources`".
+- Postman's `{{$guid}}`, `{{$timestamp}}`, `{{$isoTimestamp}}` and `{{$randomInt}}` work, with a fresh value at every send.
+
+### Fixed
+- **Importing into an open workspace could overwrite your files.** A request or `.env` with the same name as one in the collection was replaced without a word. Imports now go into their own folder in the workspace, and a taken name gets a suffix instead.
+- **Insomnia imports didn't work.** Every request failed with "invalid international domain name", because `{{ _.base_url }}` wasn't converted to `{{base_url}}`. Sub-environments (Dev, Production) now include the base environment's values, as in Insomnia; Bearer, Basic and API key auth, form and multipart bodies, and nested folders now come across; and requests outside any folder stay at the top instead of `imported/`.
+- Postman requests with **path variables** (`/users/:userId`) were sent with the `:userId` in them; they're filled in now. A raw JSON (or XML, text) body gets the `Content-Type` Postman would have sent.
+- After an import, the imported collection's first request is open and its environment selected. An import error says what file Mercury expected, instead of a parser message.
+
 ## [0.4.2] - 2026-11-17
 
 The first published build of the 0.4 line; the changes are listed under 0.4.0. 0.4.0 went out without installers (a CI output was dropped, so no build ran) and was withdrawn; 0.4.1's Apple Silicon build died on a GitHub runner image that has been retired. Same code, now built and published.

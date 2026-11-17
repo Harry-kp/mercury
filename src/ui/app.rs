@@ -509,24 +509,44 @@ impl MercuryApp {
         });
     }
 
-    /// Open an imported collection and land the user inside it.
+    /// Open an imported collection and land the user inside it: its first
+    /// request, with the environment it came with selected.
     pub fn finish_import(&mut self, folder: PathBuf, count: import::ImportCount) {
-        self.open_workspace(folder.clone(), None);
-        // otherwise the editor still holds whatever was open before the
-        // import — usually a scratch request from a folder that is no longer
-        // even open — and the collection the user just imported is nowhere
-        // to be seen.
-        if let Some(first) = workspace::all_requests(&folder)
-            .into_iter()
-            .find_map(|i| match i {
-                CollectionItem::Request { path, .. } => Some(path),
-                CollectionItem::Folder { .. } => None,
-            })
-        {
-            self.open_file(&first);
-            self.expand_to(&first);
+        let same = self.workspace.as_deref() == Some(folder.as_path());
+        if same && count.requests == 0 {
+            // just an environment: keep the open request, switch to it
+            self.refresh_env_files();
+            let index = self
+                .env_files
+                .iter()
+                .position(|e| Some(e) == count.env.as_ref());
+            self.selected_env = index;
+            self.load_env();
+        } else {
+            self.open_workspace(folder.clone(), count.env.as_deref());
+            // otherwise the editor still holds whatever was open before
+            // the import, and the collection just imported is nowhere to be
+            // seen
+            if let Some(first) = workspace::all_requests(&count.folder)
+                .into_iter()
+                .find_map(|i| match i {
+                    CollectionItem::Request { path, .. } => Some(path),
+                    CollectionItem::Folder { .. } => None,
+                })
+            {
+                self.open_file(&first);
+            }
         }
-        let summary = plural_import(count.requests, count.envs);
+        let mut summary = match (count.requests, &count.env) {
+            (0, Some(env)) => format!("Imported environment {env}"),
+            _ => plural_import(count.requests, count.envs),
+        };
+        if let Ok(sub) = count.folder.strip_prefix(&folder) {
+            if !sub.as_os_str().is_empty() {
+                // the workspace had files, so the import got its own folder
+                summary += &format!(" into {}/", sub.display());
+            }
+        }
         // an import that silently drops a body or an auth scheme produces
         // requests that fail for no visible reason
         if count.skipped.is_empty() {

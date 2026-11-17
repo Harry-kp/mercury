@@ -172,7 +172,7 @@ Measured on an M-series MacBook (macOS 15), each app freshly installed, nothing 
 - **Auth** — Basic, Bearer or a custom `Authorization` value, always in sync with the Headers tab.
 - **Query params** — a table that stays in sync with the URL, both ways.
 - **cURL** — paste a `curl …` command into the URL bar to import it; `⌘ ⇧ C` copies the request back out.
-- **Import** — Postman v2.1 and Insomnia (JSON or YAML), with their variables, auth and bodies.
+- **Import** — Postman v2.1 collections and environments, Insomnia (v4 and the v5 YAML of Insomnia 10+), with their variables, auth and bodies. Imports never overwrite your files.
 - **Responses** — pretty-printed and highlighted JSON, XML and HTML; headers and cookies; `⌘ F` to search; save images, binaries or large bodies to a file.
 - **History** — your last 50 requests from the past 7 days, with full responses. **Unsaved** in the sidebar keeps requests you've sent without saving. Each history entry records its environment and reopens on its file.
 - **Cookies** — kept for the session, so login flows just work.
