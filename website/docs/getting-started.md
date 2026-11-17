@@ -119,14 +119,20 @@ If Mercury exits immediately with an error mentioning a missing `.so` file, that
 
 Mercury is not signed with an Apple Developer ID or submitted to Microsoft, because
 both cost money a free tool doesn't have. Your operating system will say so the
-first time you open it. Nothing is wrong with the download.
+first time you open it. Nothing is wrong with the download. (The Homebrew cask clears
+macOS's download quarantine on install, so a Homebrew install opens without asking.)
 
-**macOS: "Mercury cannot be opened because the developer cannot be verified"**
+**macOS: "Apple could not verify Mercury.app is free of malware"** (older macOS: "the developer cannot be verified")
 
-Right-click (or Control-click) Mercury in **Applications** and choose **Open**, then
-**Open** again in the dialog. macOS remembers the choice. Alternatively, open
-**System Settings → Privacy & Security** and click **Open Anyway** just after the
-warning appears.
+Click **Done**, open **System Settings → Privacy & Security**, scroll to "Mercury.app
+was blocked" and click **Open Anyway**. macOS remembers the choice. On macOS 14 and
+earlier, right-click Mercury in **Applications** and choose **Open** also works.
+
+From a terminal, this does the same:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/Mercury.app
+```
 
 If you installed with the shell installer and run `mercury` from a terminal, macOS
 does not check it at all and it just starts.
