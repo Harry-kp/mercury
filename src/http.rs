@@ -162,20 +162,35 @@ impl HttpResponse {
 
 #[cfg(test)]
 pub fn client() -> reqwest::blocking::Client {
-    client_with(Default::default(), true)
+    client_with(true)
 }
 
 /// `check_certs: false` is for hosts the user chose to trust (a dev server's
-/// self-signed certificate); it shares `jar` so a login carries across.
-pub fn client_with(
-    jar: std::sync::Arc<reqwest::cookie::Jar>,
-    check_certs: bool,
-) -> reqwest::blocking::Client {
+/// self-signed certificate). That client keeps its own cookies, and follows
+/// redirects only on the same host, so the skipped check reaches nothing else.
+pub fn client_with(check_certs: bool) -> reqwest::blocking::Client {
     // reqwest is built without a crypto provider (see Cargo.toml); use ring.
     // Err only means one is already installed, which is fine.
     let _ = rustls::crypto::ring::default_provider().install_default();
+    let redirects = if check_certs {
+        reqwest::redirect::Policy::limited(10)
+    } else {
+        reqwest::redirect::Policy::custom(|a| {
+            let same = a
+                .previous()
+                .first()
+                .map(|u| (u.host_str(), u.port_or_known_default()))
+                == Some((a.url().host_str(), a.url().port_or_known_default()));
+            if same && a.previous().len() < 10 {
+                a.follow()
+            } else {
+                a.stop()
+            }
+        })
+    };
     reqwest::blocking::Client::builder()
-        .cookie_provider(jar)
+        .cookie_store(true)
+        .redirect(redirects)
         .connect_timeout(Duration::from_secs(CONNECT_TIMEOUT_SECS))
         // the blocking client's default is a 30 s total
         .timeout(None::<Duration>)
@@ -652,7 +667,7 @@ mod tests {
         assert!(bad.starts_with(CERT_ERROR), "{bad}");
         // the host the user chose to trust
         let trusted = execute(
-            &client_with(Default::default(), false),
+            &client_with(false),
             &RequestFile {
                 url: "https://self-signed.badssl.com".into(),
                 ..Default::default()
@@ -660,6 +675,29 @@ mod tests {
         )
         .expect("trusted host skips the certificate check");
         assert_eq!(trusted.status, 200);
+    }
+
+    /// The skipped certificate check must not follow a redirect to another host.
+    #[test]
+    fn trusted_host_client_stays_on_that_host() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        std::thread::spawn(move || {
+            for mut stream in listener.incoming().flatten() {
+                let _ = stream.read(&mut [0; 4096]);
+                let to = format!("http://localhost:{port}/elsewhere");
+                let _ = stream.write_all(
+                    format!("HTTP/1.1 302 Found\r\nLocation: {to}\r\nContent-Length: 0\r\n\r\n")
+                        .as_bytes(),
+                );
+            }
+        });
+        let request = RequestFile {
+            url: format!("http://127.0.0.1:{port}/"),
+            ..Default::default()
+        };
+        let stopped = execute(&client_with(false), &request).unwrap();
+        assert_eq!(stopped.status, 302);
     }
 
     #[test]

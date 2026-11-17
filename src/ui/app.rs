@@ -332,15 +332,13 @@ pub struct MercuryApp {
     client: reqwest::blocking::Client,
     /// Hosts whose certificate the user chose not to check, this session only.
     pub trusted_hosts: HashSet<String>,
-    /// The client for those hosts, built on first use; it shares `client`'s cookies.
+    /// The client for those hosts, built on first use (own cookies, same-host redirects).
     lenient: Option<reqwest::blocking::Client>,
-    jar: std::sync::Arc<reqwest::cookie::Jar>,
 }
 
 impl MercuryApp {
     pub fn new(ctx: &egui::Context) -> Self {
         let (tx, rx) = channel();
-        let jar = std::sync::Arc::new(reqwest::cookie::Jar::default());
         let mut app = Self {
             workspace: None,
             tree: Vec::new(),
@@ -404,10 +402,9 @@ impl MercuryApp {
             ctx: ctx.clone(),
             tx,
             rx,
-            client: http::client_with(jar.clone(), true),
+            client: http::client_with(true),
             trusted_hosts: HashSet::new(),
             lenient: None,
-            jar,
         };
 
         if let Some(state) = storage::load_state() {
@@ -982,9 +979,8 @@ impl MercuryApp {
         self.sent_env = self.env_name().map(str::to_string);
         let trusted = http::host(&request.url).is_some_and(|h| self.trusted_hosts.contains(&h));
         let client = if trusted {
-            let jar = self.jar.clone();
             self.lenient
-                .get_or_insert_with(|| http::client_with(jar, false))
+                .get_or_insert_with(|| http::client_with(false))
                 .clone()
         } else {
             self.client.clone()
