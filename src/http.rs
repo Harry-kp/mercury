@@ -46,6 +46,26 @@ pub struct HttpResponse {
     pub pretty: Option<String>,
 }
 
+impl HttpResponse {
+    /// Stands in for the response of a send that got none, in history.
+    /// Status 0 marks it.
+    pub fn failed() -> Self {
+        Self {
+            status: 0,
+            status_text: "Failed".into(),
+            headers: Vec::new(),
+            cookies: Vec::new(),
+            body: String::new(),
+            raw_bytes: None,
+            duration_ms: 0,
+            size_bytes: 0,
+            content_type: String::new(),
+            response_type: ResponseType::Empty,
+            pretty: None,
+        }
+    }
+}
+
 /// One client for the whole session so cookies persist across requests.
 pub fn client() -> reqwest::blocking::Client {
     // reqwest is built without a crypto provider (see Cargo.toml); use ring.

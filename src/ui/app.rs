@@ -905,28 +905,7 @@ impl MercuryApp {
         self.response_tab = ResponseTab::Body;
         match result {
             Ok(response) => {
-                self.ensure_history_loaded();
-                let request = self.sent.take().unwrap_or_else(|| self.form_request());
-                let entry = HistoryEntry {
-                    timestamp: storage::now(),
-                    request: request.clone(),
-                    response: response.clone(),
-                    env: self.sent_env.clone(),
-                    file: self
-                        .sent_file
-                        .as_ref()
-                        .map(|p| p.to_string_lossy().into_owned()),
-                };
-                self.history.push(HistorySummary::from(&entry));
-                let excess = self.history.len().saturating_sub(storage::MAX_HISTORY);
-                self.history.drain(..excess);
-                // queued now (instantly visible to history reads), written
-                // off the UI thread: it rewrites the whole history file
-                storage::queue_history(entry);
-                self.spawn(|| {
-                    storage::flush_history();
-                    None
-                });
+                let request = self.record_history(response.clone(), None);
 
                 if self.current_file.is_none() && !self.recent.iter().any(|r| r.request == request)
                 {
@@ -962,22 +941,52 @@ impl MercuryApp {
                     self.notify(format!("{summary} — in History (⌘ H)"), failed);
                 }
             }
-            Err(e) if self.sent_file.take() == self.current_file => {
-                self.sent = None;
-                self.response = None;
-                // the response panel shows the full error with a Retry
-                // button, so a toast repeating it is just noise
-                self.show_history = false;
-                self.request_error = Some(e);
-            }
             Err(e) => {
-                // failed after the user moved to another request
-                self.sent = None;
-                self.notify(format!("Request failed: {e}"), true);
+                // a failed send is in history too: it's the attempt you most
+                // want to look at again
+                self.record_history(http::HttpResponse::failed(), Some(e.clone()));
+                if self.sent_file.take() == self.current_file {
+                    self.response = None;
+                    // the response panel shows the full error with a Retry
+                    // button, so a toast repeating it is just noise
+                    self.show_history = false;
+                    self.request_error = Some(e);
+                } else {
+                    // failed after the user moved to another request
+                    self.notify(format!("Request failed: {e}"), true);
+                }
             }
         }
         self.formatted_body = None;
         self.body_rows = None;
+    }
+
+    /// Add the send that just finished to history; returns what was sent.
+    fn record_history(&mut self, response: http::HttpResponse, error: Option<String>) -> Request {
+        self.ensure_history_loaded();
+        let request = self.sent.take().unwrap_or_else(|| self.form_request());
+        let entry = HistoryEntry {
+            timestamp: storage::now(),
+            request: request.clone(),
+            response,
+            env: self.sent_env.clone(),
+            file: self
+                .sent_file
+                .as_ref()
+                .map(|p| p.to_string_lossy().into_owned()),
+            error,
+        };
+        self.history.push(HistorySummary::from(&entry));
+        let excess = self.history.len().saturating_sub(storage::MAX_HISTORY);
+        self.history.drain(..excess);
+        // queued now (instantly visible to history reads), written
+        // off the UI thread: it rewrites the whole history file
+        storage::queue_history(entry);
+        self.spawn(|| {
+            storage::flush_history();
+            None
+        });
+        request
     }
 
     pub fn ensure_history_loaded(&mut self) {
@@ -1002,7 +1011,13 @@ impl MercuryApp {
                         self.load_request(entry.request, None);
                     }
                 }
-                self.response = Some(std::sync::Arc::new(entry.response));
+                match entry.error {
+                    Some(e) => {
+                        self.response = None;
+                        self.request_error = Some(e);
+                    }
+                    None => self.response = Some(std::sync::Arc::new(entry.response)),
+                }
                 self.response_env = entry.env;
                 self.show_history = false;
             }
