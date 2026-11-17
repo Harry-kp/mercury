@@ -8,11 +8,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Save a response value for the next request.** Right-click a field in a JSON response and choose **Save as `{{token}}` in .env.dev**: the line is written into the environment file and used from the next send. **Copy value** is there too.
+- **`.env` is shared by every environment**, as in dotenv: with `.env.dev` selected, `.env` is read first and `.env.dev` overrides it.
 - **Trust a self-signed certificate where it fails.** The SSL/TLS error has **Trust host and retry**, which skips the check for that host until Mercury quits. That connection keeps its own cookies and follows redirects only on the same host. No setting, and nothing is remembered.
 - **Hover a `{{variable}}` in the URL bar to see its value** and the environment it comes from, even while you type. Before, only the Headers and Body chips showed values, so you opened the `.env` file to check.
 - **Import several exports at once.** The Postman and Insomnia pickers take more than one file, so a collection and its environment exports come in together.
 
+### Fixed
+- A `.env` value containing a line break (from an import) is written as `\n` and read back intact, instead of splitting into a broken line.
+- **Sidebar filter:** a folder that matches by name shows its requests (it showed up empty), `json` no longer matches every request, and a filter that matches nothing says so instead of leaving the sidebar blank.
+- Filtering a folder with a symlink back up the tree no longer loads ~100 nested copies of it and widens the sidebar. Very deep trees stop indenting before their rows run out of room.
+- Clicking a request no longer rescans the whole workspace (re-reading every visible request file).
+
 ### Changed
+- **History keeps response bodies up to 1 MB.** It rewrote up to 50 × 10 MB on every send; a bigger body is still shown in full when it arrives.
 - **No request timeout.** Slow endpoints (reports, LLM APIs) used to fail at 30 seconds with no way around it. Now only connecting is limited (30 s); `Esc` cancels anything else.
 - **The `⋯` beside Send is gone.** Copy as cURL and Revert to saved are on the open request's `⋯` in the sidebar (and in `⌘ K`); Format is in the Body tab, where it already was.
 - The sidebar sorts names ignoring case, the way a file manager does: `alpha` no longer comes after `Zeta`.

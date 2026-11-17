@@ -416,6 +416,21 @@ fn detect_response_type(content_type: &str, body: &[u8], status: u16) -> Respons
 /// changes. Parsing into a `serde_json::Value` and printing it back sorted
 /// keys, rewrote numbers and dropped duplicate keys, so the "Pretty" view
 /// (and Format body) didn't show what was actually sent.
+/// `"token": "abc",`, one line of formatted JSON, as `("token", "abc")`.
+/// `None` for a line that opens an object or array, or has no key.
+pub fn json_field(line: &str) -> Option<(String, String)> {
+    let line = line.trim().trim_end_matches(',');
+    let map: serde_json::Map<String, serde_json::Value> =
+        serde_json::from_str(&format!("{{{line}}}")).ok()?;
+    let (key, value) = map.into_iter().next()?;
+    let value = match value {
+        serde_json::Value::String(s) => s,
+        serde_json::Value::Object(_) | serde_json::Value::Array(_) => return None,
+        other => other.to_string(),
+    };
+    Some((key, value))
+}
+
 pub fn format_json(body: &str) -> String {
     if serde_json::from_str::<serde::de::IgnoredAny>(body).is_err() {
         return body.to_string();
@@ -704,6 +719,21 @@ mod tests {
     fn host_of_a_typed_url() {
         assert_eq!(host("localhost:8443/x").as_deref(), Some("localhost:8443"));
         assert_eq!(host("https://api.dev/v1").as_deref(), Some("api.dev"));
+    }
+
+    #[test]
+    fn a_formatted_json_line_gives_its_field() {
+        let f = |l| json_field(l);
+        assert_eq!(
+            f(r#"    "token": "a\"b","#),
+            Some(("token".into(), "a\"b".into()))
+        );
+        assert_eq!(f(r#"  "id": 42"#), Some(("id".into(), "42".into())));
+        assert_eq!(f(r#"  "ok": true,"#), Some(("ok".into(), "true".into())));
+        assert_eq!(f(r#"  "user": {"#), None);
+        assert_eq!(f(r#"  "tags": [],"#), None);
+        assert_eq!(f(r#"  "plain","#), None);
+        assert_eq!(f("}"), None);
     }
 
     #[test]
