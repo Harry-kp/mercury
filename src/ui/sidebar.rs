@@ -8,7 +8,7 @@ use super::widgets::{
     strong,
 };
 use crate::model::CollectionItem;
-use crate::{storage, workspace};
+use crate::workspace;
 use eframe::egui::{self, Align, Margin, ScrollArea, Ui};
 use std::path::{Path, PathBuf};
 
@@ -107,7 +107,7 @@ impl MercuryApp {
             });
         if let Some(idx) = remove {
             self.recent.remove(idx);
-            storage::save_recent(&self.recent);
+            self.save_recent();
         } else if let Some(request) = open {
             self.autosave();
             self.load_request(request, None);

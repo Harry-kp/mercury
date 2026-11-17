@@ -230,6 +230,21 @@ impl MercuryApp {
             return;
         }
         let search = self.history_search.to_lowercase();
+        if !self
+            .history
+            .iter()
+            .any(|e| e.url.to_lowercase().contains(&search))
+        {
+            // as the sidebar filter says it, instead of a blank panel
+            ui.add(
+                egui::Label::new(muted(format!(
+                    "No requests match \"{}\"",
+                    self.history_search
+                )))
+                .wrap(),
+            );
+            return;
+        }
         let now = storage::now();
         let mut open = None;
         ScrollArea::vertical()

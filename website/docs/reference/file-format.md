@@ -88,9 +88,10 @@ These live outside the workspace, in `~/.mercury/` (or `$MERCURY_HOME`):
 
 | File | Contents |
 |------|----------|
-| `state.json` | The last workspace, the editor contents, the selected tab and environment. Restored on launch. |
+| `state.json` | The last workspace, the open request file, the editor contents, the environment and the theme. Restored on launch. |
 | `recent.json` | Unsaved requests you've sent (up to 50) |
 | `history.json` | Sent requests and their responses (the newest 50, up to 7 days old) |
+| `history.lock` | Empty. Keeps two Mercury windows from writing history at the same moment |
 
 ## Related
 
