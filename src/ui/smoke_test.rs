@@ -85,6 +85,11 @@ fn open_send_edit_and_save() {
         .build_state(|ctx, app: &mut MercuryApp| app.frame(ctx), app);
     harness.run_steps(2);
     assert_eq!(harness.state().env_name(), Some(".env.dev"));
+    assert_eq!(
+        harness.state().tab,
+        Tab::Params,
+        "a fresh GET opens on Params"
+    );
 
     // Every control Mercury draws by hand has to name itself in the
     // accessibility tree, or it reaches a screen reader — and the keyboard

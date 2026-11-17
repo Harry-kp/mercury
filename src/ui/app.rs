@@ -339,7 +339,8 @@ impl MercuryApp {
             form_bulk_edit: false,
             headers_text: String::new(),
             body_text: String::new(),
-            tab: Tab::Body,
+            // a fresh request is a GET: Params, by the rule in `load_request`
+            tab: Tab::Params,
             headers_bulk_edit: false,
             params_bulk_edit: false,
             saved_content: None,
