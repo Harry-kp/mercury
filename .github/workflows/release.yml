@@ -80,7 +80,12 @@ jobs:
           dist ${{ (!github.event.pull_request && format('host --steps=create --tag={0}', github.ref_name)) || 'plan' }} --output-format=json > plan-dist-manifest.json
           echo "dist ran successfully"
           cat plan-dist-manifest.json
-          echo "manifest=$(jq -c "." plan-dist-manifest.json)" >> "$GITHUB_OUTPUT"
+          # Job outputs carry only what later jobs read (the build matrix).
+          # The release notes stay out: GitHub drops an output containing
+          # anything that looks like a secret, and v0.4.0's notes did, so
+          # the matrix vanished and every build was skipped. dist writes the
+          # release body from the manifest file, not from this output.
+          echo "manifest=$(jq -c 'del(.announcement_changelog, .announcement_github_body)' plan-dist-manifest.json)" >> "$GITHUB_OUTPUT"
       - name: "Upload dist-manifest.json"
         uses: actions/upload-artifact@v4
         with:
@@ -248,7 +253,8 @@ jobs:
           dist host ${{ needs.plan.outputs.tag-flag }} --steps=upload --steps=release --output-format=json > dist-manifest.json
           echo "artifacts uploaded and released successfully"
           cat dist-manifest.json
-          echo "manifest=$(jq -c "." dist-manifest.json)" >> "$GITHUB_OUTPUT"
+          # (release notes kept out of job outputs: see the plan job)
+          echo "manifest=$(jq -c 'del(.announcement_changelog, .announcement_github_body)' dist-manifest.json)" >> "$GITHUB_OUTPUT"
       - name: "Upload dist-manifest.json"
         uses: actions/upload-artifact@v4
         with:
