@@ -10,7 +10,7 @@ Every request that gets a response is saved to history together with that respon
 
 ## Opening history
 
-Press `⌘ H`, or click **History** in the response panel. The history list takes the place of the response panel. Press `⌘ H` again, or click ×, to close it.
+Press `⌘ H`, or click the clock icon at the top of the response panel (it's there in every state). The history list takes the place of the response panel. Press `⌘ H` again, or click ×, to close it.
 
 Each entry shows:
 
@@ -18,12 +18,13 @@ Each entry shows:
 - when it was sent ("Just now", "5 min ago", "Yesterday", ...)
 - the status code
 - the response time
+- the environment it was sent with
 
 Newest entries are at the top. The **Search history...** box filters entries by URL.
 
 ## Restoring an entry
 
-Click an entry to load its method, URL, headers and body into the editor and show the stored response. The list then closes. The restored request isn't linked to a file, so press `⌘ S` to save it as a new request.
+Click an entry to show the stored response. If it was sent from a request file that still exists, that file opens; otherwise the method, URL, headers and body are loaded as an unsaved request, which `⌘ S` saves. The response is labelled with the environment it came from, and with **from .env.dev** (say) once a different environment is selected. The list then closes.
 
 Bodies of images and binary responses aren't stored in history. A restored binary response shows its type and size, but you can't save its contents.
 
@@ -34,9 +35,9 @@ Bodies of images and binary responses aren't stored in history. A restored binar
 | File | `~/.mercury/history.json` (one list for all workspaces) |
 | Entries kept | The newest 50 |
 | Age | Entries older than 7 days are dropped |
-| Clearing | The trash icon in the history header deletes the file immediately, with no confirmation |
+| Clearing | The trash icon in the history header clears it at once. The notification that follows has an **Undo** link for a few seconds |
 
-History stores full request headers and response bodies, including any tokens they contain, in plain text. Clear it if that's a concern.
+History stores full request headers and response bodies, including any tokens they contain, in plain text. The history panel says so under its search box. Clear it if that's a concern.
 
 History is read from disk only when you first open the list or send a request, and only a summary of each entry is kept in memory. See [Performance](/docs/performance#lazy-loading).
 

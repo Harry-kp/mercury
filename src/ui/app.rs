@@ -4,7 +4,7 @@
 
 use super::icon::Icon;
 use super::palette::Palette;
-use super::theme::{self, theme, Layout, Radius, Space, Text};
+use super::theme::{self, theme, Layout, Space};
 use super::widgets::{
     self, confirm_modal, faint, icon_button, input_modal, key_combo, label, menu_item, modal,
     muted, popup_menu, strong, ModalAction,
@@ -17,7 +17,7 @@ use crate::model::{
     RequestFile, ThemeMode,
 };
 use crate::{curl, storage, vars, workspace};
-use eframe::egui::{self, Align, Key, Margin, Sense, Stroke, Vec2};
+use eframe::egui::{self, Align, Key, Margin, Stroke, Vec2};
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -52,6 +52,10 @@ pub enum Action {
     ImportInsomnia,
     Docs,
     Help,
+    RenameRequest,
+    DuplicateRequest,
+    DeleteRequest,
+    RevertFile,
 }
 
 /// One keyboard shortcut. `SHORTCUTS` is the single list: the in-app help
@@ -114,7 +118,13 @@ pub const SHORTCUTS: &[Shortcut] = &[
         Action::FindInResponse,
     ),
     cmd("⌘ ⇧ C", "Copy as cURL", Key::C, true, Action::CopyCurl),
-    cmd("⌘ ⇧ F", "Focus mode", Key::F, true, Action::FocusMode),
+    cmd(
+        "⌘ ⇧ F",
+        "Hide / show sidebar",
+        Key::F,
+        true,
+        Action::FocusMode,
+    ),
     Shortcut {
         keys: "?",
         label: "Keyboard shortcuts",
@@ -172,7 +182,8 @@ pub enum Dialog {
     NewRequest(PathBuf, bool),
     NewFolder(PathBuf),
     Rename(PathBuf),
-    Delete(PathBuf),
+    /// The path, and the confirmation text (counted once, when opened).
+    Delete(PathBuf, String),
     Shortcuts,
 }
 
@@ -180,6 +191,15 @@ pub struct Toast {
     pub text: String,
     pub shown_at: f64,
     pub is_error: bool,
+    /// What the toast's "Undo" puts back. Clearing a list is instant and
+    /// undoable rather than confirmed: a confirm on every clear is noise, and
+    /// no confirm at all lost whole histories to one mis-click.
+    pub undo: Option<Undo>,
+}
+
+pub enum Undo {
+    History(Vec<HistoryEntry>),
+    Recent(Vec<RecentRequest>),
 }
 
 /// Results from background threads, drained once per frame.
@@ -215,6 +235,11 @@ pub struct MercuryApp {
     pub tree: Vec<CollectionItem>,
     pub expanded: HashSet<PathBuf>,
     pub selected_folder: Option<PathBuf>,
+    /// Where a new or saved request lands: the folder of the request opened
+    /// last, or the folder clicked last, whichever came later.
+    last_folder: Option<PathBuf>,
+    /// Request files opened lately, newest first (the palette's empty query).
+    pub opened_recently: Vec<PathBuf>,
     pub search: String,
     /// Filtering needs the whole tree in memory; see `sidebar::load_subtree`.
     pub tree_fully_loaded: bool,
@@ -258,6 +283,13 @@ pub struct MercuryApp {
     /// The file that was open when it left. If the user navigates to another
     /// request meanwhile, the response belongs to neither of them on screen.
     sent_file: Option<PathBuf>,
+    /// The environment it left with, recorded in history.
+    sent_env: Option<String>,
+    /// The environment the response on screen came from.
+    pub response_env: Option<String>,
+    /// The open file as it was when opened: "Revert to saved" goes back to
+    /// it, since autosave has already written every edit since.
+    opened_content: Option<String>,
     request_counter: u64,
 
     // History and recent
@@ -307,7 +339,8 @@ impl MercuryApp {
             form_bulk_edit: false,
             headers_text: String::new(),
             body_text: String::new(),
-            tab: Tab::Body,
+            // a fresh request is a GET: Params, by the rule in `load_request`
+            tab: Tab::Params,
             headers_bulk_edit: false,
             params_bulk_edit: false,
             saved_content: None,
@@ -322,6 +355,11 @@ impl MercuryApp {
             in_flight: None,
             sent: None,
             sent_file: None,
+            sent_env: None,
+            response_env: None,
+            opened_content: None,
+            last_folder: None,
+            opened_recently: Vec::new(),
             request_counter: 0,
             history: Vec::new(),
             history_loaded: false,
@@ -379,7 +417,33 @@ impl MercuryApp {
             text: text.into(),
             shown_at: self.time,
             is_error,
+            undo: None,
         });
+    }
+
+    fn notify_undo(&mut self, text: String, undo: Undo) {
+        self.notify(text, false);
+        if let Some(toast) = &mut self.toast {
+            toast.undo = Some(undo);
+        }
+    }
+
+    fn undo(&mut self, undo: Undo) {
+        match undo {
+            Undo::History(entries) => {
+                storage::restore_history(entries);
+                self.history = storage::load_history_summaries();
+                self.history_loaded = true;
+            }
+            Undo::Recent(mut old) => {
+                // anything sent since the clear stays, after the old ones
+                old.append(&mut self.recent);
+                let excess = old.len().saturating_sub(storage::MAX_RECENT);
+                old.drain(..excess);
+                self.recent = old;
+                storage::save_recent(&self.recent);
+            }
+        }
     }
 
     /// Run `job` on a thread; its event (if any) is handled next frame.
@@ -406,7 +470,16 @@ impl MercuryApp {
     }
 
     pub fn pick_folder(&self) {
-        self.spawn(|| rfd::FileDialog::new().pick_folder().map(Event::OpenFolder));
+        self.pick_folder_titled("Open a folder of requests");
+    }
+
+    fn pick_folder_titled(&self, title: &'static str) {
+        self.spawn(move || {
+            rfd::FileDialog::new()
+                .set_title(title)
+                .pick_folder()
+                .map(Event::OpenFolder)
+        });
     }
 
     /// Open an imported collection and land the user inside it.
@@ -444,7 +517,7 @@ impl MercuryApp {
 
     pub fn open_workspace(&mut self, path: PathBuf, env: Option<&str>) {
         if !path.is_dir() {
-            self.notify(format!("Workspace not found: {}", path.display()), true);
+            self.notify(format!("Folder not found: {}", path.display()), true);
             return;
         }
         self.env_files = workspace::env_files(&path);
@@ -523,9 +596,25 @@ impl MercuryApp {
             .map(String::as_str)
     }
 
+    /// A user-chosen switch (menu or ⌘E). It is announced: the only other
+    /// signal is a chip in the corner, and ⌘E cycles in file-name order, so
+    /// one press from dev can land on prod.
     pub fn select_env(&mut self, index: Option<usize>) {
         self.selected_env = index;
         self.load_env();
+        let text = match self.env_name() {
+            Some(name) => format!("Environment: {name}"),
+            None => "No environment".to_string(),
+        };
+        self.notify(text, false);
+    }
+
+    /// "prod" when a production-looking environment is selected, so the Send
+    /// button can say where the request is going.
+    pub fn prod_target(&self) -> Option<&str> {
+        self.env_name()
+            .filter(|n| theme::is_prod(n))
+            .map(|n| n.trim_start_matches(".env."))
     }
 
     fn load_env(&mut self) {
@@ -590,9 +679,22 @@ impl MercuryApp {
         self.headers_text = request.headers;
         self.body_text = request.body;
         self.query_params = kv::parse_query_params(&self.url);
+        // Open on the tab that holds this request's content. The tab used to
+        // be one global value, so a GET opened on an empty Body editor, or on
+        // whatever the previous request was showing.
+        self.tab = if !self.body_text.trim().is_empty()
+            || matches!(
+                self.method,
+                HttpMethod::POST | HttpMethod::PUT | HttpMethod::PATCH
+            ) {
+            Tab::Body
+        } else {
+            Tab::Params
+        };
         self.current_file = file;
         self.saved_content = self.current_file.as_ref().map(|_| self.file_content());
         self.response = None;
+        self.response_env = None;
         self.request_error = None;
         self.formatted_body = None;
         self.response_tab = ResponseTab::Body;
@@ -604,15 +706,22 @@ impl MercuryApp {
             .map_err(|e| e.to_string())
             .and_then(|c| RequestFile::from_json(&c));
         match loaded {
-            Ok(file) => self.load_request(
-                Request {
-                    method: file.method,
-                    url: file.url,
-                    headers: kv::map_to_headers(&file.headers),
-                    body: file.body,
-                },
-                Some(path.to_path_buf()),
-            ),
+            Ok(file) => {
+                self.load_request(
+                    Request {
+                        method: file.method,
+                        url: file.url,
+                        headers: kv::map_to_headers(&file.headers),
+                        body: file.body,
+                    },
+                    Some(path.to_path_buf()),
+                );
+                self.opened_content = self.saved_content.clone();
+                self.last_folder = path.parent().map(Path::to_path_buf);
+                self.opened_recently.retain(|p| p != path);
+                self.opened_recently.insert(0, path.to_path_buf());
+                self.opened_recently.truncate(5);
+            }
             // the file name and the reason; the absolute path just wraps the
             // notification onto three lines
             Err(e) => {
@@ -651,29 +760,72 @@ impl MercuryApp {
         self.autosave();
         self.load_request(Request::default(), None);
         self.focus("url_bar");
-        self.notify("New request", false);
     }
 
     fn save(&mut self) {
+        // an existing file: write now; the status bar says "Saved", a toast
+        // on top of that was noise on every ⌘S
         if self.current_file.is_some() {
-            if self.save_file() {
-                self.notify("Saved", false);
-            }
+            self.save_file();
         } else if let Some(root) = self.target_folder() {
             self.open_dialog(Dialog::NewRequest(root, true), "");
         } else {
-            self.pick_folder();
-            self.notify("Open a folder first to save requests", false);
+            // the picker's own title says why it opened; a success-ticked
+            // toast beside it read as if something had been saved
+            self.pick_folder_titled("Choose a folder to save requests in");
         }
     }
 
-    /// Where "new request" / "new folder" land: the selected collection, else
-    /// the workspace root.
+    /// Where "new request" / "new folder" / "save" land: the folder of the
+    /// request opened last or the folder clicked last, else the root. It was
+    /// the folder *clicked* last, which could be minutes and requests ago.
     fn target_folder(&self) -> Option<PathBuf> {
-        self.selected_folder
+        self.last_folder
             .clone()
-            .filter(|p| p.is_dir())
+            .filter(|p| p.is_dir() && self.workspace.as_ref().is_some_and(|w| p.starts_with(w)))
             .or_else(|| self.workspace.clone())
+    }
+
+    pub fn select_folder(&mut self, path: &Path) {
+        self.selected_folder = Some(path.to_path_buf());
+        self.last_folder = Some(path.to_path_buf());
+    }
+
+    /// Back to the file as it was when it was opened.
+    fn revert_file(&mut self) {
+        let (Some(path), Some(content)) = (self.current_file.clone(), self.opened_content.clone())
+        else {
+            return;
+        };
+        let Ok(file) = RequestFile::from_json(&content) else {
+            return;
+        };
+        let response = self.response.take();
+        self.load_request(
+            Request {
+                method: file.method,
+                url: file.url,
+                headers: kv::map_to_headers(&file.headers),
+                body: file.body,
+            },
+            Some(path),
+        );
+        self.response = response;
+        self.saved_content = None; // differs from disk until written
+        if self.save_file() {
+            self.notify("Reverted to the version you opened", false);
+        }
+    }
+
+    pub fn duplicate(&mut self, path: &Path) {
+        match workspace::duplicate(path) {
+            Ok(copy) => {
+                self.rebuild_tree();
+                let name = copy.file_stem().unwrap_or_default().to_string_lossy();
+                self.notify(format!("Duplicated as '{name}'"), false);
+            }
+            Err(e) => self.notify(e, true),
+        }
     }
 
     fn focus(&self, id: &str) {
@@ -706,6 +858,7 @@ impl MercuryApp {
         self.in_flight = Some(id);
         self.sent = Some(self.form_request());
         self.sent_file = self.current_file.clone();
+        self.sent_env = self.env_name().map(str::to_string);
         let client = self.client.clone();
         self.spawn(move || Some(Event::Response(id, http::execute(&client, &request))));
     }
@@ -728,6 +881,11 @@ impl MercuryApp {
                     timestamp: storage::now(),
                     request: request.clone(),
                     response: response.clone(),
+                    env: self.sent_env.clone(),
+                    file: self
+                        .sent_file
+                        .as_ref()
+                        .map(|p| p.to_string_lossy().into_owned()),
                 };
                 self.history.push(HistorySummary::from(&entry));
                 let excess = self.history.len().saturating_sub(storage::MAX_HISTORY);
@@ -750,6 +908,7 @@ impl MercuryApp {
                 let failed = response.status >= 400;
                 if self.sent_file.take() == self.current_file {
                     self.response = Some(response);
+                    self.response_env = self.sent_env.take();
                     self.request_error = None;
                     // the pane puts the status badge at the top of the
                     // response; a toast saying "200 OK" next to it is noise on
@@ -794,9 +953,20 @@ impl MercuryApp {
     pub fn open_history_entry(&mut self, timestamp: f64) {
         match storage::load_history_entry(timestamp) {
             Some(entry) => {
-                self.autosave();
-                self.load_request(entry.request, None);
+                // back on the file it was sent from, if it still exists,
+                // instead of a detached "Untitled" copy
+                match entry.file.map(PathBuf::from).filter(|f| f.is_file()) {
+                    Some(file) => {
+                        self.open_file(&file);
+                        self.expand_to(&file);
+                    }
+                    None => {
+                        self.autosave();
+                        self.load_request(entry.request, None);
+                    }
+                }
                 self.response = Some(entry.response);
+                self.response_env = entry.env;
                 self.show_history = false;
             }
             None => self.notify("History entry no longer exists", true),
@@ -804,8 +974,18 @@ impl MercuryApp {
     }
 
     pub fn clear_history(&mut self) {
+        let count = self.history.len();
         self.history.clear();
-        storage::clear_history();
+        let entries = storage::take_history();
+        let what = plural(count, "history entry", "history entries");
+        self.notify_undo(format!("Cleared {what}"), Undo::History(entries));
+    }
+
+    pub fn clear_recent(&mut self) {
+        let old = std::mem::take(&mut self.recent);
+        storage::save_recent(&self.recent);
+        let what = plural(old.len(), "unsaved request", "unsaved requests");
+        self.notify_undo(format!("Cleared {what}"), Undo::Recent(old));
     }
 
     fn copy_as_curl(&mut self) {
@@ -923,11 +1103,23 @@ impl MercuryApp {
     pub fn open_dialog(&mut self, dialog: Dialog, text: &str) {
         // otherwise focus stays wherever it was (the URL bar, after ⌘N) and
         // the name field silently swallows nothing
-        if !matches!(dialog, Dialog::Delete(_) | Dialog::Shortcuts) {
+        if !matches!(dialog, Dialog::Delete(..) | Dialog::Shortcuts) {
             self.focus("modal_input");
         }
         self.dialog = Some(dialog);
         self.dialog_text = text.to_string();
+    }
+
+    pub fn ask_delete(&mut self, path: &Path) {
+        let name = path.file_stem().unwrap_or_default().to_string_lossy();
+        let is_dir = path.is_dir();
+        let counts = if is_dir {
+            workspace::count_contents(path)
+        } else {
+            (1, 0)
+        };
+        let message = delete_message(&name, is_dir, counts);
+        self.open_dialog(Dialog::Delete(path.to_path_buf(), message), "");
     }
 
     /// "New request" vs "New request in users" — the destination matters.
@@ -968,19 +1160,13 @@ impl MercuryApp {
             ),
             Dialog::NewFolder(_) => input_modal(ctx, &titles, "Folder name", "Create", text),
             Dialog::Rename(_) => input_modal(ctx, "Rename", "New name", "Rename", text),
-            Dialog::Delete(path) => {
-                let name = path.file_stem().unwrap_or_default().to_string_lossy();
-                let (title, what) = if path.is_dir() {
-                    ("Delete folder", "folder")
+            Dialog::Delete(path, message) => {
+                let title = if path.is_dir() {
+                    "Delete folder"
                 } else {
-                    ("Delete request", "request")
+                    "Delete request"
                 };
-                confirm_modal(
-                    ctx,
-                    title,
-                    &format!("Delete the {what} '{name}'?"),
-                    "Delete",
-                )
+                confirm_modal(ctx, title, message, title)
             }
             Dialog::Shortcuts => shortcuts_modal(ctx),
         };
@@ -1033,7 +1219,7 @@ impl MercuryApp {
                 self.rebuild_tree();
                 Ok("Renamed")
             }
-            Dialog::Delete(path) => {
+            Dialog::Delete(path, _) => {
                 workspace::delete(&path)?;
                 if self
                     .current_file
@@ -1096,6 +1282,24 @@ impl MercuryApp {
             }
             Action::ImportPostman => self.start_import(&POSTMAN),
             Action::ImportInsomnia => self.start_import(&INSOMNIA),
+            Action::RenameRequest
+            | Action::DuplicateRequest
+            | Action::DeleteRequest
+            | Action::RevertFile => {
+                let Some(file) = self.current_file.clone() else {
+                    self.notify("Open a saved request first", false);
+                    return;
+                };
+                match action {
+                    Action::RenameRequest => {
+                        let name = file.file_name().unwrap_or_default().to_string_lossy();
+                        self.open_dialog(Dialog::Rename(file.clone()), &name);
+                    }
+                    Action::DuplicateRequest => self.duplicate(&file),
+                    Action::DeleteRequest => self.ask_delete(&file),
+                    _ => self.revert_file(),
+                }
+            }
             Action::Docs => {
                 let _ = open::that(DOCS_URL);
             }
@@ -1158,19 +1362,26 @@ impl MercuryApp {
                     self.workspace_menu(ui);
                     self.breadcrumb(ui);
 
-                    ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
-                        self.help_menu(ui);
-                        let (what, tip) = if theme::is_dark() {
-                            (Icon::Sun, "Switch to light (⌘ D)")
-                        } else {
-                            (Icon::Moon, "Switch to dark (⌘ D)")
-                        };
-                        if icon_button(ui, what, tip).clicked() {
-                            self.run(Action::ToggleTheme);
-                        }
-                        ui.add_space(Space::SM);
-                        self.env_menu(ui);
-                    });
+                    // The right-hand group is laid out left to right after a
+                    // spacer, not in a right-to-left layout: that reversed
+                    // the Tab order (… → theme → environment).
+                    let (env, _) = self.env_label();
+                    let right = widgets::chip_width(ui, &env)
+                        + Space::SM
+                        + Layout::ICON_BUTTON * 2.0
+                        + ui.spacing().item_spacing.x * 3.0;
+                    ui.add_space((ui.available_width() - right).max(0.0));
+                    self.env_menu(ui);
+                    ui.add_space(Space::SM);
+                    let (what, tip) = if theme::is_dark() {
+                        (Icon::Sun, "Switch to light (⌘ D)")
+                    } else {
+                        (Icon::Moon, "Switch to dark (⌘ D)")
+                    };
+                    if icon_button(ui, what, tip).clicked() {
+                        self.run(Action::ToggleTheme);
+                    }
+                    self.help_menu(ui);
                 });
             });
     }
@@ -1184,7 +1395,11 @@ impl MercuryApp {
         } else {
             "Open folder".to_string()
         };
-        let chip = chip(ui, Icon::Folder, &name, t.text, open);
+        let mut chip = widgets::chip(ui, Icon::Folder, &name, t.text, open);
+        if let Some(path) = &self.workspace {
+            // the full path used to sit in the status bar, truncated
+            chip = chip.on_hover_text(path.display().to_string());
+        }
         popup_menu(ui, &chip, Layout::MENU_WIDTH, |ui| {
             if menu_item(ui, Some(Icon::Folder), "Open folder…", "⌘ O") {
                 self.pick_folder();
@@ -1201,7 +1416,7 @@ impl MercuryApp {
             }
             if open {
                 widgets::divider(ui);
-                if menu_item(ui, Some(Icon::Copy), "Copy workspace path", "") {
+                if menu_item(ui, Some(Icon::Copy), "Copy folder path", "") {
                     let path = self.workspace.clone().unwrap_or_default();
                     ui.ctx().copy_text(path.display().to_string());
                 }
@@ -1210,20 +1425,28 @@ impl MercuryApp {
     }
 
     /// folder / folder / METHOD request •
-    fn breadcrumb(&self, ui: &mut egui::Ui) {
+    fn breadcrumb(&mut self, ui: &mut egui::Ui) {
         let t = theme();
-        let Some(root) = &self.workspace else {
-            return;
-        };
         let sep = |ui: &mut egui::Ui| {
             ui.label(muted("/").color(t.text_faint));
         };
-        let Some(file) = &self.current_file else {
-            sep(ui);
-            ui.label(muted("Untitled"));
-            if !self.url.is_empty() {
-                ui.label(faint("unsaved"));
+        if self.current_file.is_none() {
+            if self.workspace.is_some() {
+                sep(ui);
+                ui.label(muted("Untitled"));
             }
+            // the only way to keep a request used to be ⌘S, which nothing on
+            // screen mentioned once the first-run tips were gone
+            if !self.url.trim().is_empty()
+                && widgets::link(ui, muted("Save…").color(t.accent))
+                    .on_hover_text("Save this request as a file (⌘ S)")
+                    .clicked()
+            {
+                self.run(Action::Save);
+            }
+            return;
+        }
+        let (Some(root), Some(file)) = (&self.workspace, &self.current_file) else {
             return;
         };
         if let Some(folder) = file.strip_prefix(root).ok().and_then(Path::parent) {
@@ -1248,14 +1471,18 @@ impl MercuryApp {
         }
     }
 
-    fn env_menu(&mut self, ui: &mut egui::Ui) {
+    fn env_label(&self) -> (String, egui::Color32) {
         let t = theme();
-        let (name, color) = match (self.env_name(), &self.workspace) {
+        match (self.env_name(), &self.workspace) {
             (Some(name), _) => (name.to_string(), t.env(name)),
             (None, Some(_)) => ("No environment".to_string(), t.text_muted),
             (None, None) => ("No environment".to_string(), t.text_faint),
-        };
-        let chip = chip(ui, Icon::Layers, &name, color, self.workspace.is_some());
+        }
+    }
+
+    fn env_menu(&mut self, ui: &mut egui::Ui) {
+        let (name, color) = self.env_label();
+        let chip = widgets::chip(ui, Icon::Layers, &name, color, self.workspace.is_some());
         let mut picked = None;
         popup_menu(ui, &chip, Layout::MENU_WIDTH, |ui| {
             if menu_item(ui, None, "None", "") {
@@ -1287,7 +1514,7 @@ impl MercuryApp {
             if menu_item(ui, Some(Icon::Keyboard), "Keyboard shortcuts", "?") {
                 self.dialog = Some(Dialog::Shortcuts);
             }
-            if menu_item(ui, Some(Icon::PanelLeft), "Focus mode", "⌘ ⇧ F") {
+            if menu_item(ui, Some(Icon::PanelLeft), "Hide / show sidebar", "⌘ ⇧ F") {
                 self.run(Action::FocusMode);
             }
             widgets::divider(ui);
@@ -1316,26 +1543,18 @@ impl MercuryApp {
                 );
                 ui.horizontal_centered(|ui| {
                     ui.spacing_mut().item_spacing.x = Space::SM;
-                    match &self.workspace {
-                        Some(path) => {
-                            widgets::glyph(ui, Icon::Folder, 12.0, t.text_faint);
-                            ui.label(faint(widgets::workspace_label(path, 56)))
-                                .on_hover_text(path.display().to_string());
-                        }
-                        None => {
-                            ui.label(faint("No workspace — requests are files in a folder"));
-                        }
+                    // status, not a second copy of the folder chip: is the
+                    // open file on disk yet?
+                    if self.workspace.is_none() {
+                        ui.label(faint("No folder open — requests are files in a folder"));
+                    } else if self.has_unsaved_changes() {
+                        ui.label(faint("Unsaved changes · saves automatically"));
+                    } else if self.current_file.is_some() {
+                        ui.label(faint("Saved"));
                     }
 
                     ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
                         ui.spacing_mut().item_spacing.x = Space::SM;
-                        if widgets::link(ui, faint("Shortcuts"))
-                            .on_hover_text("Press ?")
-                            .clicked()
-                        {
-                            self.dialog = Some(Dialog::Shortcuts);
-                        }
-                        ui.add_space(Space::MD);
                         if widgets::link(ui, faint("Commands"))
                             .on_hover_text("Press ⌘K")
                             .clicked()
@@ -1345,7 +1564,7 @@ impl MercuryApp {
                         key_combo(ui, "⌘ K");
                         if self.focus_mode {
                             ui.add_space(Space::MD);
-                            ui.label(faint("Focus mode · ⌘ ⇧ F to exit").color(t.accent));
+                            ui.label(faint("Sidebar hidden · ⌘ ⇧ F to show").color(t.accent));
                         }
                     });
                 });
@@ -1362,68 +1581,61 @@ impl MercuryApp {
             return;
         }
         let (text, shown_at, is_error) = (toast.text.clone(), toast.shown_at, toast.is_error);
-        let alive = egui::Area::new(egui::Id::new("toast"))
+        let action = toast.undo.as_ref().map(|_| "Undo");
+        let state = egui::Area::new(egui::Id::new("toast"))
             .anchor(
                 egui::Align2::RIGHT_BOTTOM,
                 Vec2::new(-Space::XL, -(Layout::STATUS_BAR_HEIGHT + Space::LG)),
             )
             .order(egui::Order::Tooltip)
-            .show(ctx, |ui| widgets::toast(ui, &text, shown_at, is_error))
+            .show(ctx, |ui| {
+                widgets::toast(ui, &text, shown_at, is_error, action)
+            })
             .inner;
-        if !alive {
+        if state.acted {
+            if let Some(undo) = self.toast.take().and_then(|t| t.undo) {
+                self.undo(undo);
+            }
+        } else if !state.alive {
             self.toast = None;
         }
     }
 }
 
-/// A small pill of icon + text used for the workspace and environment menus.
-fn chip(
-    ui: &mut egui::Ui,
-    what: Icon,
-    text: &str,
-    color: egui::Color32,
-    enabled: bool,
-) -> egui::Response {
-    let t = theme();
-    let text = widgets::truncate(text, CRUMB_CHARS);
-    let galley =
-        ui.fonts_mut(|f| f.layout_no_wrap(text.clone(), theme::semibold(Text::SMALL), color));
-    let size = Vec2::new(galley.size().x + 14.0 + Space::SM + Space::MD * 2.0, 26.0);
-    let (rect, response) = ui.allocate_exact_size(size, Sense::click());
-    if response.hovered() {
-        ui.painter().rect_filled(rect, Radius::SM, t.hover);
-    }
-    let icon_rect = egui::Rect::from_center_size(
-        egui::pos2(rect.left() + Space::MD + 7.0, rect.center().y),
-        Vec2::splat(14.0),
-    );
-    super::icon::paint(
-        ui.painter(),
-        what,
-        icon_rect,
-        if enabled { color } else { t.text_faint },
-    );
-    ui.painter().galley(
-        egui::pos2(
-            icon_rect.right() + Space::SM,
-            rect.center().y - galley.size().y / 2.0,
-        ),
-        galley,
-        color,
-    );
-    response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, enabled, &text));
-    response.on_hover_cursor(egui::CursorIcon::PointingHand)
+/// "1 request" / "3 requests" — "1 requests" reads like a bug.
+fn plural(n: usize, one: &str, many: &str) -> String {
+    format!("{n} {}", if n == 1 { one } else { many })
 }
 
-/// "1 request, 1 environment" — an import that says "1 environments" reads
-/// like a bug in the thing that just read your collection.
 fn plural_import(requests: usize, envs: usize) -> String {
-    let s = |n: usize| if n == 1 { "" } else { "s" };
     format!(
-        "Imported {requests} request{}, {envs} environment{}",
-        s(requests),
-        s(envs)
+        "Imported {}, {}",
+        plural(requests, "request", "requests"),
+        plural(envs, "environment", "environments")
     )
+}
+
+/// A folder delete is `rm -rf`: say what goes with it, including files
+/// that aren't requests (fixtures, READMEs) and that the user may not expect.
+fn delete_message(name: &str, is_dir: bool, (requests, others): (usize, usize)) -> String {
+    if !is_dir {
+        return format!("Delete the request '{name}'?");
+    }
+    let mut message = if requests == 0 {
+        format!("Delete the folder '{name}'?")
+    } else {
+        format!(
+            "Delete '{name}' and the {} in it?",
+            plural(requests, "request", "requests")
+        )
+    };
+    if others > 0 {
+        message += &format!(
+            " It also holds {}.",
+            plural(others, "other file", "other files")
+        );
+    }
+    message
 }
 
 fn shortcuts_modal(ctx: &egui::Context) -> ModalAction {
@@ -1540,6 +1752,28 @@ mod tests {
                 assert_ne!(a.action, b.action);
             }
         }
+    }
+
+    /// A folder delete is permanent and takes everything inside with it, so
+    /// the confirmation has to say what that is.
+    #[test]
+    fn delete_message_counts_what_goes() {
+        assert_eq!(
+            delete_message("users", true, (3, 2)),
+            "Delete 'users' and the 3 requests in it? It also holds 2 other files."
+        );
+        assert_eq!(
+            delete_message("users", true, (1, 0)),
+            "Delete 'users' and the 1 request in it?"
+        );
+        assert_eq!(
+            delete_message("empty", true, (0, 1)),
+            "Delete the folder 'empty'? It also holds 1 other file."
+        );
+        assert_eq!(
+            delete_message("list-users", false, (1, 0)),
+            "Delete the request 'list-users'?"
+        );
     }
 
     /// The help modal and the palette render `keys` as one cap per space-run.

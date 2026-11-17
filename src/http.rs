@@ -136,24 +136,47 @@ pub fn execute(
     })
 }
 
+/// What happened and what to try, then the full cause. reqwest's own text is
+/// only the outer layer ("error sending request for url (…)"); the reason
+/// (refused, DNS, certificate) is at the bottom of the `source()` chain.
 fn error_message(e: &reqwest::Error) -> String {
-    let text = e.to_string();
+    let mut text = e.to_string();
+    let mut source = std::error::Error::source(e);
+    while let Some(cause) = source {
+        text = format!("{text}: {cause}");
+        source = cause.source();
+    }
     let lower = text.to_lowercase();
-    if e.is_timeout() {
-        format!("Request timed out after {TIMEOUT_SECS}s")
+    let host = e
+        .url()
+        .and_then(|u| {
+            Some(format!(
+                "{}{}",
+                u.host_str()?,
+                u.port().map(|p| format!(":{p}")).unwrap_or_default()
+            ))
+        })
+        .unwrap_or_else(|| "the server".into());
+    let summary = if e.is_timeout() {
+        format!("No reply from {host} after {TIMEOUT_SECS}s.")
     } else if e.is_connect()
         && ["certificate", "ssl", "tls", "handshake"]
             .iter()
             .any(|w| lower.contains(w))
     {
-        format!("SSL/TLS error: {text}")
+        format!("SSL/TLS error talking to {host}. Its certificate may not be trusted.")
+    } else if e.is_connect() && lower.contains("refused") {
+        format!("Nothing is listening on {host}. Is the server running?")
+    } else if lower.contains("dns") || lower.contains("lookup") || lower.contains("nodename") {
+        format!("Can't find the host {host}. Check the spelling or your network.")
     } else if e.is_connect() {
-        format!("Connection failed: {text}")
+        format!("Could not connect to {host}.")
     } else if e.is_builder() {
-        format!("Invalid URL: {text}")
+        "Invalid URL.".to_string()
     } else {
-        format!("Request failed: {text}")
-    }
+        "Request failed.".to_string()
+    };
+    format!("{summary}\n\n{text}")
 }
 
 fn extract_cookies(headers: &[(String, String)]) -> Vec<String> {
@@ -347,6 +370,25 @@ mod tests {
             asked.body, r#"{"ok":true}"#,
             "an explicit Accept-Encoding must still decode"
         );
+    }
+
+    /// "error sending request for url (…)" says nothing about why. The
+    /// cause is deeper in the chain, and the user needs a next step.
+    #[test]
+    fn refused_connection_says_why_and_what_to_try() {
+        let port = TcpListener::bind("127.0.0.1:0")
+            .unwrap()
+            .local_addr()
+            .unwrap()
+            .port(); // listener dropped: nothing listens there now
+        let err = get(&format!("http://127.0.0.1:{port}/x"), &[]).unwrap_err();
+        assert!(
+            err.starts_with(&format!(
+                "Nothing is listening on 127.0.0.1:{port}. Is the server running?"
+            )),
+            "{err}"
+        );
+        assert!(err.to_lowercase().contains("refused"), "{err}");
     }
 
     #[test]

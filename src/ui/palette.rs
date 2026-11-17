@@ -6,10 +6,10 @@
 
 use super::app::{Action, MercuryApp, SHORTCUTS};
 use super::icon::Icon;
-use super::theme::{theme, Layout, Radius, Space};
+use super::theme::{theme, Layout, Space};
 use super::widgets::{self, faint, label, method_text, muted};
 use crate::model::{CollectionItem, HttpMethod};
-use eframe::egui::{self, Align, Key, Margin, Sense, Stroke, Vec2};
+use eframe::egui::{self, Align, Key, Vec2};
 use std::path::{Path, PathBuf};
 
 /// Commands offered by the palette, in the order they appear. Actions that
@@ -19,6 +19,10 @@ const COMMANDS: &[(Action, &str, Icon)] = &[
     (Action::New, "New request", Icon::Plus),
     (Action::Save, "Save request", Icon::Download),
     (Action::NewFolder, "New folder", Icon::Folder),
+    (Action::RenameRequest, "Rename request…", Icon::Pencil),
+    (Action::DuplicateRequest, "Duplicate request", Icon::File),
+    (Action::RevertFile, "Revert to saved", Icon::Clock),
+    (Action::DeleteRequest, "Delete request…", Icon::Trash),
     (Action::OpenFolder, "Open folder…", Icon::Folder),
     (Action::ImportPostman, "Import from Postman…", Icon::Package),
     (
@@ -32,7 +36,7 @@ const COMMANDS: &[(Action, &str, Icon)] = &[
     (Action::History, "Toggle history", Icon::Clock),
     (Action::ToggleRaw, "Toggle raw response", Icon::File),
     (Action::FindInResponse, "Find in response", Icon::Search),
-    (Action::FocusMode, "Toggle focus mode", Icon::PanelLeft),
+    (Action::FocusMode, "Hide / show sidebar", Icon::PanelLeft),
     (Action::ToggleTheme, "Toggle light / dark", Icon::Sun),
     (Action::Help, "Keyboard shortcuts", Icon::Keyboard),
     (Action::Docs, "Documentation", Icon::ExternalLink),
@@ -48,6 +52,10 @@ pub struct Palette {
     /// Keyboard navigation has to drag the list with it.
     scroll_to_selection: bool,
     requests: Vec<RequestEntry>,
+    /// Recently opened request files, newest first: what an empty query
+    /// shows before the commands. Listing every request first pushed the
+    /// commands out of reach in any real workspace.
+    recent: Vec<PathBuf>,
 }
 
 struct RequestEntry {
@@ -74,7 +82,7 @@ enum Open {
 }
 
 impl Palette {
-    pub fn new(items: Vec<CollectionItem>, root: Option<&Path>) -> Self {
+    pub fn new(items: Vec<CollectionItem>, root: Option<&Path>, recent: &[PathBuf]) -> Self {
         let requests = items
             .into_iter()
             .filter_map(|item| match item {
@@ -100,6 +108,7 @@ impl Palette {
             selected_for: String::new(),
             scroll_to_selection: false,
             requests,
+            recent: recent.to_vec(),
         }
     }
 
@@ -126,6 +135,14 @@ impl Palette {
             ));
         }
         for request in &self.requests {
+            if query.is_empty() {
+                // only the recently opened ones, newest first, above the commands
+                let Some(at) = self.recent.iter().position(|p| *p == request.path) else {
+                    continue;
+                };
+                scored.push((100 - at as i32, request_row(request)));
+                continue;
+            }
             let haystack = if request.folder.is_empty() {
                 request.name.clone()
             } else {
@@ -134,21 +151,22 @@ impl Palette {
             let Some(score) = score(&haystack, &query) else {
                 continue;
             };
-            scored.push((
-                // a saved request usually beats a command matching the same words
-                score + 5,
-                Row {
-                    icon: Icon::File,
-                    title: request.name.clone(),
-                    subtitle: request.folder.clone(),
-                    keys: "",
-                    method: request.method,
-                    open: Open::Request(request.path.clone()),
-                },
-            ));
+            // a saved request usually beats a command matching the same words
+            scored.push((score + 5, request_row(request)));
         }
         scored.sort_by_key(|(score, _)| std::cmp::Reverse(*score));
         scored.into_iter().map(|(_, row)| row).collect()
+    }
+}
+
+fn request_row(request: &RequestEntry) -> Row {
+    Row {
+        icon: Icon::File,
+        title: request.name.clone(),
+        subtitle: request.folder.clone(),
+        keys: "",
+        method: request.method,
+        open: Open::Request(request.path.clone()),
     }
 }
 
@@ -177,14 +195,17 @@ impl MercuryApp {
             .as_deref()
             .map(crate::workspace::all_requests)
             .unwrap_or_default();
-        self.palette = Some(Palette::new(items, self.workspace.as_deref()));
+        self.palette = Some(Palette::new(
+            items,
+            self.workspace.as_deref(),
+            &self.opened_recently,
+        ));
     }
 
     pub fn command_palette(&mut self, ctx: &egui::Context) {
         if self.palette.is_none() {
             return;
         }
-        let t = theme();
 
         let (up, down, enter, escape) = ctx.input_mut(|i| {
             (
@@ -227,16 +248,8 @@ impl MercuryApp {
                 egui::Modal::default_area(egui::Id::new("command_palette"))
                     .anchor(egui::Align2::CENTER_TOP, Vec2::new(0.0, 96.0)),
             )
-            .backdrop_color(egui::Color32::from_black_alpha(
-                if super::theme::is_dark() { 110 } else { 45 },
-            ))
-            .frame(
-                egui::Frame::NONE
-                    .fill(t.elevated)
-                    .stroke(Stroke::new(1.0_f32, t.border))
-                    .corner_radius(Radius::LG)
-                    .inner_margin(Margin::same(Space::MD as i8)),
-            )
+            .backdrop_color(widgets::backdrop())
+            .frame(widgets::modal_frame(Space::MD))
             .show(ctx, |ui| {
                 ui.set_width(Layout::PALETTE_WIDTH);
                 widgets::search_input(
@@ -300,54 +313,30 @@ impl MercuryApp {
 
 fn palette_row(ui: &mut egui::Ui, index: usize, active: bool, scroll_to: bool, row: &Row) -> bool {
     let t = theme();
-    let height = 34.0;
-    let rect = egui::Rect::from_min_size(ui.cursor().min, Vec2::new(ui.available_width(), height));
-    let background = ui.painter().add(egui::Shape::Noop);
-    ui.scope_builder(
-        egui::UiBuilder::new()
-            .max_rect(rect.shrink2(Vec2::new(Space::LG, 0.0)))
-            .layout(egui::Layout::left_to_right(Align::Center)),
-        |ui| {
-            ui.set_min_height(height);
-            ui.spacing_mut().item_spacing.x = Space::MD;
-            widgets::glyph(
-                ui,
-                row.icon,
-                15.0,
-                if active { t.accent } else { t.text_faint },
-            );
-            ui.label(label(&row.title));
-            if !row.subtitle.is_empty() {
-                ui.label(faint(&row.subtitle));
+    let response = widgets::row_sized(ui, ("palette", index), &row.title, active, 34.0, |ui| {
+        ui.spacing_mut().item_spacing.x = Space::MD;
+        widgets::glyph(
+            ui,
+            row.icon,
+            15.0,
+            if active { t.accent } else { t.text_faint },
+        );
+        ui.label(label(&row.title));
+        if !row.subtitle.is_empty() {
+            ui.label(faint(&row.subtitle));
+        }
+        ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
+            if let Some(method) = row.method {
+                ui.label(method_text(method));
+            } else if !row.keys.is_empty() {
+                widgets::key_combo(ui, row.keys);
             }
-            ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
-                if let Some(method) = row.method {
-                    ui.label(method_text(method));
-                } else if !row.keys.is_empty() {
-                    widgets::key_combo(ui, row.keys);
-                }
-            });
-        },
-    );
-    ui.advance_cursor_after_rect(rect);
-
-    let response = ui.interact(rect, ui.id().with(index), Sense::click());
-    let fill = match (active, response.hovered()) {
-        (true, _) => t.selected,
-        (false, true) => t.hover,
-        (false, false) => egui::Color32::TRANSPARENT,
-    };
-    ui.painter()
-        .set(background, egui::Shape::rect_filled(rect, Radius::SM, fill));
+        });
+    });
     if scroll_to {
         response.scroll_to_me(None);
     }
-    response.widget_info(|| {
-        egui::WidgetInfo::selected(egui::WidgetType::SelectableLabel, true, active, &row.title)
-    });
-    response
-        .on_hover_cursor(egui::CursorIcon::PointingHand)
-        .clicked()
+    response.clicked()
 }
 
 #[cfg(test)]
@@ -368,8 +357,30 @@ mod tests {
 
     #[test]
     fn empty_query_lists_every_command() {
-        let palette = Palette::new(Vec::new(), None);
+        let palette = Palette::new(Vec::new(), None, &[]);
         assert_eq!(palette.rows().len(), COMMANDS.len());
+    }
+
+    /// With nothing typed: the recently opened requests, then every command.
+    /// Listing all requests first buried the commands in a real workspace.
+    #[test]
+    fn empty_query_shows_recent_requests_then_commands() {
+        let items: Vec<CollectionItem> = (0..20)
+            .map(|i| CollectionItem::Request {
+                name: format!("r{i}.json"),
+                path: PathBuf::from(format!("/ws/r{i}.json")),
+                method: None,
+            })
+            .collect();
+        let recent = [PathBuf::from("/ws/r7.json"), PathBuf::from("/ws/r3.json")];
+        let palette = Palette::new(items, Some(Path::new("/ws")), &recent);
+        let rows = palette.rows();
+        assert_eq!(rows.len(), 2 + COMMANDS.len());
+        assert_eq!(
+            (rows[0].title.as_str(), rows[1].title.as_str()),
+            ("r7", "r3")
+        );
+        assert!(matches!(rows[2].open, Open::Command(_)));
     }
 
     #[test]
@@ -379,7 +390,7 @@ mod tests {
             path: PathBuf::from("/ws/admin/list-users.json"),
             method: Some(HttpMethod::GET),
         }];
-        let mut palette = Palette::new(items, Some(Path::new("/ws")));
+        let mut palette = Palette::new(items, Some(Path::new("/ws")), &[]);
         palette.query = "admin".into();
         let rows = palette.rows();
         assert_eq!(rows[0].title, "list-users");

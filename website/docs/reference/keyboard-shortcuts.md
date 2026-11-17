@@ -22,11 +22,11 @@ On macOS `⌘` is Command. On Windows and Linux it's `Ctrl`.
 | `⌘ D` | Toggle light / dark |
 | `⌘ F` | Find in response |
 | `⌘ ⇧ C` | Copy as cURL |
-| `⌘ ⇧ F` | Focus mode |
+| `⌘ ⇧ F` | Hide / show sidebar |
 | `?` | Keyboard shortcuts |
 | `Esc` | Close find / cancel request / close dialog / clear filter |
 
-Press `?` (when you aren't typing in a field), click **Shortcuts** in the status bar, or pick **Keyboard shortcuts** from the `⋯` menu to see this list in the app.
+Press `?` (when you aren't typing in a field), pick **Keyboard shortcuts** from the `⋯` menu, or search for it in `⌘ K` to see this list in the app.
 
 ## Notes
 

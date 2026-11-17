@@ -12,7 +12,7 @@ Each saved request is a `.json` file in your workspace. The [File Format](/docs/
 
 - **Method.** Click the method name to choose one of `GET`, `POST`, `PUT`, `PATCH`, `DELETE`, `HEAD`, `OPTIONS`, `CONNECT` or `TRACE`.
 - **URL.** Type the full URL, including `http://` or `https://`. `⌘ L` moves focus to it.
-- **cURL.** Paste a command that starts with `curl ` and it replaces the method, URL, headers and body. See [Import from cURL](/docs/features/import-export#import-from-curl).
+- **cURL.** Paste a command that starts with `curl ` and it becomes the request: method, URL, headers and body. If a saved request is open, the cURL opens as a new unsaved request and the file is left alone. See [Import from cURL](/docs/features/import-export#import-from-curl).
 - **Send / Stop.** `⌘ Enter` or the button sends the request. While it's running, the button becomes Stop, and `Esc` cancels too.
 
 If the URL, headers or body use a `{{variable}}` that the selected environment doesn't define, the URL bar gets an amber border. Hover over it to see which variables are missing.
@@ -28,11 +28,11 @@ The body type sits at the right of the tab row and writes the `Content-Type` hea
 | **JSON** | `application/json` | Highlighted, with a format button |
 | **Form** | `application/x-www-form-urlencoded` | A table; values are percent-encoded into `a=1&b=2` |
 | **Text** | `text/plain` | Plain |
-| **No type** | none | Plain |
+| **none** | none | Plain |
 
-If you type a body and leave the type as **No type**, Mercury says so under the editor — most APIs reject a body without a `Content-Type`, and the error they send back rarely says that.
+If you type a body and leave the type as **none**, Mercury says so under the editor — most APIs reject a body without a `Content-Type`, and the error they send back rarely says that.
 
-The header stays the source of truth, so editing `Content-Type` by hand in the Headers tab changes the body type too. A content type Mercury doesn't recognise (`application/xml`, say) shows the plain editor and is left alone unless you pick a different type. The Params and Headers tabs show how many entries are enabled as a small count next to the name. The Auth tab is labeled with the current auth type.
+The header stays the source of truth, so editing `Content-Type` by hand in the Headers tab changes the body type too. A content type Mercury doesn't recognise (`application/xml`, say) shows the plain editor and is left alone unless you pick a different type. The Params and Headers tabs show how many entries are enabled as a small count next to the name. A request opens on the tab that holds its content: **Body** for anything with a body (and POST, PUT, PATCH), **Params** otherwise. At narrow window sizes the body type moves to its own line under the tabs.
 
 ### Body
 
@@ -70,13 +70,14 @@ The Auth tab edits the `Authorization` header. See [Authentication](/docs/featur
 
 ## Variables
 
-`{{NAME}}` is replaced with a value from the selected environment in the URL, headers and body when you send the request or copy it as cURL. Unknown variables are sent as the literal text `{{NAME}}`. See [Environments](/docs/features/environments).
+`{{NAME}}` is replaced with a value from the selected environment in the URL, headers and body when you send the request or copy it as cURL. Unknown variables are named in a line under the URL bar ("`{{NAME}}` isn't defined in .env.dev") and, if you send anyway, go out as the literal text `{{NAME}}`. See [Environments](/docs/features/environments).
 
 ## Saving
 
-- `⌘ S` saves the open request. If the request isn't saved yet, Mercury asks for a name and creates `<name>.json` in the selected collection, or in the workspace root if you haven't clicked one. If no workspace is open, it asks you to open a folder first.
+- `⌘ S`, or **Save…** next to the breadcrumb, saves the request. If it isn't saved yet, Mercury asks for a name and creates `<name>.json` in the folder of the request you opened last (or the folder you clicked last, whichever came later), else in the workspace root. If no workspace is open, it asks you to open a folder first.
 - Right-click a folder and choose **New Request** to save the current editor contents into that folder.
-- Once a request has a file, Mercury saves it automatically every 5 seconds while there are unsaved changes, when you switch to another request, and when you quit. A dot after the name in the breadcrumb means there are unsaved changes.
+- Once a request has a file, Mercury saves it automatically every 5 seconds while there are unsaved changes, when you switch to another request, and when you quit. A dot after the name in the breadcrumb, and **Unsaved changes** in the status bar, mean the latest edits aren't on disk yet; the status bar says **Saved** once they are.
+- **Revert to saved** (in the `⋯` at the end of the URL bar, or `⌘ K`) puts the file back the way it was when you opened it, undoing edits that autosave has already written.
 - `⌘ N` starts a new, empty, unsaved request.
 
 If a response arrives after you have opened a different request, it is recorded in [history](/docs/features/history) rather than shown under the request you are now looking at.
@@ -93,7 +94,9 @@ Below that are three tabs:
 - **Headers** lists every response header.
 - **Cookies** appears with a count when the response sets cookies, and lists them as `name=value`.
 
-On the Body tab, the **Pretty / Raw** switch chooses between the formatted body and the exact bytes (`⌘ R`), and the copy icon copies the whole body. `⌘ F` opens a find bar over the body: every match is highlighted, the bar counts them, `⏎` steps to the next and `Esc` closes it. You can also select part of the body and copy that. For images, other binary content and bodies too large to show, the panel offers a **Save response…** button instead. In the top row, the download icon saves the body to a file and the clock icon opens the [history list](/docs/features/history).
+On the Body tab, the **Pretty / Raw** switch chooses between the formatted body and the exact bytes (`⌘ R`), and the copy icon copies the whole body. The search icon (or `⌘ F`) opens a find bar over the body: every match is highlighted, the bar counts them, `⏎` steps to the next and `Esc` closes it. You can also select part of the body and copy that. For images, other binary content and bodies too large to show, the panel offers a **Save response…** button instead. In the top row, the download icon saves the body to a file and the clock icon opens the [history list](/docs/features/history). The clock is there before anything has been sent, too.
+
+The `⋯` at the end of the URL bar holds **Copy as cURL** (`⌘ Shift C`) and **Format body**.
 
 How the body is displayed depends on its type:
 
@@ -110,7 +113,7 @@ How the body is displayed depends on its type:
 
 If the server doesn't send a `Content-Type`, Mercury guesses the type from the body. Text bodies have a copy button. See [Performance](/docs/performance) for why the size limits exist.
 
-If a request fails, the panel shows the reason: timed out, SSL/TLS error, connection failed, or invalid URL.
+If a request fails, the panel says what happened and what to try (for example "Nothing is listening on localhost:3000. Is the server running?"), followed by the full underlying error.
 
 ## Defaults
 
@@ -132,7 +135,7 @@ Mercury uses one HTTP client for the whole session, and that client has a cookie
 
 ## Sidebar actions
 
-Right-click a request in the sidebar:
+Hover a request in the sidebar and click `⋯` (it stays visible on the open request), or right-click it:
 
 | Action | What it does |
 |--------|--------------|

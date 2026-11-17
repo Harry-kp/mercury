@@ -27,9 +27,9 @@ API_TOKEN="prod token"
 **Only one environment is active at a time.** Files aren't layered or merged. A plain `.env` is not loaded on top of the selected one.
 
 - Pick the environment in the menu at the **top right** of the window. **None** turns variables off.
-- `⌘ E` switches to the next environment. After the last one it goes to None, then starts over.
+- `⌘ E` switches to the next environment, in file-name order. After the last one it goes to None, then starts over. Every switch, from the menu or `⌘ E`, shows a notification naming the environment you landed on.
 - When you open a workspace, Mercury selects the first file (alphabetically) whose name contains `.dev`, or else the first file. When Mercury reopens the workspace at launch, it restores the environment you last had selected.
-- Environment names that contain `prod` are shown in red, and names that contain `stag` in amber, so it's harder to send to production by mistake.
+- Environment names that contain `prod` are shown in red, and names that contain `stag` in amber, so it's harder to send to production by mistake. With a `prod` environment selected, the Send button turns red and reads **Send · prod** (or `production`, and so on).
 
 ## File format
 
@@ -64,7 +64,7 @@ Authorization: Bearer {{API_TOKEN}}
 
 ## Seeing what's missing
 
-- If any variable in the request is undefined, the URL bar gets an **amber border**. Hover over it to see the list.
+- If any variable in the request is undefined, a line under the URL bar names it and the environment it's missing from, and the tab that holds it shows a warning.
 - The **Params** and **Headers** tabs show a chip for each variable they use: ✓ if it's defined, ✗ if it isn't.
 
 ## Editing environment files

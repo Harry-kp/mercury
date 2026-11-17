@@ -34,16 +34,31 @@ impl MercuryApp {
                 ui.set_max_width(ui.available_width());
                 if self.show_history {
                     self.history_list(ui);
-                } else if self.in_flight.is_some() {
-                    self.waiting_state(ui);
-                } else if self.response.is_some() {
+                } else if self.response.is_some() && self.in_flight.is_none() {
                     self.response_view(ui);
-                } else if let Some(error) = self.request_error.clone() {
-                    self.failed_state(ui, &error);
                 } else {
-                    self.ready_state(ui);
+                    // History has a door in every state, not only once a
+                    // response has arrived
+                    ui.allocate_ui_with_layout(
+                        Vec2::new(ui.available_width(), Layout::ICON_BUTTON),
+                        egui::Layout::right_to_left(Align::Center),
+                        |ui| self.history_button(ui),
+                    );
+                    if self.in_flight.is_some() {
+                        self.waiting_state(ui);
+                    } else if let Some(error) = self.request_error.clone() {
+                        self.failed_state(ui, &error);
+                    } else {
+                        self.ready_state(ui);
+                    }
                 }
             });
+    }
+
+    fn history_button(&mut self, ui: &mut Ui) {
+        if icon_button(ui, Icon::Clock, "History (⌘ H)").clicked() {
+            self.show_history = true;
+        }
     }
 
     fn waiting_state(&self, ui: &mut Ui) {
@@ -136,6 +151,14 @@ impl MercuryApp {
             "Search history",
             0.0,
         );
+        ui.add_space(Space::SM);
+        // only the docs used to say this
+        ui.add(
+            egui::Label::new(faint(
+                "Kept for 7 days on this computer, headers and tokens included.",
+            ))
+            .wrap(),
+        );
         ui.add_space(Space::LG);
 
         if self.history.is_empty() {
@@ -175,6 +198,9 @@ impl MercuryApp {
                                 |ui| {
                                     ui.spacing_mut().item_spacing.x = Space::MD;
                                     ui.label(faint(relative_time(entry.timestamp, now)));
+                                    if let Some(env) = &entry.env {
+                                        ui.label(faint(env).color(t.env(env)));
+                                    }
                                     ui.label(faint(format!("{} ms", entry.duration_ms)));
                                     ui.label(
                                         muted(entry.status.to_string())
@@ -198,6 +224,7 @@ impl MercuryApp {
         let Some(response) = self.response.clone() else {
             return;
         };
+        let t = theme();
         let kind = response.response_type;
         let is_text = matches!(
             kind,
@@ -211,11 +238,25 @@ impl MercuryApp {
             status_badge(ui, response.status, &response.status_text);
             response_time(ui, response.duration_ms);
             ui.label(faint(format_bytes(response.size_bytes)));
+            // which environment answered: after a switch, the response on
+            // screen is from the old one, and nothing used to say so
+            if let Some(env) = &self.response_env {
+                let stale = self.env_name() != Some(env.as_str());
+                let text = if stale {
+                    format!("from {env}")
+                } else {
+                    env.clone()
+                };
+                let color = if stale { t.warning } else { t.env(env) };
+                ui.label(faint(text).color(color)).on_hover_text(if stale {
+                    "Sent with another environment than the one selected now"
+                } else {
+                    "The environment this was sent with"
+                });
+            }
             ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
                 ui.spacing_mut().item_spacing.x = Space::XXS;
-                if icon_button(ui, Icon::Clock, "History (⌘ H)").clicked() {
-                    self.show_history = true;
-                }
+                self.history_button(ui);
                 if (can_save || is_text)
                     && icon_button(ui, Icon::Download, "Save response to a file").clicked()
                 {
@@ -227,8 +268,12 @@ impl MercuryApp {
 
         let mut picked = None;
         let mut raw = None;
-        egui::containers::Sides::new().shrink_left().show(
+        let mut find = false;
+        let current = self.response_tab;
+        let raw_view = self.raw_view;
+        widgets::tab_row(
             ui,
+            Layout::RESPONSE_TABS_MIN,
             |ui| {
                 ui.spacing_mut().item_spacing.x = Space::XS;
                 for (tab, text, count) in [
@@ -236,23 +281,27 @@ impl MercuryApp {
                     (ResponseTab::Headers, "Headers", response.headers.len()),
                     (ResponseTab::Cookies, "Cookies", response.cookies.len()),
                 ] {
-                    if tab_button(ui, text, count, self.response_tab == tab, false) {
+                    if tab_button(ui, text, count, current == tab, false) {
                         picked = Some(tab);
                     }
                 }
             },
             |ui| {
-                if self.response_tab != ResponseTab::Body {
+                if current != ResponseTab::Body {
                     return;
                 }
                 if !is_text {
                     // copying "[Binary data: 8 bytes]" helps nobody
                     return;
                 }
-                raw = widgets::switch(ui, "raw", ["Pretty", "Raw"], self.raw_view);
+                raw = widgets::switch(ui, "raw", ["Pretty", "Raw"], raw_view);
                 copy_button(ui, "response_body", || response.body.clone());
+                find = icon_button(ui, Icon::Search, "Find in response (⌘ F)").clicked();
             },
         );
+        if find {
+            self.run(super::app::Action::FindInResponse);
+        }
         if let Some(tab) = picked {
             self.response_tab = tab;
         }
@@ -411,12 +460,13 @@ impl MercuryApp {
                                 code(ui, xml_job(text, width));
                             }
                             _ => {
-                                ui.add(
+                                let body = ui.add(
                                     egui::TextEdit::multiline(&mut text.as_str())
                                         .desired_width(width)
                                         .frame(false)
                                         .font(mono(Text::SMALL)),
                                 );
+                                widgets::name(&body, "Response body");
                             }
                         }
                     });
@@ -485,6 +535,7 @@ fn find_bar(
                 .id(egui::Id::new("response_find"))
                 .font(mono(Text::SMALL)),
         );
+        widgets::name(&field, "Find in response");
         // a single-line TextEdit reports Enter by losing focus
         if field.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
             at += 1;

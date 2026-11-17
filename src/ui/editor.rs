@@ -8,10 +8,26 @@ use super::widgets::{
     popup_menu, section_label, send_button, tab_button,
 };
 use crate::kv::{self, AuthMode, BodyKind};
-use crate::model::HttpMethod;
+use crate::model::{HttpMethod, Request};
+
 use crate::{curl, vars};
 use eframe::egui::{self, Align, Margin, RichText, ScrollArea, Sense, Stroke, Ui, Vec2};
 use std::collections::BTreeSet;
+
+/// How many characters one edit inserted: what is left of `after` once the
+/// prefix and suffix it shares with `before` are taken away. A keystroke
+/// inserts one; a paste inserts many.
+fn inserted_chars(before: &str, after: &str) -> usize {
+    let (b, a): (Vec<char>, Vec<char>) = (before.chars().collect(), after.chars().collect());
+    let prefix = b.iter().zip(&a).take_while(|(x, y)| x == y).count();
+    let suffix = b[prefix..]
+        .iter()
+        .rev()
+        .zip(a[prefix..].iter().rev())
+        .take_while(|(x, y)| x == y)
+        .count();
+    a.len() - prefix - suffix
+}
 
 impl MercuryApp {
     pub fn editor(&mut self, ui: &mut Ui) {
@@ -25,18 +41,17 @@ impl MercuryApp {
 
     fn url_bar(&mut self, ui: &mut Ui) {
         let t = theme();
-        let undefined: BTreeSet<String> = vars::extract(&self.url)
-            .into_iter()
-            .filter(|v| !self.env_vars.contains_key(v))
-            .collect();
+        let in_url = vars::extract(&self.url)
+            .iter()
+            .any(|v| !self.env_vars.contains_key(v));
         let focused = ui.memory(|m| m.has_focus(egui::Id::new("url_bar")));
-        let border = match (focused, undefined.is_empty()) {
+        let border = match (focused, in_url) {
             (true, _) => t.accent,
-            (false, false) => t.warning,
-            (false, true) => t.border,
+            (false, true) => t.warning,
+            (false, false) => t.border,
         };
 
-        let frame = widgets::card()
+        widgets::card()
             .stroke(Stroke::new(1.0_f32, border))
             .inner_margin(Margin::same(Space::SM as i8))
             .show(ui, |ui| {
@@ -52,7 +67,14 @@ impl MercuryApp {
                     ui.add_space(Space::SM);
 
                     let executing = self.in_flight.is_some();
-                    let send_width = if executing { 86.0 } else { 104.0 };
+                    let target = self.prod_target().map(str::to_owned);
+                    let send_width = if executing {
+                        86.0
+                    } else {
+                        widgets::button_width(ui, &widgets::send_label(target.as_deref()))
+                    } + Layout::ICON_BUTTON
+                        + Space::SM;
+                    let before = self.url.clone();
                     let url = ui.add(
                         egui::TextEdit::singleline(&mut self.url)
                             .hint_text(muted("https://api.example.com/users"))
@@ -63,11 +85,13 @@ impl MercuryApp {
                             .font(mono(Text::BODY))
                             .id(egui::Id::new("url_bar")),
                     );
+                    widgets::name(&url, "URL");
                     if url.changed() {
-                        self.on_url_edited();
+                        self.on_url_edited(&before);
                     }
                     ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
-                        if send_button(ui, executing).clicked() {
+                        self.request_actions(ui);
+                        if send_button(ui, executing, target.as_deref()).clicked() {
                             if executing {
                                 self.cancel_request();
                             } else {
@@ -77,14 +101,64 @@ impl MercuryApp {
                     });
                 });
             });
+        self.undefined_line(ui);
+    }
 
-        if !undefined.is_empty() {
-            let list: Vec<String> = undefined.iter().map(|v| format!("{{{{{v}}}}}")).collect();
-            frame.response.on_hover_text(format!(
-                "Not defined in this environment:\n{}",
-                list.join("\n")
-            ));
+    /// "…" at the end of the URL bar: the request's own actions, so none of
+    /// them is reachable only through a shortcut.
+    fn request_actions(&mut self, ui: &mut Ui) {
+        let trigger = icon_button(ui, Icon::Ellipsis, "Request actions");
+        let saved = self.current_file.is_some();
+        let mut picked = None;
+        popup_menu(ui, &trigger, Layout::MENU_WIDTH, |ui| {
+            if menu_item(ui, Some(Icon::Terminal), "Copy as cURL", "⌘ ⇧ C") {
+                picked = Some(Action::CopyCurl);
+            }
+            if menu_item(ui, Some(Icon::Sparkle), "Format body", "") {
+                picked = Some(Action::FormatBody);
+            }
+            if saved {
+                widgets::divider(ui);
+                if menu_item(ui, Some(Icon::File), "Duplicate request", "") {
+                    picked = Some(Action::DuplicateRequest);
+                }
+                if menu_item(ui, Some(Icon::Clock), "Revert to saved", "") {
+                    picked = Some(Action::RevertFile);
+                }
+            }
+        });
+        if let Some(action) = picked {
+            self.run(action);
         }
+    }
+
+    /// Undefined variables, said in words under the URL bar. An amber border
+    /// explained only on hover sent people to the server's 404 instead.
+    fn undefined_line(&self, ui: &mut Ui) {
+        let all = format!("{} {} {}", self.url, self.headers_text, self.body_text);
+        let undefined: BTreeSet<String> = vars::extract(&all)
+            .into_iter()
+            .filter(|v| !self.env_vars.contains_key(v))
+            .collect();
+        if undefined.is_empty() {
+            return;
+        }
+        let names: Vec<String> = undefined.iter().map(|v| format!("{{{{{v}}}}}")).collect();
+        let verb = if names.len() == 1 { "isn't" } else { "aren't" };
+        let text = match self.env_name() {
+            Some(env) => format!("{} {verb} defined in {env}", names.join(", ")),
+            None => format!(
+                "{} {verb} defined: no environment is selected",
+                names.join(", ")
+            ),
+        };
+        let t = theme();
+        ui.add_space(Space::SM);
+        ui.horizontal_wrapped(|ui| {
+            ui.spacing_mut().item_spacing.x = Space::SM;
+            widgets::glyph(ui, Icon::Alert, 13.0, t.warning);
+            ui.label(muted(text).color(t.warning));
+        });
     }
 
     fn method_picker(&mut self, ui: &mut Ui) {
@@ -139,21 +213,44 @@ impl MercuryApp {
         });
     }
 
-    /// A pasted cURL command replaces the whole request; otherwise re-sync params.
-    fn on_url_edited(&mut self) {
-        if self.url.trim_start().starts_with("curl ") {
+    /// A pasted cURL command becomes the request; otherwise re-sync params.
+    ///
+    /// Only a paste counts: typing "curl …" by hand would otherwise re-parse
+    /// on every keystroke. And a saved request is never overwritten: autosave
+    /// would write the cURL over the file within seconds, and ⌘Z only knows
+    /// about the URL text, so the headers and body were simply gone.
+    fn on_url_edited(&mut self, before: &str) {
+        let pasted = inserted_chars(before, &self.url) > 1;
+        if pasted && self.url.trim_start().starts_with("curl ") {
             match curl::parse(&self.url) {
                 Ok(req) => {
-                    self.method = req.method;
-                    self.url = req.url;
-                    self.headers_text = req
+                    let saved = self.current_file.is_some();
+                    self.url = before.to_string(); // the open file keeps its URL
+                    self.autosave();
+                    let headers = req
                         .headers
                         .iter()
                         .map(|(k, v)| format!("{k}: {v}"))
                         .collect::<Vec<_>>()
                         .join("\n");
-                    self.body_text = req.body.unwrap_or_default();
-                    self.notify("Imported cURL command", false);
+                    self.load_request(
+                        Request {
+                            method: req.method,
+                            url: req.url,
+                            headers,
+                            body: req.body.unwrap_or_default(),
+                        },
+                        None,
+                    );
+                    self.notify(
+                        if saved {
+                            "Opened the cURL command as a new request"
+                        } else {
+                            "Imported cURL command"
+                        },
+                        false,
+                    );
+                    return;
                 }
                 Err(e) => self.notify(e, true),
             }
@@ -186,58 +283,45 @@ impl MercuryApp {
                 kv::count_enabled(&kv::parse_lines(&self.headers_text, ":")),
                 missing(&self.headers_text),
             ),
-            (
-                Tab::Auth,
-                match auth_mode {
-                    AuthMode::None => "Auth",
-                    _ => auth_mode.label(),
-                },
-                0,
-                false,
-            ),
+            // always "Auth": a tab that renamed itself to "Bearer" or "Basic"
+            // moved under the user's cursor from one request to the next
+            (Tab::Auth, "Auth", 0, false),
         ];
 
         let mut picked = None;
-        let mut auth_trigger = None;
         let mut body_trigger = None;
         let mut format = false;
-        egui::containers::Sides::new().shrink_left().show(
+        let current = self.tab;
+        widgets::tab_row(
             ui,
+            Layout::REQUEST_TABS_MIN,
             |ui| {
                 ui.spacing_mut().item_spacing.x = Space::XS;
                 for (tab, text, count, warn) in tabs {
-                    if tab_button(ui, text, count, self.tab == tab, warn) {
+                    if tab_button(ui, text, count, current == tab, warn) {
                         picked = Some(tab);
                     }
                 }
-                auth_trigger = Some(icon_button(ui, Icon::ChevronDown, "Auth type"));
             },
             |ui| {
-                if self.tab != Tab::Body {
+                if current != Tab::Body {
                     return;
                 }
                 if body_kind == BodyKind::Json {
                     format = icon_button(ui, Icon::Sparkle, "Format JSON").clicked();
                 }
+                let kind = match body_kind {
+                    BodyKind::None => "none",
+                    other => other.label(),
+                };
                 body_trigger = Some(link(
                     ui,
-                    muted(format!("{} ⌄", body_kind.label())).color(theme().accent),
+                    muted(format!("Body type: {kind} ⌄")).color(theme().accent),
                 ));
             },
         );
         if let Some(tab) = picked {
             self.tab = tab;
-        }
-        if let Some(trigger) = auth_trigger {
-            popup_menu(ui, &trigger, 132.0, |ui| {
-                for mode in AuthMode::ALL {
-                    let check = (auth_mode == mode).then_some(Icon::Check);
-                    if menu_item(ui, check, mode.label(), "") {
-                        self.set_auth_mode(auth_mode, mode);
-                        self.tab = Tab::Auth;
-                    }
-                }
-            });
         }
         if let Some(trigger) = body_trigger {
             popup_menu(ui, &trigger, 150.0, |ui| {
@@ -301,7 +385,7 @@ impl MercuryApp {
         };
         widgets::code_frame().show(ui, |ui| {
             let rows = widgets::fill_rows(ui, Space::XXL, 12);
-            ui.add(
+            let body = ui.add(
                 egui::TextEdit::multiline(&mut self.body_text)
                     .hint_text(muted(if json {
                         r#"{ "key": "value" }"#
@@ -313,6 +397,7 @@ impl MercuryApp {
                     .frame(false)
                     .layouter(&mut layouter),
             );
+            widgets::name(&body, "Request body");
         });
         if kind == BodyKind::None && !self.body_text.trim().is_empty() {
             // the type picker lives in the corner of the tab row, which is
@@ -425,7 +510,7 @@ impl MercuryApp {
                 } else {
                     widgets::field_frame()
                         .show(ui, |ui| {
-                            ui.add(
+                            let field = ui.add(
                                 egui::TextEdit::multiline(text)
                                     .id(egui::Id::new(id))
                                     .hint_text(muted(hint))
@@ -433,8 +518,9 @@ impl MercuryApp {
                                     .desired_rows(rows)
                                     .frame(false)
                                     .font(mono(Text::SMALL)),
-                            )
-                            .changed()
+                            );
+                            widgets::name(&field, label);
+                            field.changed()
                         })
                         .inner
                 };
@@ -442,11 +528,16 @@ impl MercuryApp {
                 changed
             };
 
+        let labels: Vec<&str> = AuthMode::ALL.iter().map(|m| m.label()).collect();
+        let at = AuthMode::ALL.iter().position(|m| *m == mode).unwrap_or(0);
+        if let Some(i) = widgets::segmented(ui, "auth_mode", &labels, at) {
+            self.set_auth_mode(mode, AuthMode::ALL[i]);
+            return;
+        }
+        ui.add_space(Space::LG);
         let new_value = match mode {
             AuthMode::None => {
-                ui.label(muted(
-                    "No authentication. Pick a type from the chevron next to the tabs.",
-                ));
+                ui.label(muted("No Authorization header is sent."));
                 None
             }
             AuthMode::Basic => {
@@ -506,5 +597,24 @@ impl MercuryApp {
                 });
             });
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::inserted_chars;
+
+    #[test]
+    fn inserted_chars_tells_a_keystroke_from_a_paste() {
+        assert_eq!(inserted_chars("curl", "curl "), 1);
+        assert_eq!(inserted_chars("ab", "aXb"), 1);
+        assert_eq!(
+            inserted_chars("{{BASE}}/users", "curl x.y"),
+            8,
+            "replacing a selection"
+        );
+        assert_eq!(inserted_chars("aaa", "aaaa"), 1, "repeated characters");
+        assert_eq!(inserted_chars("abc", "ab"), 0, "deleting");
+        assert_eq!(inserted_chars("", "curl https://a.b"), 16);
     }
 }

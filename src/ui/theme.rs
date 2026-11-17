@@ -173,6 +173,12 @@ pub fn is_dark() -> bool {
     IS_DARK.load(Ordering::Relaxed)
 }
 
+/// An environment file that looks like production (`.env.prod`,
+/// `.env.production`). It turns the env chip red and labels the Send button.
+pub fn is_prod(env_name: &str) -> bool {
+    env_name.contains("prod")
+}
+
 impl Theme {
     pub fn method(&self, method: HttpMethod) -> Color32 {
         self.methods[method as usize]
@@ -189,7 +195,7 @@ impl Theme {
 
     /// Production envs are red, staging amber — a visual "careful".
     pub fn env(&self, name: &str) -> Color32 {
-        if name.contains("prod") {
+        if is_prod(name) {
             self.error
         } else if name.contains("stag") {
             self.warning
@@ -281,6 +287,13 @@ impl Layout {
     pub const MODAL_WIDTH: f32 = 440.0;
     pub const PALETTE_WIDTH: f32 = 560.0;
     pub const MENU_WIDTH: f32 = 200.0;
+    /// Square hit area of an icon button.
+    pub const ICON_BUTTON: f32 = 24.0;
+    pub const CHIP_HEIGHT: f32 = 26.0;
+    /// Below these widths a tab row's right-hand controls drop to a second
+    /// line instead of being drawn on top of the tabs.
+    pub const REQUEST_TABS_MIN: f32 = 470.0;
+    pub const RESPONSE_TABS_MIN: f32 = 400.0;
     pub const KEY_FIELD_WIDTH: f32 = 148.0;
     pub const FIND_FIELD_WIDTH: f32 = 180.0;
 }

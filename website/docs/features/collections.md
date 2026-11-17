@@ -34,7 +34,7 @@ Press `⌘ O`, choose **Open folder…** from the workspace menu, or click **Ope
 - Each request shows its method. If a `.json` file isn't a valid request, it's listed without a method and shows an error when you open it.
 - Mercury reads a folder the first time you expand it. Clicking a folder expands or collapses it.
 
-Unsaved requests you've sent appear above the tree under **Recent** (up to 50). Click one to load it, or click × to remove it. When you save a request, it's removed from Recent.
+Unsaved requests you've sent appear above the tree under **Unsaved** (up to 50). Click one to load it, or click × to remove it. The trash icon clears the list, with **Undo** in the notification. When you save a request, it's removed from the list.
 
 ## Searching
 
@@ -44,14 +44,14 @@ To jump straight to a request without touching the tree, press `⌘ K` and type 
 
 ## Creating, renaming and deleting
 
-Right-click a **folder**:
+Hover a **folder** and click `⋯`, or right-click it. Clicking a folder also makes it where the next new or saved request goes.
 
 | Action | What it does |
 |--------|--------------|
 | **New Request** | Saves the current editor contents as `<name>.json` in this folder |
 | **New Folder** | Creates a subfolder |
 | **Rename** | Renames the folder in place |
-| **Delete** | Deletes the folder and everything in it, after you confirm |
+| **Delete** | Deletes the folder and everything in it, after you confirm. The confirmation counts the requests inside and any other files, such as fixtures or a README, that will go with it. Deleted files skip the Trash. |
 | **Copy Path** | Copies the folder's full path |
 
 Requests have **Duplicate**, **Rename**, **Delete** and **Copy Path**. See [Sidebar actions](/docs/features/requests#sidebar-actions).

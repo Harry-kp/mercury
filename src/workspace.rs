@@ -148,6 +148,29 @@ pub fn rename(path: &Path, new_name: &str) -> Result<PathBuf, String> {
     Ok(new_path)
 }
 
+/// What deleting `dir` takes with it: `(requests, other files)`, counted
+/// recursively, hidden files included. A folder delete is permanent, so the
+/// confirmation has to say more than the folder's name.
+pub fn count_contents(dir: &Path) -> (usize, usize) {
+    let mut counts = (0, 0);
+    for path in fs::read_dir(dir)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .map(|e| e.path())
+    {
+        if path.is_dir() {
+            let (r, o) = count_contents(&path);
+            counts = (counts.0 + r, counts.1 + o);
+        } else if path.extension().is_some_and(|e| e == "json") {
+            counts.0 += 1;
+        } else {
+            counts.1 += 1;
+        }
+    }
+    counts
+}
+
 pub fn delete(path: &Path) -> Result<(), String> {
     let result = if path.is_dir() {
         fs::remove_dir_all(path)
@@ -193,6 +216,24 @@ pub fn watch(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn count_contents_sees_nested_requests_and_other_files() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let root = dir.path();
+        fs::create_dir_all(root.join("a/b")).unwrap();
+        for f in [
+            "x.json",
+            "a/y.json",
+            "a/b/z.json",
+            "a/README.md",
+            "a/b/.fixture",
+        ] {
+            fs::write(root.join(f), "{}").unwrap();
+        }
+        assert_eq!(count_contents(root), (3, 2));
+        assert_eq!(count_contents(&root.join("a/b")), (1, 1));
+    }
+
     #[test]
     fn names_the_user_types_cannot_escape_their_folder() {
         let dir = tempfile::TempDir::new().unwrap();

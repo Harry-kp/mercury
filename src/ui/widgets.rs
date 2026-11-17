@@ -34,25 +34,6 @@ pub fn truncate(s: &str, max_chars: usize) -> String {
     }
 }
 
-/// A workspace path as the status bar shows it: rooted at `~`, and trimmed
-/// from the *front*, because the tail is the part that identifies a folder.
-pub fn workspace_label(path: &std::path::Path, max_chars: usize) -> String {
-    let text = path.display().to_string();
-    let text = match dirs::home_dir().map(|h| h.display().to_string()) {
-        Some(home) => text
-            .strip_prefix(&home)
-            .map_or(text.clone(), |r| format!("~{r}")),
-        None => text,
-    };
-    let count = text.chars().count();
-    if count <= max_chars {
-        return text;
-    }
-    let mut out = String::from("…");
-    out.extend(text.chars().skip(count - max_chars.saturating_sub(1)));
-    out
-}
-
 pub fn format_bytes(bytes: usize) -> String {
     const KB: f64 = 1024.0;
     let b = bytes as f64;
@@ -436,6 +417,15 @@ pub fn focus_ring(ui: &Ui, rect: Rect, response: &Response) {
     );
 }
 
+/// Names a control for screen readers. A text field's hint disappears as
+/// soon as you type and is not its name, so without this every field reached
+/// VoiceOver as just "text field".
+pub fn name(response: &Response, label: &str) {
+    response
+        .ctx
+        .accesskit_node_builder(response.id, |node| node.set_label(label));
+}
+
 /// Clickable text with a pointer cursor.
 pub fn link(ui: &mut Ui, text: RichText) -> Response {
     let name = text.text().to_owned();
@@ -452,6 +442,51 @@ pub fn glyph(ui: &mut Ui, what: Icon, size: f32, color: Color32) -> Response {
     response
 }
 
+/// Longest label a [`chip`] shows before truncating.
+const CHIP_CHARS: usize = 28;
+
+/// Width a [`chip`] with `text` takes, for laying out around it.
+pub fn chip_width(ui: &Ui, text: &str) -> f32 {
+    let text = truncate(text, CHIP_CHARS);
+    let galley = ui.fonts_mut(|f| f.layout_no_wrap(text, semibold(Text::SMALL), Color32::WHITE));
+    galley.size().x + 14.0 + Space::SM + Space::MD * 2.0
+}
+
+/// A small pill of icon + text that opens a menu (the folder and the
+/// environment in the top bar).
+pub fn chip(ui: &mut Ui, what: Icon, text: &str, color: Color32, enabled: bool) -> Response {
+    let t = theme();
+    let text = truncate(text, CHIP_CHARS);
+    let galley = ui.fonts_mut(|f| f.layout_no_wrap(text.clone(), semibold(Text::SMALL), color));
+    let size = Vec2::new(chip_width(ui, &text), Layout::CHIP_HEIGHT);
+    let (rect, response) = ui.allocate_exact_size(size, Sense::click());
+    if response.hovered() {
+        ui.painter().rect_filled(rect, Radius::SM, t.hover);
+    }
+    // it takes Tab focus like any button; without a ring it was invisible
+    focus_ring(ui, rect, &response);
+    let icon_rect = Rect::from_center_size(
+        egui::pos2(rect.left() + Space::MD + 7.0, rect.center().y),
+        Vec2::splat(14.0),
+    );
+    icon::paint(
+        ui.painter(),
+        what,
+        icon_rect,
+        if enabled { color } else { t.text_faint },
+    );
+    ui.painter().galley(
+        egui::pos2(
+            icon_rect.right() + Space::SM,
+            rect.center().y - galley.size().y / 2.0,
+        ),
+        galley,
+        color,
+    );
+    response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, enabled, &text));
+    response.on_hover_cursor(egui::CursorIcon::PointingHand)
+}
+
 /// Square icon button with a hover plate. The workhorse of every toolbar.
 pub fn icon_button(ui: &mut Ui, what: Icon, tooltip: &str) -> Response {
     icon_button_colored(ui, what, tooltip, theme().text_muted)
@@ -459,8 +494,7 @@ pub fn icon_button(ui: &mut Ui, what: Icon, tooltip: &str) -> Response {
 
 fn icon_button_colored(ui: &mut Ui, what: Icon, tooltip: &str, color: Color32) -> Response {
     let t = theme();
-    let side = 24.0;
-    let (rect, response) = ui.allocate_exact_size(Vec2::splat(side), Sense::click());
+    let (rect, response) = ui.allocate_exact_size(Vec2::splat(Layout::ICON_BUTTON), Sense::click());
     if response.hovered() {
         ui.painter().rect_filled(rect, Radius::XS, t.hover);
     }
@@ -550,8 +584,19 @@ pub fn row(
     selected: bool,
     add: impl FnOnce(&mut Ui),
 ) -> Response {
+    row_sized(ui, id, name, selected, Layout::ROW_HEIGHT, add)
+}
+
+/// [`row`] with its own height (the command palette's taller rows).
+pub fn row_sized(
+    ui: &mut Ui,
+    id: impl std::hash::Hash,
+    name: &str,
+    selected: bool,
+    height: f32,
+    add: impl FnOnce(&mut Ui),
+) -> Response {
     let t = theme();
-    let height = Layout::ROW_HEIGHT;
     let rect = Rect::from_min_size(ui.cursor().min, Vec2::new(ui.available_width(), height));
     let background = ui.painter().add(egui::Shape::Noop);
 
@@ -641,10 +686,29 @@ pub fn copy_button(ui: &mut Ui, id: &str, text: impl FnOnce() -> String) {
     }
 }
 
+/// The Send button's label: "Send", or "Send · prod" when `target` names a
+/// production environment.
+pub fn send_label(target: Option<&str>) -> String {
+    target.map_or_else(|| "Send".to_string(), |t| format!("Send · {t}"))
+}
+
+/// Width [`button`] gives `text` with a leading icon, for laying out around it.
+pub fn button_width(ui: &Ui, text: &str) -> f32 {
+    let label =
+        ui.fonts_mut(|f| f.layout_no_wrap(text.to_owned(), semibold(Text::BODY), Color32::WHITE));
+    label.size().x + 15.0 + Space::SM + Space::XL * 2.0
+}
+
 /// Send / stop control. Shows a spinner while the request is in flight.
-pub fn send_button(ui: &mut Ui, executing: bool) -> Response {
+/// `target` (a production environment) turns it red and names it.
+pub fn send_button(ui: &mut Ui, executing: bool, target: Option<&str>) -> Response {
     if !executing {
-        return button(ui, Button::Primary, "Send", Some(Icon::Play))
+        let kind = if target.is_some() {
+            Button::Danger
+        } else {
+            Button::Primary
+        };
+        return button(ui, kind, &send_label(target), Some(Icon::Play))
             .on_hover_text("Send request (⌘ ⏎)");
     }
     let t = theme();
@@ -730,14 +794,16 @@ fn field(
                 if let Some(what) = leading {
                     glyph(ui, what, 14.0, t.text_faint);
                 }
-                ui.add(
+                let response = ui.add(
                     egui::TextEdit::singleline(text)
                         .id(id)
                         .hint_text(muted(hint))
                         .desired_width(content - lead)
                         .frame(false)
                         .font(ui_font(Text::BODY)),
-                )
+                );
+                name(&response, hint.trim_end_matches('…'));
+                response
             })
             .inner
         })
@@ -747,13 +813,19 @@ fn field(
 /// Two-state switch. Both states stay visible, so "Pretty | Raw" cannot be
 /// misread as a label for the current mode. Returns the state clicked.
 pub fn switch(ui: &mut Ui, id: &str, options: [&str; 2], right: bool) -> Option<bool> {
+    segmented(ui, id, &options, right as usize).map(|i| i == 1)
+}
+
+/// One-of-few choice with every option visible (auth type, Pretty/Raw).
+/// Returns the index clicked.
+pub fn segmented(ui: &mut Ui, id: &str, options: &[&str], selected: usize) -> Option<usize> {
     let t = theme();
     const HEIGHT: f32 = 22.0;
     let segments: Vec<(std::sync::Arc<egui::Galley>, f32, bool)> = options
         .iter()
         .enumerate()
         .map(|(i, text)| {
-            let active = (i == 1) == right;
+            let active = i == selected;
             let font = if active {
                 semibold(Text::MICRO)
             } else {
@@ -765,10 +837,10 @@ pub fn switch(ui: &mut Ui, id: &str, options: [&str; 2], right: bool) -> Option<
             (galley, width, active)
         })
         .collect();
-    let width: f32 = segments.iter().map(|(_, w, _)| w).sum::<f32>() + 6.0;
+    let width: f32 = segments.iter().map(|(_, w, _)| w + 2.0).sum::<f32>() + 2.0;
 
     // one allocation, painted left-to-right: a nested `ui.horizontal` would
-    // inherit a right-to-left parent and swap the two labels
+    // inherit a right-to-left parent and reverse the segments
     let (rect, _) = ui.allocate_exact_size(Vec2::new(width, HEIGHT), Sense::hover());
     ui.painter().rect_filled(rect, Radius::SM, t.input);
 
@@ -791,6 +863,7 @@ pub fn switch(ui: &mut Ui, id: &str, options: [&str; 2], right: bool) -> Option<
         } else if response.hovered() {
             ui.painter().rect_filled(seg, Radius::XS, t.hover);
         }
+        focus_ring(ui, seg, &response);
         let color = if active { t.text } else { t.text_muted };
         ui.painter()
             .galley(seg.center() - galley.size() / 2.0, galley, color);
@@ -801,11 +874,34 @@ pub fn switch(ui: &mut Ui, id: &str, options: [&str; 2], right: bool) -> Option<
             .on_hover_cursor(egui::CursorIcon::PointingHand)
             .clicked()
         {
-            picked = Some(i == 1);
+            picked = Some(i);
         }
         x += seg_width + 2.0;
     }
     picked
+}
+
+/// Tabs on the left, controls on the right. Below `min_width` the right side
+/// drops to its own line: `Sides` never wraps, so at the minimum window size
+/// the controls were painted on top of the tabs.
+pub fn tab_row(
+    ui: &mut Ui,
+    min_width: f32,
+    left: impl FnOnce(&mut Ui),
+    right: impl FnOnce(&mut Ui),
+) {
+    if ui.available_width() >= min_width {
+        egui::containers::Sides::new()
+            .shrink_left()
+            .show(ui, left, right);
+    } else {
+        ui.horizontal(left);
+        ui.allocate_ui_with_layout(
+            Vec2::new(ui.available_width(), Layout::CONTROL_HEIGHT),
+            egui::Layout::right_to_left(Align::Center),
+            right,
+        );
+    }
 }
 
 /// Styled dropdown attached to `trigger`.
@@ -1160,14 +1256,32 @@ pub fn kv_section(ui: &mut Ui, title: &str, id: &str, items: &[(String, String)]
         });
 }
 
+/// What a [`toast`] reports back each frame.
+pub struct ToastState {
+    /// False once fully faded.
+    pub alive: bool,
+    /// The action link (e.g. "Undo") was clicked this frame.
+    pub acted: bool,
+}
+
 /// Status-bar / overlay message that fades out. Errors can be clicked to copy.
-/// Returns false once fully faded.
-pub fn toast(ui: &mut Ui, message: &str, shown_at: f64, is_error: bool) -> bool {
+/// `action` adds a link (e.g. "Undo") after the message.
+pub fn toast(
+    ui: &mut Ui,
+    message: &str,
+    shown_at: f64,
+    is_error: bool,
+    action: Option<&str>,
+) -> ToastState {
     let t = theme();
     let now = ui.input(|i| i.time);
     let elapsed = now - shown_at;
+    let mut acted = false;
     if !(0.0..TOAST_SECS).contains(&elapsed) {
-        return false;
+        return ToastState {
+            alive: false,
+            acted,
+        };
     }
     // hold full opacity, then fade over the last second
     let alpha = (((TOAST_SECS - elapsed) as f32).min(1.0) * 255.0) as u8;
@@ -1199,11 +1313,16 @@ pub fn toast(ui: &mut Ui, message: &str, shown_at: f64, is_error: bool) -> bool 
                 ui.spacing_mut().item_spacing.x = Space::MD;
                 glyph(ui, what, 15.0, fade(base));
                 ui.label(label(&text).color(fade(t.text)));
+                if let Some(action) = action {
+                    acted = link(ui, strong(action).color(fade(t.accent))).clicked();
+                }
             });
         })
         .response;
 
-    if is_error && !copied {
+    // an action toast is not click-to-copy: the frame's click area would sit
+    // on top of the link and swallow it
+    if is_error && !copied && action.is_none() {
         let response = response
             .interact(Sense::click())
             .on_hover_cursor(egui::CursorIcon::PointingHand)
@@ -1219,7 +1338,7 @@ pub fn toast(ui: &mut Ui, message: &str, shown_at: f64, is_error: bool) -> bool 
         response.on_hover_text(message);
     }
     ui.ctx().request_repaint();
-    true
+    ToastState { alive: true, acted }
 }
 
 // ---------------------------------------------------------------------------
@@ -1261,15 +1380,16 @@ pub fn key_value_editor(
     if *bulk_edit {
         return field_frame()
             .show(ui, |ui| {
-                ui.add(
+                let field = ui.add(
                     egui::TextEdit::multiline(text)
                         .hint_text(muted(hint))
                         .desired_width(ui.available_width())
                         .desired_rows(fill_rows(ui, Space::XXL, 8))
                         .frame(false)
                         .font(mono(Text::SMALL)),
-                )
-                .changed()
+                );
+                name(&field, "Bulk edit");
+                field.changed()
             })
             .inner;
     }
@@ -1296,38 +1416,38 @@ fn key_value_rows(ui: &mut Ui, rows: &mut Vec<KeyValue>, sep: &str) -> bool {
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing.x = Space::SM;
             // always add the checkbox so widget ids stay stable
-            changed |= ui
-                .add_visible(filled, egui::Checkbox::without_text(&mut row.enabled))
-                .changed();
+            let check = ui.add_visible(filled, egui::Checkbox::without_text(&mut row.enabled));
+            name(&check, &format!("Enable {}", row.key));
+            changed |= check.changed();
             let dim = filled && !row.enabled;
             let key_color = if dim { t.text_faint } else { t.syntax.key };
             let value_color = if dim { t.text_faint } else { t.text };
             ui.push_id(idx, |ui| {
-                changed |= ui
-                    .add(
-                        egui::TextEdit::singleline(&mut row.key)
-                            .hint_text(muted("Key"))
-                            .desired_width(key_width)
-                            .frame(false)
-                            .text_color(key_color)
-                            .font(mono(Text::SMALL)),
-                    )
-                    .changed();
+                let key = ui.add(
+                    egui::TextEdit::singleline(&mut row.key)
+                        .hint_text(muted("Key"))
+                        .desired_width(key_width)
+                        .frame(false)
+                        .text_color(key_color)
+                        .font(mono(Text::SMALL)),
+                );
+                name(&key, &format!("Key {}", idx + 1));
+                changed |= key.changed();
                 ui.label(
                     RichText::new(sep)
                         .font(mono(Text::SMALL))
                         .color(t.text_faint),
                 );
-                changed |= ui
-                    .add(
-                        egui::TextEdit::singleline(&mut row.value)
-                            .hint_text(muted("Value"))
-                            .desired_width((ui.available_width() - 30.0).max(40.0))
-                            .frame(false)
-                            .text_color(value_color)
-                            .font(mono(Text::SMALL)),
-                    )
-                    .changed();
+                let value = ui.add(
+                    egui::TextEdit::singleline(&mut row.value)
+                        .hint_text(muted("Value"))
+                        .desired_width((ui.available_width() - 30.0).max(40.0))
+                        .frame(false)
+                        .text_color(value_color)
+                        .font(mono(Text::SMALL)),
+                );
+                name(&value, &format!("Value {}", idx + 1));
+                changed |= value.changed();
             });
             ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
                 if filled && icon_button(ui, Icon::Close, "Remove").clicked() {
@@ -1357,29 +1477,33 @@ pub enum ModalAction {
     Close,
 }
 
+/// The surface every modal (dialogs, the command palette) is drawn on.
+pub fn modal_frame(margin: f32) -> egui::Frame {
+    let t = theme();
+    egui::Frame::NONE
+        .fill(t.elevated)
+        .stroke(Stroke::new(1.0_f32, t.border))
+        .corner_radius(Radius::LG)
+        .inner_margin(Margin::same(margin as i8))
+}
+
+/// The dimming behind a modal.
+pub fn backdrop() -> Color32 {
+    Color32::from_black_alpha(if super::theme::is_dark() { 110 } else { 45 })
+}
+
 /// Centered modal with a dimming backdrop. Esc or a backdrop click closes it.
 pub fn modal(
     ctx: &egui::Context,
     title: &str,
     add: impl FnOnce(&mut Ui) -> ModalAction,
 ) -> ModalAction {
-    let t = theme();
     // `Modal::should_close` only reacts to Esc from the second frame on (egui
     // records the top modal layer at end of frame), so check it ourselves.
     let escape = ctx.input(|i| i.key_pressed(egui::Key::Escape));
     let response = egui::Modal::new(egui::Id::new(("mercury_modal", title)))
-        .backdrop_color(Color32::from_black_alpha(if super::theme::is_dark() {
-            110
-        } else {
-            45
-        }))
-        .frame(
-            egui::Frame::NONE
-                .fill(t.elevated)
-                .stroke(Stroke::new(1.0_f32, t.border))
-                .corner_radius(Radius::LG)
-                .inner_margin(Margin::same(Space::XXL as i8)),
-        )
+        .backdrop_color(backdrop())
+        .frame(modal_frame(Space::XXL))
         .show(ctx, |ui| {
             ui.set_width(Layout::MODAL_WIDTH);
             ui.label(heading(title));
@@ -1533,14 +1657,6 @@ mod tests {
         assert_eq!(truncate("short", 10), "short");
         assert_eq!(truncate("héllo wörld", 5), "héll…");
         assert_eq!(truncate("日本語のURL", 3), "日本…");
-    }
-
-    #[test]
-    fn workspace_label_keeps_the_tail() {
-        use std::path::Path;
-        assert_eq!(workspace_label(Path::new("/a/b"), 10), "/a/b");
-        assert_eq!(workspace_label(Path::new("/srv/work/api"), 9), "…work/api");
-        assert_eq!(workspace_label(Path::new("/日本語のURL"), 3), "…RL");
     }
 
     #[test]
