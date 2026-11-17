@@ -433,7 +433,6 @@ impl MercuryApp {
                 .filter(|p| p.is_file())
             {
                 app.open_file(&file);
-                app.expand_to(&file);
             }
         }
         app
@@ -608,23 +607,27 @@ impl MercuryApp {
 
     /// Expand every folder between the workspace root and `file`, so a
     /// reopened request is visible in the tree instead of hidden three
-    /// collapsed folders deep.
+    /// collapsed folders deep. Rescans only if a folder had to be opened:
+    /// a rescan reads every visible request, and this runs on every click.
     pub fn expand_to(&mut self, file: &Path) {
         let Some(root) = self.workspace.clone() else {
             return;
         };
+        let mut changed = false;
         let mut dir = file.parent();
         while let Some(path) = dir {
             if !path.starts_with(&root) {
                 break;
             }
-            self.expanded.insert(path.to_path_buf());
+            changed |= self.expanded.insert(path.to_path_buf());
             if path == root {
                 break;
             }
             dir = path.parent();
         }
-        self.rebuild_tree();
+        if changed {
+            self.rebuild_tree();
+        }
     }
 
     /// Forget the workspace without touching the request being edited: it
@@ -819,11 +822,7 @@ impl MercuryApp {
                 );
                 self.opened_content = self.saved_content.clone();
                 // opened from ⌘K, history or a relaunch: show where it lives
-                let expanded = self.expanded.len();
                 self.expand_to(path);
-                if self.expanded.len() != expanded {
-                    self.rebuild_tree();
-                }
                 self.last_folder = path.parent().map(Path::to_path_buf);
                 self.opened_recently.retain(|p| p != path);
                 self.opened_recently.insert(0, path.to_path_buf());
@@ -1116,7 +1115,6 @@ impl MercuryApp {
                 match entry.file.map(PathBuf::from).filter(|f| f.is_file()) {
                     Some(file) => {
                         self.open_file(&file);
-                        self.expand_to(&file);
                     }
                     None => {
                         self.autosave();

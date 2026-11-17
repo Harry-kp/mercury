@@ -21,7 +21,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **History keeps response bodies up to 1 MB.** It rewrote up to 50 × 10 MB on every send; a bigger body is still shown in full when it arrives.
 - **No request timeout.** Slow endpoints (reports, LLM APIs) used to fail at 30 seconds with no way around it. Now only connecting is limited (30 s); `Esc` cancels anything else.
 - **The `⋯` beside Send is gone.** Copy as cURL and Revert to saved are on the open request's `⋯` in the sidebar (and in `⌘ K`); Format is in the Body tab, where it already was.
+- The sidebar sorts names ignoring case, the way a file manager does: `alpha` no longer comes after `Zeta`.
 - The install instructions include `brew trust --cask harry-kp/tap/mercury`: Homebrew 7 refuses casks from untrusted taps, so the one-line install failed.
+
+### Fixed
+- **Sidebar filter:** a folder that matches by name shows its requests (it showed up empty), `json` no longer matches every request, and a filter that matches nothing says so instead of leaving the sidebar blank.
+- Filtering a folder with a symlink back up the tree no longer loads ~100 nested copies of it and widens the sidebar. Very deep trees stop indenting before their rows run out of room.
+- Clicking a request no longer rescans the whole workspace (re-reading every visible request file).
 
 ## [0.4.3] - 2026-11-17
 

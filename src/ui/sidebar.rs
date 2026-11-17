@@ -35,7 +35,7 @@ impl MercuryApp {
                 // never opened, so the first keystroke loads the whole tree.
                 if !self.search.is_empty() && !self.tree_fully_loaded {
                     let mut tree = std::mem::take(&mut self.tree);
-                    load_subtree(&mut tree, &self.expanded);
+                    load_subtree(&mut tree, &self.expanded, workspace::MAX_DEPTH);
                     self.tree = tree;
                     self.tree_fully_loaded = true;
                 }
@@ -93,8 +93,7 @@ impl MercuryApp {
                 for (idx, recent) in self.recent.iter().enumerate().rev() {
                     let request = &recent.request;
                     let row = widgets::row(ui, ("recent", idx), &request.url, false, |ui| {
-                        // leave room for the × that is painted on top of the row
-                        ui.set_max_width((ui.available_width() - 26.0).max(40.0));
+                        reserve_action(ui);
                         ui.label(method_text(request.method));
                         ui.add(egui::Label::new(muted(&request.url).color(t.text)).truncate());
                     });
@@ -138,8 +137,17 @@ impl MercuryApp {
             self.empty_sidebar(ui);
             return;
         }
-        let mut tree = std::mem::take(&mut self.tree);
         let search = self.search.to_lowercase();
+        if !search.is_empty() && !self.tree.iter().any(|i| matches_search(i, &search)) {
+            ui.add_space(Space::SM);
+            egui::Frame::NONE
+                .inner_margin(Margin::symmetric(Space::MD as i8, 0))
+                .show(ui, |ui| {
+                    ui.label(muted(format!("No requests match \"{}\"", self.search)))
+                });
+            return;
+        }
+        let mut tree = std::mem::take(&mut self.tree);
         self.tree_items(ui, &mut tree, 0, &search);
         self.tree = tree;
     }
@@ -206,7 +214,8 @@ impl MercuryApp {
         search: &str,
     ) {
         let t = theme();
-        let indent = depth as f32 * Layout::TREE_INDENT;
+        // capped, or a deep tree pushes rows past the panel and widens it
+        let indent = (depth as f32 * Layout::TREE_INDENT).min(ui.available_width() / 3.0);
         for item in items {
             if !search.is_empty() && !matches_search(item, search) {
                 continue;
@@ -257,7 +266,13 @@ impl MercuryApp {
                     }
                     response.context_menu(|ui| self.folder_menu(ui, name, path));
                     if let (Some(children), true) = (children, expanded) {
-                        self.tree_items(ui, children, depth + 1, search);
+                        // a folder that matches by name shows all it holds
+                        let inner = if name.to_lowercase().contains(search) {
+                            ""
+                        } else {
+                            search
+                        };
+                        self.tree_items(ui, children, depth + 1, inner);
                     }
                 }
                 CollectionItem::Request { name, path, method } => {
@@ -337,7 +352,7 @@ impl MercuryApp {
     }
 }
 
-/// Keeps a row's text clear of the "…" painted over its right end.
+/// Keeps a row's text clear of the "…" or "×" painted over its right end.
 fn reserve_action(ui: &mut Ui) {
     ui.set_max_width((ui.available_width() - 26.0).max(40.0));
 }
@@ -361,19 +376,32 @@ fn chevron(ui: &mut Ui, expanded: bool) {
     widgets::glyph(ui, what, 11.0, theme().text_faint);
 }
 
-/// Load every folder's children so a filter can see the whole workspace.
-fn load_subtree(items: &mut [CollectionItem], expanded: &std::collections::HashSet<PathBuf>) {
+/// Load every folder's children so a filter can see the whole workspace,
+/// no deeper than the palette looks: a symlink back up the tree is a loop.
+fn load_subtree(
+    items: &mut [CollectionItem],
+    expanded: &std::collections::HashSet<PathBuf>,
+    depth: usize,
+) {
     for item in items {
         if let CollectionItem::Folder { path, children, .. } = item {
+            if depth == 0 {
+                return;
+            }
             let children = children.get_or_insert_with(|| workspace::scan(path, expanded));
-            load_subtree(children, expanded);
+            load_subtree(children, expanded, depth - 1);
         }
     }
 }
 
 fn matches_search(item: &CollectionItem, search: &str) -> bool {
     match item {
-        CollectionItem::Request { name, .. } => name.to_lowercase().contains(search),
+        // the name the row shows: ".json" would match every request
+        CollectionItem::Request { name, .. } => name
+            .strip_suffix(".json")
+            .unwrap_or(name)
+            .to_lowercase()
+            .contains(search),
         CollectionItem::Folder { name, children, .. } => {
             name.to_lowercase().contains(search)
                 || children
@@ -381,5 +409,51 @@ fn matches_search(item: &CollectionItem, search: &str) -> bool {
                     .flatten()
                     .any(|child| matches_search(child, search))
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashSet;
+
+    fn depth(items: &[CollectionItem]) -> usize {
+        items
+            .iter()
+            .map(|item| match item {
+                CollectionItem::Folder {
+                    children: Some(c), ..
+                } => 1 + depth(c),
+                _ => 1,
+            })
+            .max()
+            .unwrap_or(0)
+    }
+
+    /// Typing in the filter loads the whole tree. A link back up it used to
+    /// be followed until the path got too long for the OS: ~100 levels that
+    /// all rendered, and widened the sidebar.
+    #[cfg(unix)]
+    #[test]
+    fn filtering_stops_at_a_symlink_loop() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let root = dir.path();
+        std::fs::create_dir(root.join("api")).unwrap();
+        std::os::unix::fs::symlink(root, root.join("api/loop")).unwrap();
+        let mut tree = workspace::scan(root, &HashSet::new());
+        load_subtree(&mut tree, &HashSet::new(), workspace::MAX_DEPTH);
+        assert!(depth(&tree) <= workspace::MAX_DEPTH + 1, "{}", depth(&tree));
+    }
+
+    #[test]
+    fn filter_matches_the_name_the_row_shows() {
+        let request = CollectionItem::Request {
+            name: "get-user.json".into(),
+            path: PathBuf::from("get-user.json"),
+            method: None,
+        };
+        assert!(matches_search(&request, "user"));
+        // ".json" is not on screen, so it must not match every request
+        assert!(!matches_search(&request, "json"));
     }
 }
