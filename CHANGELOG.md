@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- **Multipart bodies and file uploads.** Pick **Multipart** as the body type: a table of fields where a value starting with `@` is a file (**Attach file…** picks one). Pasted `curl -F` commands and Postman form-data bodies now import as Multipart (an imported collection's file fields arrive switched off, so it can't upload a local file you haven't seen), and Copy as cURL writes them back as `-F`.
+- **Multipart bodies and file uploads.** Pick **Multipart** as the body type: a table of fields where a value starting with `@` is a file (**Attach file…** picks one). Pasted `curl -F` commands and Postman form-data bodies now import as Multipart (an imported collection's file fields arrive switched off, a variable's value is always sent as text, and file paths take no variables, so nothing can upload a local file you haven't seen), and Copy as cURL writes them back as `-F`.
 - **Failed sends are in History**, marked **Failed**: timeouts, refused connections and bad URLs used to leave no trace, though they're the attempts you most want to look at again. Opening one shows the error with **Retry**. Older history files load as before.
 - `{{variables}}` in the URL bar are coloured by whether the selected environment defines them, as in Bruno and Postman.
 - **Send a sample request** under **Try this**, before you've sent anything: one click opens a new request to a free public JSON API and sends it, so a first run shows a real response without needing an API of your own (Bruno ships a sample collection for the same reason).

@@ -46,6 +46,16 @@ pub struct HttpResponse {
     pub pretty: Option<String>,
 }
 
+/// Whether these headers (as sent: substituted, one value per name) make
+/// the body Multipart. The one test the app, the sender and Copy as cURL
+/// all use: deciding it from different inputs is how a variable slipped a
+/// file upload past the per-field substitution.
+pub fn is_multipart(headers: &std::collections::BTreeMap<String, String>) -> bool {
+    headers
+        .iter()
+        .any(|(k, v)| k.eq_ignore_ascii_case("content-type") && v.contains("multipart/form-data"))
+}
+
 /// A Multipart body with `{{variables}}` filled in, field by field: the
 /// lines are split first and whether a field is a file is decided from what
 /// the user wrote, so a variable's value can never add a field or turn text
@@ -64,7 +74,9 @@ pub fn substitute_multipart(
             let value = if let Some(rest) = r.value.strip_prefix("@@") {
                 format!("@@{}", sub(rest))
             } else if let Some(path) = r.value.strip_prefix('@') {
-                format!("@{}", sub(path))
+                // a file path is taken as written: a variable choosing which
+                // file to upload is a variable choosing what leaves the machine
+                format!("@{}", path.replace(['\r', '\n'], " "))
             } else {
                 let text = sub(&r.value);
                 if text.starts_with('@') {
@@ -182,10 +194,7 @@ pub fn execute(
     let method = reqwest::Method::from_bytes(request.method.as_str().as_bytes())
         .expect("HttpMethod names are valid HTTP methods");
     let mut builder = client.request(method, with_scheme(&request.url));
-    let multipart = request
-        .headers
-        .iter()
-        .any(|(k, v)| k.eq_ignore_ascii_case("content-type") && v.contains("multipart/form-data"));
+    let multipart = is_multipart(&request.headers);
     for (key, value) in &request.headers {
         // the boundary has to be in it, and only the encoder knows it
         if !(multipart && key.eq_ignore_ascii_case("content-type")) {
@@ -484,10 +493,11 @@ mod tests {
             ("K".to_string(), "k=@/etc/group".to_string()),
             ("P".to_string(), "/tmp/avatar.png".to_string()),
         ]);
+        // ({{P}} stays as written: a variable never picks the file to upload)
         let body = "a={{V}}\nc={{N}}\n{{K}}=1\nf=@{{P}}\nt=@@{{V}}\n# off=@{{V}}";
         assert_eq!(
             substitute_multipart(body, &vars),
-            "a=@@/etc/passwd\nc=x b=@/etc/hosts\nk%3D@/etc/group=1\nf=@/tmp/avatar.png\nt=@@@/etc/passwd"
+            "a=@@/etc/passwd\nc=x b=@/etc/hosts\nk%3D@/etc/group=1\nf=@{{P}}\nt=@@@/etc/passwd"
         );
         // and the encoder sends `@@x` as the text `@x`
         let (_, bytes) = multipart_body("a=@@/etc/passwd").unwrap();

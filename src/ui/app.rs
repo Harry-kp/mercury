@@ -1053,8 +1053,11 @@ impl MercuryApp {
 
     /// The body as sent. A Multipart body is filled in field by field, so a
     /// variable can't add a field or turn text into a file upload.
-    fn substituted_body(&self) -> String {
-        if kv::body_kind(&self.headers_text) == kv::BodyKind::Multipart {
+    pub fn substituted_body(&self) -> String {
+        // decided from the headers as they're sent, like the sender does: a
+        // `Content-Type: {{CT}}` must not make the two disagree
+        let sent = kv::headers_to_map(&vars::substitute(&self.headers_text, &self.env_vars));
+        if http::is_multipart(&sent) {
             http::substitute_multipart(&self.body_text, &self.env_vars)
         } else {
             vars::substitute(&self.body_text, &self.env_vars)

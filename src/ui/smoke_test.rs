@@ -797,6 +797,18 @@ fn open_send_edit_and_save() {
         "{echoed}"
     );
 
+    // Multipart is decided from the headers as sent: a `Content-Type:
+    // {{CT}}` filled in by a (possibly imported) .env must not skip the
+    // per-field substitution that keeps a variable from becoming a file
+    harness.state_mut().headers_text = "Content-Type: {{CT}}".into();
+    harness.state_mut().body_text = "a={{V}}".into();
+    for (k, v) in [("CT", "multipart/form-data"), ("V", "@/etc/passwd")] {
+        harness.state_mut().env_vars.insert(k.into(), v.into());
+    }
+    assert_eq!(harness.state().substituted_body(), "a=@@/etc/passwd");
+    harness.state_mut().env_vars.remove("CT");
+    harness.state_mut().env_vars.remove("V");
+
     // a header switched off in the editor survives save + reopen (the file
     // used to keep only enabled headers, so unchecking one deleted it)
     harness.state_mut().open_file(&file);
