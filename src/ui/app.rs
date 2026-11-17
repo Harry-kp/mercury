@@ -214,6 +214,10 @@ enum Event {
     Imported(Result<(PathBuf, ImportCount), String>),
     FilesChanged,
     Toast(String, bool),
+    /// History, read off the UI thread: the file holds up to 50 full
+    /// responses, and parsing 10 MB of it froze the window for 40 ms.
+    History(Vec<HistorySummary>),
+    HistoryEntry(Option<HistoryEntry>),
 }
 
 pub struct Importer {
@@ -267,6 +271,11 @@ pub struct MercuryApp {
     pub form_bulk_edit: bool,
     pub headers_text: String,
     pub body_text: String,
+    /// See [`super::editor::BodyLayout`].
+    pub body_layout: Option<super::editor::BodyLayout>,
+    /// The `{{variables}}` in `body_text` and the text they were found in:
+    /// three places ask every frame, and a 1 MB body takes 0.5 ms to scan.
+    body_vars: std::cell::RefCell<(String, Vec<String>)>,
     pub tab: Tab,
     pub headers_bulk_edit: bool,
     pub params_bulk_edit: bool,
@@ -275,6 +284,9 @@ pub struct MercuryApp {
     /// Fields of the open file Mercury doesn't edit, saved back as they were.
     file_extra: std::collections::BTreeMap<String, serde_json::Value>,
     last_save: f64,
+    /// [`Self::has_unsaved_changes`] as of this frame, for the top and status
+    /// bars: each call serializes the whole request (2 ms for a 1 MB body).
+    unsaved: bool,
 
     // Response
     /// Shared, so drawing a frame never copies a multi-megabyte body.
@@ -310,7 +322,9 @@ pub struct MercuryApp {
 
     // History and recent
     pub history: Vec<HistorySummary>,
-    history_loaded: bool,
+    /// The list has arrived from disk; `history_loading` while it hasn't yet.
+    pub history_loaded: bool,
+    history_loading: bool,
     pub history_search: String,
     pub show_history: bool,
     pub recent: Vec<RecentRequest>,
@@ -368,12 +382,15 @@ impl MercuryApp {
             form_bulk_edit: false,
             headers_text: String::new(),
             body_text: String::new(),
+            body_layout: None,
+            body_vars: Default::default(),
             // a fresh request is a GET: Params, by the rule in `load_request`
             tab: Tab::Params,
             headers_bulk_edit: false,
             params_bulk_edit: false,
             saved_content: None,
             last_save: 0.0,
+            unsaved: false,
             response: None,
             request_error: None,
             formatted_body: None,
@@ -395,6 +412,7 @@ impl MercuryApp {
             request_counter: 0,
             history: Vec::new(),
             history_loaded: false,
+            history_loading: false,
             history_search: String::new(),
             show_history: false,
             recent: storage::load_recent(),
@@ -795,6 +813,15 @@ impl MercuryApp {
         .to_json()
     }
 
+    /// `vars::extract(&self.body_text)`, scanned again only when the body changed.
+    pub fn body_vars(&self) -> Vec<String> {
+        let mut cache = self.body_vars.borrow_mut();
+        if cache.0 != self.body_text {
+            *cache = (self.body_text.clone(), vars::extract(&self.body_text));
+        }
+        cache.1.clone()
+    }
+
     pub fn has_unsaved_changes(&self) -> bool {
         self.current_file.is_some() && self.saved_content.as_deref() != Some(&self.file_content())
     }
@@ -1140,14 +1167,33 @@ impl MercuryApp {
     }
 
     pub fn ensure_history_loaded(&mut self) {
-        if !self.history_loaded {
-            self.history = storage::load_history_summaries();
-            self.history_loaded = true;
+        if !self.history_loaded && !self.history_loading {
+            self.history_loading = true;
+            self.spawn(|| Some(Event::History(storage::load_history_summaries())));
         }
     }
 
+    fn history_arrived(&mut self, mut loaded: Vec<HistorySummary>) {
+        // sends that finished while it loaded may not be in it yet
+        let sent: Vec<_> = std::mem::take(&mut self.history)
+            .into_iter()
+            .filter(|s| !loaded.iter().any(|l| l.timestamp == s.timestamp))
+            .collect();
+        loaded.extend(sent);
+        let excess = loaded.len().saturating_sub(storage::MAX_HISTORY);
+        loaded.drain(..excess);
+        self.history = loaded;
+        self.history_loaded = true;
+        self.history_loading = false;
+    }
+
     pub fn open_history_entry(&mut self, timestamp: f64) {
-        match storage::load_history_entry(timestamp) {
+        // finding it parses the whole history file
+        self.spawn(move || Some(Event::HistoryEntry(storage::load_history_entry(timestamp))));
+    }
+
+    fn show_history_entry(&mut self, entry: Option<HistoryEntry>) {
+        match entry {
             Some(entry) => {
                 // back on the file it was sent from, if it still exists,
                 // instead of a detached "Untitled" copy
@@ -1275,6 +1321,8 @@ impl MercuryApp {
                 Event::Imported(Err(e)) => self.notify(e, true),
                 Event::FilesChanged => files_changed = true,
                 Event::Toast(text, is_error) => self.notify(text, is_error),
+                Event::History(loaded) => self.history_arrived(loaded),
+                Event::HistoryEntry(entry) => self.show_history_entry(entry),
             }
         }
         if files_changed {
@@ -1891,7 +1939,7 @@ impl MercuryApp {
             .map(|s| s.to_string_lossy())
             .unwrap_or_default();
         ui.label(strong(widgets::truncate(&name, CRUMB_CHARS)));
-        if self.has_unsaved_changes() {
+        if self.unsaved {
             widgets::glyph(ui, Icon::Dot, 9.0, t.warning)
                 .on_hover_text("Unsaved changes (auto-saves in a few seconds)");
         }
@@ -1994,7 +2042,7 @@ impl MercuryApp {
                     // open file on disk yet?
                     if self.workspace.is_none() {
                         ui.label(faint("No folder open — requests are files in a folder"));
-                    } else if self.has_unsaved_changes() {
+                    } else if self.unsaved {
                         ui.label(faint("Unsaved changes · saves automatically"));
                     } else if self.current_file.is_some() {
                         ui.label(faint("Saved"));
@@ -2196,8 +2244,10 @@ impl MercuryApp {
         );
         self.handle_events();
 
-        if self.has_unsaved_changes() && self.time - self.last_save > AUTOSAVE_SECS {
+        self.unsaved = self.has_unsaved_changes();
+        if self.unsaved && self.time - self.last_save > AUTOSAVE_SECS {
             self.save_file();
+            self.unsaved = self.has_unsaved_changes(); // it can fail
         }
 
         self.top_bar(ctx);

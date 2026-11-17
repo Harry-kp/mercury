@@ -220,6 +220,9 @@ impl MercuryApp {
         ui.add_space(Space::LG);
 
         if self.history.is_empty() {
+            if !self.history_loaded {
+                return; // not "No requests yet" while it is read
+            }
             empty_state(
                 ui,
                 Icon::Inbox,
