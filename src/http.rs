@@ -273,10 +273,14 @@ pub fn execute(
     let (bytes, response_type, size_bytes) = if declared > MAX_RESPONSE_SIZE {
         (Vec::new(), ResponseType::TooLarge, declared)
     } else {
-        let bytes = response
-            .bytes()
-            .map_err(|e| format!("Failed to read response body: {e}"))?
-            .to_vec();
+        // a body without Content-Length (chunked, or a stream that never
+        // ends) is read only one byte past the limit, not into memory whole
+        let mut bytes = Vec::new();
+        std::io::Read::read_to_end(
+            &mut std::io::Read::take(response, MAX_RESPONSE_SIZE as u64 + 1),
+            &mut bytes,
+        )
+        .map_err(|e| format!("Failed to read response body: {e}"))?;
         let kind = detect_response_type(&content_type, &bytes, status.as_u16());
         let len = bytes.len();
         (bytes, kind, len)
@@ -287,7 +291,7 @@ pub fn execute(
             (format!("[Binary data: {size_bytes} bytes]"), Some(bytes))
         }
         ResponseType::TooLarge => (String::new(), None),
-        _ => (String::from_utf8_lossy(&bytes).into_owned(), None),
+        _ => (text_of(&bytes, &content_type), None),
     };
 
     // pretty-print here, on the request thread, not in the first frame
@@ -356,6 +360,20 @@ fn extract_cookies(headers: &[(String, String)]) -> Vec<String> {
         .collect()
 }
 
+/// A text body as a string. UTF-8, unless the server declares Latin-1,
+/// whose bytes are exactly the first 256 code points.
+fn text_of(bytes: &[u8], content_type: &str) -> String {
+    let ct = content_type.to_lowercase().replace('"', "");
+    if ["charset=iso-8859-1", "charset=latin1"]
+        .iter()
+        .any(|c| ct.contains(c))
+    {
+        bytes.iter().map(|&b| b as char).collect()
+    } else {
+        String::from_utf8_lossy(bytes).into_owned()
+    }
+}
+
 fn detect_response_type(content_type: &str, body: &[u8], status: u16) -> ResponseType {
     if status == 204 || body.is_empty() {
         return ResponseType::Empty;
@@ -364,8 +382,22 @@ fn detect_response_type(content_type: &str, body: &[u8], status: u16) -> Respons
         return ResponseType::TooLarge;
     }
     let ct = content_type.to_lowercase();
-    // SVG is text; let it fall through to XML
-    if ct.starts_with("image/") && !ct.contains("svg") {
+    // text first: the binary words below are substrings of text types too
+    // (GitHub's `application/vnd.github.star+json` has "tar" in it)
+    if ct.contains("application/json") || ct.contains("+json") {
+        return ResponseType::Json;
+    }
+    // SVG (`image/svg+xml`) is text too
+    if ct.contains("application/xml") || ct.contains("text/xml") || ct.contains("+xml") {
+        return ResponseType::Xml;
+    }
+    if ct.contains("text/html") {
+        return ResponseType::Html;
+    }
+    if ct.starts_with("text/") {
+        return ResponseType::PlainText;
+    }
+    if ct.starts_with("image/") {
         return ResponseType::Image;
     }
     if ct.starts_with("application/octet-stream")
@@ -375,18 +407,6 @@ fn detect_response_type(content_type: &str, body: &[u8], status: u16) -> Respons
         || ["zip", "tar", "gzip"].iter().any(|w| ct.contains(w))
     {
         return ResponseType::Binary;
-    }
-    if ct.contains("application/json") || ct.contains("+json") {
-        return ResponseType::Json;
-    }
-    if ct.contains("application/xml") || ct.contains("text/xml") || ct.contains("+xml") {
-        return ResponseType::Xml;
-    }
-    if ct.contains("text/html") {
-        return ResponseType::Html;
-    }
-    if ct.starts_with("text/") {
-        return ResponseType::PlainText;
     }
     // no useful content-type: sniff
     let Ok(text) = std::str::from_utf8(body) else {
@@ -494,6 +514,9 @@ pub fn format_xml(body: &str) -> String {
     let mut out = String::new();
     let mut indent = 0usize;
     let mut token = String::new();
+    // the last tag opened an element: its closing tag stays on its line
+    // (`<name>Ada</name>`, not `</name>` alone on the next)
+    let mut after_open = false;
     for ch in body.chars() {
         match ch {
             '<' => {
@@ -512,14 +535,17 @@ pub fn format_xml(body: &str) -> String {
                 if closing {
                     indent = indent.saturating_sub(1);
                 }
-                if !out.is_empty() && !out.ends_with('\n') {
-                    out.push('\n');
+                if !(closing && after_open) {
+                    if !out.is_empty() && !out.ends_with('\n') {
+                        out.push('\n');
+                    }
+                    out.push_str(&"  ".repeat(indent));
                 }
-                out.push_str(&"  ".repeat(indent));
                 out.push_str(tag);
                 if opens {
                     indent += 1;
                 }
+                after_open = opens;
                 token.clear();
             }
             _ => token.push(ch),
@@ -781,6 +807,53 @@ mod tests {
         );
     }
 
+    /// The words that mark an archive are inside text types too: GitHub's
+    /// `application/vnd.github.star+json` showed as an "Archive".
+    #[test]
+    fn text_types_are_not_taken_for_binary() {
+        let star = "application/vnd.github.star+json; charset=utf-8";
+        assert_eq!(detect_response_type(star, b"[]", 200), Json);
+        assert_eq!(
+            detect_response_type("text/x-tar-list", b"a", 200),
+            PlainText
+        );
+        assert_eq!(
+            detect_response_type("application/x-gzip", b"\x1f", 200),
+            Binary
+        );
+    }
+
+    #[test]
+    fn latin1_bodies_are_decoded() {
+        let body = b"caf\xe9";
+        assert_eq!(text_of(body, "text/plain; charset=ISO-8859-1"), "café");
+        assert_eq!(text_of(body, "text/plain; charset=\"latin1\""), "café");
+        assert_eq!(text_of("café".as_bytes(), "text/plain"), "café");
+    }
+
+    /// Without a Content-Length the size is only known once the body has
+    /// been read; it used to be read whole, however big, and then dropped.
+    #[test]
+    fn an_undeclared_body_stops_at_the_limit() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        std::thread::spawn(move || {
+            if let Some(mut stream) = listener.incoming().flatten().next() {
+                let _ = stream.read(&mut [0; 4096]);
+                let _ = stream.write_all(b"HTTP/1.1 200 OK\r\nConnection: close\r\n\r\n");
+                let chunk = vec![b'a'; 1024 * 1024];
+                for _ in 0..30 {
+                    if stream.write_all(&chunk).is_err() {
+                        break;
+                    }
+                }
+            }
+        });
+        let r = get(&format!("http://{addr}"), &[]).unwrap();
+        assert_eq!(r.response_type, TooLarge);
+        assert_eq!(r.size_bytes, MAX_RESPONSE_SIZE + 1);
+    }
+
     #[test]
     fn detects_empty() {
         assert_eq!(detect_response_type("application/json", b"", 200), Empty);
@@ -833,7 +906,11 @@ mod tests {
     fn formats() {
         assert_eq!(format_json("{\"a\":1}"), "{\n  \"a\": 1\n}");
         assert_eq!(format_json("not json"), "not json");
-        assert_eq!(format_xml("<r><i>t</i></r>"), "<r>\n  <i>t\n  </i>\n</r>");
+        assert_eq!(format_xml("<r><i>t</i></r>"), "<r>\n  <i>t</i>\n</r>");
+        assert_eq!(
+            format_xml("<a><b></b><c x=\"1\"/>\n  <d>y</d></a>"),
+            "<a>\n  <b></b>\n  <c x=\"1\"/>\n  <d>y</d>\n</a>"
+        );
     }
 
     /// Pretty view has to show what the server sent. Going through

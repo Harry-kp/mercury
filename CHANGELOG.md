@@ -16,6 +16,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - A `.env` value containing a line break (from an import) is written as `\n` and read back intact, instead of splitting into a broken line.
+- JSON whose content type contains "tar" or "zip" (GitHub's `application/vnd.github.star+json`) showed as an **Archive** instead of JSON.
+- A response without a `Content-Length` was downloaded whole, however large, before being called too large. Mercury now stops reading at the 10 MB limit.
+- Pretty XML keeps a closing tag on its element's line (`<name>Ada</name>`), instead of putting every `</name>` on a line of its own.
+- A `charset=ISO-8859-1` body showed boxes for accented letters; it is decoded now.
+- At the narrowest response panel, raw text ran a character or two past the right edge.
+- **Save response…** on an image or file reopened from history saved the text `[Binary data: N bytes]`. History keeps no bytes for those, so the panel now says to send again.
+- Opening a history entry whose request file no longer parses put its response under the request that was open; it now opens as an unsaved request.
+- A large JSON or text response is no longer kept in memory twice.
 
 ### Changed
 - **History keeps response bodies up to 1 MB.** It rewrote up to 50 × 10 MB on every send; a bigger body is still shown in full when it arrives.

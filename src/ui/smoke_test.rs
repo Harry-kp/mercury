@@ -326,6 +326,21 @@ fn open_send_edit_and_save() {
         crate::http::ResponseType::TooLarge
     );
     harness.state_mut().url = before;
+
+    // a binary body back from history keeps no bytes: its Save wrote the
+    // "[Binary data: …]" placeholder into the file
+    harness.state_mut().response = Some(std::sync::Arc::new(crate::http::HttpResponse {
+        status: 200,
+        status_text: "200 OK".into(),
+        size_bytes: 8,
+        body: "[Binary data: 8 bytes]".into(),
+        content_type: "image/png".into(),
+        response_type: crate::http::ResponseType::Image,
+        ..crate::http::HttpResponse::failed()
+    }));
+    harness.run_steps(2);
+    assert!(harness.query_by_label("Save response…").is_none());
+    harness.get_by_label("Send again to save it");
     harness.state_mut().response = None;
     harness.run_steps(2);
 
@@ -718,6 +733,18 @@ fn open_send_edit_and_save() {
         "a history entry must reopen the file it was sent from"
     );
     assert_eq!(harness.state().response_env.as_deref(), Some(".env.dev"));
+    // ...and when that file no longer parses, the entry opens on its own
+    // instead of putting its response under whatever request is open
+    let original = std::fs::read_to_string(&file).unwrap();
+    std::fs::write(&file, "{ broken").unwrap();
+    let invoice = ws.join("billing/invoices/get-invoice.json");
+    harness.state_mut().open_file(&invoice);
+    harness.state_mut().open_history_entry(sent.timestamp);
+    assert_eq!(harness.state().current_file, None);
+    assert_eq!(harness.state().url, sent.url);
+    std::fs::write(&file, original).unwrap();
+    harness.state_mut().open_file(&file);
+    harness.run_steps(2);
 
     // Revert to saved undoes edits autosave has already written
     harness.key_press_modifiers(Modifiers::COMMAND, Key::L);
@@ -791,6 +818,17 @@ fn open_send_edit_and_save() {
         !overlaps(&small, "Auth", "Body type: none ⌄"),
         "request tabs overlap the body type"
     );
+    // raw text wraps inside the panel, not a character or two past its edge
+    small.state_mut().raw_view = true;
+    small.run_steps(3);
+    let row = small
+        .query_all_by_label_contains("{\"echo\"")
+        .next()
+        .expect("the body's first row")
+        .rect();
+    let code_right = 900.0 - super::theme::Space::XL - super::theme::Space::LG;
+    assert!(row.max.x <= code_right, "{} > {code_right}", row.max.x);
+    small.state_mut().raw_view = false;
     drop(small);
 
     // A big body is drawn a screenful at a time; typing in find must jump
