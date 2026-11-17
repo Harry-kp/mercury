@@ -10,6 +10,10 @@ use super::widgets::{
 use crate::kv::{self, AuthMode, BodyKind};
 use crate::model::{HttpMethod, Request};
 
+use crate::{curl, vars};
+use eframe::egui::{self, Align, Margin, RichText, ScrollArea, Sense, Stroke, Ui, Vec2};
+use std::collections::BTreeSet;
+
 /// How many characters one edit inserted: what is left of `after` once the
 /// prefix and suffix it shares with `before` are taken away. A keystroke
 /// inserts one; a paste inserts many.
@@ -25,10 +29,6 @@ fn inserted_chars(before: &str, after: &str) -> usize {
     a.len() - prefix - suffix
 }
 
-use crate::{curl, vars};
-use eframe::egui::{self, Align, Margin, RichText, ScrollArea, Sense, Stroke, Ui, Vec2};
-use std::collections::BTreeSet;
-
 impl MercuryApp {
     pub fn editor(&mut self, ui: &mut Ui) {
         self.url_bar(ui);
@@ -41,18 +41,17 @@ impl MercuryApp {
 
     fn url_bar(&mut self, ui: &mut Ui) {
         let t = theme();
-        let undefined: BTreeSet<String> = vars::extract(&self.url)
-            .into_iter()
-            .filter(|v| !self.env_vars.contains_key(v))
-            .collect();
+        let in_url = vars::extract(&self.url)
+            .iter()
+            .any(|v| !self.env_vars.contains_key(v));
         let focused = ui.memory(|m| m.has_focus(egui::Id::new("url_bar")));
-        let border = match (focused, undefined.is_empty()) {
+        let border = match (focused, in_url) {
             (true, _) => t.accent,
-            (false, false) => t.warning,
-            (false, true) => t.border,
+            (false, true) => t.warning,
+            (false, false) => t.border,
         };
 
-        let frame = widgets::card()
+        widgets::card()
             .stroke(Stroke::new(1.0_f32, border))
             .inner_margin(Margin::same(Space::SM as i8))
             .show(ui, |ui| {
@@ -73,7 +72,8 @@ impl MercuryApp {
                         86.0
                     } else {
                         widgets::button_width(ui, &widgets::send_label(target.as_deref()))
-                    };
+                    } + Layout::ICON_BUTTON
+                        + Space::SM;
                     let before = self.url.clone();
                     let url = ui.add(
                         egui::TextEdit::singleline(&mut self.url)
@@ -89,6 +89,7 @@ impl MercuryApp {
                         self.on_url_edited(&before);
                     }
                     ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
+                        self.request_actions(ui);
                         if send_button(ui, executing, target.as_deref()).clicked() {
                             if executing {
                                 self.cancel_request();
@@ -99,14 +100,54 @@ impl MercuryApp {
                     });
                 });
             });
+        self.undefined_line(ui);
+    }
 
-        if !undefined.is_empty() {
-            let list: Vec<String> = undefined.iter().map(|v| format!("{{{{{v}}}}}")).collect();
-            frame.response.on_hover_text(format!(
-                "Not defined in this environment:\n{}",
-                list.join("\n")
-            ));
+    /// "…" at the end of the URL bar: the request's own actions, so none of
+    /// them is reachable only through a shortcut.
+    fn request_actions(&mut self, ui: &mut Ui) {
+        let trigger = icon_button(ui, Icon::Ellipsis, "Request actions");
+        let mut picked = None;
+        popup_menu(ui, &trigger, Layout::MENU_WIDTH, |ui| {
+            if menu_item(ui, Some(Icon::Terminal), "Copy as cURL", "⌘ ⇧ C") {
+                picked = Some(Action::CopyCurl);
+            }
+            if menu_item(ui, Some(Icon::Sparkle), "Format body", "") {
+                picked = Some(Action::FormatBody);
+            }
+        });
+        if let Some(action) = picked {
+            self.run(action);
         }
+    }
+
+    /// Undefined variables, said in words under the URL bar. An amber border
+    /// explained only on hover sent people to the server's 404 instead.
+    fn undefined_line(&self, ui: &mut Ui) {
+        let all = format!("{} {} {}", self.url, self.headers_text, self.body_text);
+        let undefined: BTreeSet<String> = vars::extract(&all)
+            .into_iter()
+            .filter(|v| !self.env_vars.contains_key(v))
+            .collect();
+        if undefined.is_empty() {
+            return;
+        }
+        let names: Vec<String> = undefined.iter().map(|v| format!("{{{{{v}}}}}")).collect();
+        let verb = if names.len() == 1 { "isn't" } else { "aren't" };
+        let text = match self.env_name() {
+            Some(env) => format!("{} {verb} defined in {env}", names.join(", ")),
+            None => format!(
+                "{} {verb} defined: no environment is selected",
+                names.join(", ")
+            ),
+        };
+        let t = theme();
+        ui.add_space(Space::SM);
+        ui.horizontal_wrapped(|ui| {
+            ui.spacing_mut().item_spacing.x = Space::SM;
+            widgets::glyph(ui, Icon::Alert, 13.0, t.warning);
+            ui.label(muted(text).color(t.warning));
+        });
     }
 
     fn method_picker(&mut self, ui: &mut Ui) {
@@ -231,58 +272,45 @@ impl MercuryApp {
                 kv::count_enabled(&kv::parse_lines(&self.headers_text, ":")),
                 missing(&self.headers_text),
             ),
-            (
-                Tab::Auth,
-                match auth_mode {
-                    AuthMode::None => "Auth",
-                    _ => auth_mode.label(),
-                },
-                0,
-                false,
-            ),
+            // always "Auth": a tab that renamed itself to "Bearer" or "Basic"
+            // moved under the user's cursor from one request to the next
+            (Tab::Auth, "Auth", 0, false),
         ];
 
         let mut picked = None;
-        let mut auth_trigger = None;
         let mut body_trigger = None;
         let mut format = false;
-        egui::containers::Sides::new().shrink_left().show(
+        let current = self.tab;
+        widgets::tab_row(
             ui,
+            Layout::REQUEST_TABS_MIN,
             |ui| {
                 ui.spacing_mut().item_spacing.x = Space::XS;
                 for (tab, text, count, warn) in tabs {
-                    if tab_button(ui, text, count, self.tab == tab, warn) {
+                    if tab_button(ui, text, count, current == tab, warn) {
                         picked = Some(tab);
                     }
                 }
-                auth_trigger = Some(icon_button(ui, Icon::ChevronDown, "Auth type"));
             },
             |ui| {
-                if self.tab != Tab::Body {
+                if current != Tab::Body {
                     return;
                 }
                 if body_kind == BodyKind::Json {
                     format = icon_button(ui, Icon::Sparkle, "Format JSON").clicked();
                 }
+                let kind = match body_kind {
+                    BodyKind::None => "none",
+                    other => other.label(),
+                };
                 body_trigger = Some(link(
                     ui,
-                    muted(format!("{} ⌄", body_kind.label())).color(theme().accent),
+                    muted(format!("Body type: {kind} ⌄")).color(theme().accent),
                 ));
             },
         );
         if let Some(tab) = picked {
             self.tab = tab;
-        }
-        if let Some(trigger) = auth_trigger {
-            popup_menu(ui, &trigger, 132.0, |ui| {
-                for mode in AuthMode::ALL {
-                    let check = (auth_mode == mode).then_some(Icon::Check);
-                    if menu_item(ui, check, mode.label(), "") {
-                        self.set_auth_mode(auth_mode, mode);
-                        self.tab = Tab::Auth;
-                    }
-                }
-            });
         }
         if let Some(trigger) = body_trigger {
             popup_menu(ui, &trigger, 150.0, |ui| {
@@ -487,11 +515,16 @@ impl MercuryApp {
                 changed
             };
 
+        let labels: Vec<&str> = AuthMode::ALL.iter().map(|m| m.label()).collect();
+        let at = AuthMode::ALL.iter().position(|m| *m == mode).unwrap_or(0);
+        if let Some(i) = widgets::segmented(ui, "auth_mode", &labels, at) {
+            self.set_auth_mode(mode, AuthMode::ALL[i]);
+            return;
+        }
+        ui.add_space(Space::LG);
         let new_value = match mode {
             AuthMode::None => {
-                ui.label(muted(
-                    "No authentication. Pick a type from the chevron next to the tabs.",
-                ));
+                ui.label(muted("No Authorization header is sent."));
                 None
             }
             AuthMode::Basic => {

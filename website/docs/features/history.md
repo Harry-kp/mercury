@@ -10,7 +10,7 @@ Every request that gets a response is saved to history together with that respon
 
 ## Opening history
 
-Press `⌘ H`, or click **History** in the response panel. The history list takes the place of the response panel. Press `⌘ H` again, or click ×, to close it.
+Press `⌘ H`, or click the clock icon at the top of the response panel (it's there in every state). The history list takes the place of the response panel. Press `⌘ H` again, or click ×, to close it.
 
 Each entry shows:
 

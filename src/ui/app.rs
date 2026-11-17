@@ -642,6 +642,18 @@ impl MercuryApp {
         self.headers_text = request.headers;
         self.body_text = request.body;
         self.query_params = kv::parse_query_params(&self.url);
+        // Open on the tab that holds this request's content. The tab used to
+        // be one global value, so a GET opened on an empty Body editor, or on
+        // whatever the previous request was showing.
+        self.tab = if !self.body_text.trim().is_empty()
+            || matches!(
+                self.method,
+                HttpMethod::POST | HttpMethod::PUT | HttpMethod::PATCH
+            ) {
+            Tab::Body
+        } else {
+            Tab::Params
+        };
         self.current_file = file;
         self.saved_content = self.current_file.as_ref().map(|_| self.file_content());
         self.response = None;

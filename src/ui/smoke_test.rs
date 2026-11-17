@@ -2,7 +2,7 @@
 //! egui_kittest (clicks, keys, typing) against a local HTTP server.
 //! Copy a block from here to reproduce a UI bug before fixing it.
 
-use super::app::{Dialog, MercuryApp};
+use super::app::{Dialog, MercuryApp, Tab};
 use eframe::egui::{self, accesskit, Key, Modifiers};
 use egui_kittest::{kittest::Queryable, Harness};
 use std::io::{Read, Write};
@@ -139,6 +139,13 @@ fn open_send_edit_and_save() {
         Some(file.as_path())
     );
     assert_eq!(harness.state().query_params[0].value, "café");
+    assert_eq!(
+        harness.state().tab,
+        Tab::Params,
+        "a GET opens on Params, not on an empty Body editor"
+    );
+    // History has a door before anything has been sent
+    harness.get_by_role_and_label(accesskit::Role::Button, "History (⌘ H)");
 
     // ⌘Enter sends; env vars are substituted into URL and headers
     harness.key_press_modifiers(Modifiers::COMMAND, Key::Enter);
@@ -157,6 +164,15 @@ fn open_send_edit_and_save() {
     );
     assert_eq!(response.cookies, vec!["s=1; Path=/"]);
     assert_eq!(harness.state().history.len(), 1);
+    harness
+        .get_by_role_and_label(accesskit::Role::Button, "Find in response (⌘ F)")
+        .click();
+    harness.run_steps(2);
+    assert!(
+        harness.state().find.is_some(),
+        "the Find button opens the find bar"
+    );
+    harness.state_mut().find = None;
     // saved requests don't go to Recent
     assert!(harness.state().recent.is_empty());
 
@@ -311,6 +327,54 @@ fn open_send_edit_and_save() {
         "the cURL must open as a new request, not take over the saved one"
     );
     assert_eq!(harness.state().method, crate::model::HttpMethod::POST);
+    assert_eq!(
+        harness.state().tab,
+        Tab::Body,
+        "a request with a body opens on Body"
+    );
+
+    // An undefined variable is said in words under the URL bar, not only as
+    // an amber border with a tooltip.
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::L);
+    harness.run_steps(2);
+    harness.key_press(Key::End);
+    harness.event(egui::Event::Text("/{{NOPE}}".into()));
+    harness.run_steps(2);
+    assert!(
+        harness
+            .query_all_by_label_contains("{{NOPE}} isn't defined in .env.dev")
+            .next()
+            .is_some(),
+        "the undefined variable must be named on screen"
+    );
+
+    // The auth type is picked inside the Auth tab, from visible options.
+    harness
+        .get_by_role_and_label(accesskit::Role::Button, "Auth")
+        .click();
+    harness.run_steps(2);
+    harness
+        .get_by_role_and_label(accesskit::Role::RadioButton, "Bearer")
+        .click();
+    harness.run_steps(2);
+    assert!(harness
+        .state()
+        .headers_text
+        .contains("Authorization: Bearer"));
+
+    // Copy as cURL has a visible door: the request's "…" menu.
+    harness
+        .get_by_role_and_label(accesskit::Role::Button, "Request actions")
+        .click();
+    harness.run_steps(2);
+    harness
+        .get_by_role_and_label(accesskit::Role::Button, "Copy as cURL")
+        .click();
+    harness.run_steps(2);
+    assert_eq!(
+        harness.state().toast.as_ref().map(|t| t.text.as_str()),
+        Some("Copied as cURL")
+    );
     for _ in 0..400 {
         harness.step(); // well past the autosave interval
     }
@@ -368,6 +432,43 @@ fn open_send_edit_and_save() {
     );
     harness.key_press_modifiers(Modifiers::COMMAND, Key::H);
     harness.run_steps(2);
+
+    // At the minimum window size, tab-row controls wrap instead of being
+    // painted on top of the tabs.
+    let mut small = Harness::builder()
+        .with_size(egui::vec2(900.0, 620.0))
+        .build_state(
+            |ctx, app: &mut MercuryApp| app.frame(ctx),
+            MercuryApp::new(&egui::Context::default()),
+        );
+    small.state_mut().open_workspace(ws.clone(), None);
+    small.state_mut().open_file(&file);
+    small.run_steps(3);
+    small.state_mut().send_request();
+    wait_for_response(&mut small);
+    small.state_mut().tab = Tab::Body; // shows the body type control
+    small.run_steps(3);
+    let overlaps = |small: &Harness<'_, MercuryApp>, a: &str, b: &str| {
+        let rect = |label: &str| {
+            small
+                .query_all_by_label(label)
+                .next()
+                .unwrap_or_else(|| panic!("{label} on screen"))
+                .rect()
+        };
+        rect(a).intersects(rect(b))
+    };
+    for control in ["Raw", "Copy to clipboard", "Find in response (⌘ F)"] {
+        assert!(
+            !overlaps(&small, "Cookies", control),
+            "the response tabs overlap {control}"
+        );
+    }
+    assert!(
+        !overlaps(&small, "Auth", "Body type: none ⌄"),
+        "request tabs overlap the body type"
+    );
+    drop(small);
 
     // quitting and relaunching reopens the request that was open, instead of
     // orphaning it into an "Untitled" unsaved request

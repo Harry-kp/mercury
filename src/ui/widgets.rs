@@ -459,8 +459,7 @@ pub fn icon_button(ui: &mut Ui, what: Icon, tooltip: &str) -> Response {
 
 fn icon_button_colored(ui: &mut Ui, what: Icon, tooltip: &str, color: Color32) -> Response {
     let t = theme();
-    let side = 24.0;
-    let (rect, response) = ui.allocate_exact_size(Vec2::splat(side), Sense::click());
+    let (rect, response) = ui.allocate_exact_size(Vec2::splat(Layout::ICON_BUTTON), Sense::click());
     if response.hovered() {
         ui.painter().rect_filled(rect, Radius::XS, t.hover);
     }
@@ -766,13 +765,19 @@ fn field(
 /// Two-state switch. Both states stay visible, so "Pretty | Raw" cannot be
 /// misread as a label for the current mode. Returns the state clicked.
 pub fn switch(ui: &mut Ui, id: &str, options: [&str; 2], right: bool) -> Option<bool> {
+    segmented(ui, id, &options, right as usize).map(|i| i == 1)
+}
+
+/// One-of-few choice with every option visible (auth type, Pretty/Raw).
+/// Returns the index clicked.
+pub fn segmented(ui: &mut Ui, id: &str, options: &[&str], selected: usize) -> Option<usize> {
     let t = theme();
     const HEIGHT: f32 = 22.0;
     let segments: Vec<(std::sync::Arc<egui::Galley>, f32, bool)> = options
         .iter()
         .enumerate()
         .map(|(i, text)| {
-            let active = (i == 1) == right;
+            let active = i == selected;
             let font = if active {
                 semibold(Text::MICRO)
             } else {
@@ -784,10 +789,10 @@ pub fn switch(ui: &mut Ui, id: &str, options: [&str; 2], right: bool) -> Option<
             (galley, width, active)
         })
         .collect();
-    let width: f32 = segments.iter().map(|(_, w, _)| w).sum::<f32>() + 6.0;
+    let width: f32 = segments.iter().map(|(_, w, _)| w + 2.0).sum::<f32>() + 2.0;
 
     // one allocation, painted left-to-right: a nested `ui.horizontal` would
-    // inherit a right-to-left parent and swap the two labels
+    // inherit a right-to-left parent and reverse the segments
     let (rect, _) = ui.allocate_exact_size(Vec2::new(width, HEIGHT), Sense::hover());
     ui.painter().rect_filled(rect, Radius::SM, t.input);
 
@@ -810,6 +815,7 @@ pub fn switch(ui: &mut Ui, id: &str, options: [&str; 2], right: bool) -> Option<
         } else if response.hovered() {
             ui.painter().rect_filled(seg, Radius::XS, t.hover);
         }
+        focus_ring(ui, seg, &response);
         let color = if active { t.text } else { t.text_muted };
         ui.painter()
             .galley(seg.center() - galley.size() / 2.0, galley, color);
@@ -820,11 +826,34 @@ pub fn switch(ui: &mut Ui, id: &str, options: [&str; 2], right: bool) -> Option<
             .on_hover_cursor(egui::CursorIcon::PointingHand)
             .clicked()
         {
-            picked = Some(i == 1);
+            picked = Some(i);
         }
         x += seg_width + 2.0;
     }
     picked
+}
+
+/// Tabs on the left, controls on the right. Below `min_width` the right side
+/// drops to its own line: `Sides` never wraps, so at the minimum window size
+/// the controls were painted on top of the tabs.
+pub fn tab_row(
+    ui: &mut Ui,
+    min_width: f32,
+    left: impl FnOnce(&mut Ui),
+    right: impl FnOnce(&mut Ui),
+) {
+    if ui.available_width() >= min_width {
+        egui::containers::Sides::new()
+            .shrink_left()
+            .show(ui, left, right);
+    } else {
+        ui.horizontal(left);
+        ui.allocate_ui_with_layout(
+            Vec2::new(ui.available_width(), Layout::CONTROL_HEIGHT),
+            egui::Layout::right_to_left(Align::Center),
+            right,
+        );
+    }
 }
 
 /// Styled dropdown attached to `trigger`.

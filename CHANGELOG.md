@@ -7,7 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **A request opens on the tab that holds its content.** Requests with a body (and POST, PUT, PATCH) open on Body, everything else on Params. The tab used to be a single global value, so every GET opened on an empty Body editor, or on whatever the previous request had shown.
+- **The auth type is picked inside the Auth tab**, from a None / Basic / Bearer / Custom row. The Auth tab no longer renames itself to "Bearer" or "Basic", and the unlabeled ⏷ next to the tabs is gone.
+- **Undefined variables are named under the URL bar** ("`{{USER_ID}}` isn't defined in .env.dev"). Before, the URL bar turned amber and said why only on hover, and Send went ahead with the literal text.
+- Find in response, Copy as cURL and History have visible buttons: a search icon in the response toolbar, a `⋯` menu at the end of the URL bar, and a clock icon in the response panel in every state. Each was reachable only by shortcut or the palette.
+- The body type reads **Body type: none / JSON / Form / Text**.
+
 ### Fixed
+- At the minimum window size the request and response tab rows were drawn on top of their own controls ("Auth" over the body type; "Cookies" under copy and Pretty/Raw). The controls now move to a second line when there's no room.
 - **Pasting a cURL into a saved request overwrote the file.** The cURL replaced the method, headers and body, autosave wrote that over the request file within seconds, and `⌘ Z` only brought back the URL. A cURL pasted over a saved request now opens as a new unsaved request. Typing `curl …` by hand no longer re-parses on every keystroke.
 - **Clearing History or Recent was one click with no way back.** The trash icon sits next to the panel's close button. Clearing is still instant, and the notification now has an **Undo** link.
 - **`⌘ E` could land on production silently.** Environments cycle in file-name order, so dev → prod was one press away, and the only sign was a chip in the corner. Every switch is now announced, and with a `prod` environment selected, the Send button turns red and reads **Send · prod**.

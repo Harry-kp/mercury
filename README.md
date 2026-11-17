@@ -137,7 +137,7 @@ api/
 
 Grep it, diff it, commit it, edit it in VS Code — Mercury picks up outside edits live. `headers` and `body` are optional, and headers are written in sorted order so git diffs stay clean.
 
-**Environments** are `.env` files in the workspace root. Pick one from the top-right menu or cycle with `⌘ E`; `{{NAME}}` is substituted into the URL, headers and body when you send. Undefined variables are flagged on the tab that holds them. Production shows in red, staging in amber, and every switch is announced; with prod selected, Send reads **Send · prod**.
+**Environments** are `.env` files in the workspace root. Pick one from the top-right menu or cycle with `⌘ E`; `{{NAME}}` is substituted into the URL, headers and body when you send. Undefined variables are named under the URL bar and flagged on the tab that holds them. Production shows in red, staging in amber, and every switch is announced; with prod selected, Send reads **Send · prod**.
 
 ```bash
 # .env.dev

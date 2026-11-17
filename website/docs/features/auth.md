@@ -10,7 +10,7 @@ The **Auth** tab edits the request's `Authorization` header. Mercury doesn't sto
 
 ## Choosing a type
 
-Click the ⏷ next to the tab names and pick a type. The tab label shows the current type.
+Open the **Auth** tab and pick a type from the row at the top: **None**, **Basic**, **Bearer** or **Custom**.
 
 | Type | Header it writes |
 |------|------------------|
@@ -53,7 +53,7 @@ For Basic, the username and password are base64-encoded **before** variable subs
 
 ## Troubleshooting 401s
 
-- Check that the environment that defines the token is selected. An undefined `{{API_TOKEN}}` is sent literally, and the URL bar shows an amber border.
+- Check that the environment that defines the token is selected. An undefined `{{API_TOKEN}}` is sent literally; the line under the URL bar names it.
 - Check the Headers tab for a disabled or duplicate `Authorization` line.
 - Check whether the token has expired.
 

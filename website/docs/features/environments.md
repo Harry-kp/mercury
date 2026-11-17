@@ -64,7 +64,7 @@ Authorization: Bearer {{API_TOKEN}}
 
 ## Seeing what's missing
 
-- If any variable in the request is undefined, the URL bar gets an **amber border**. Hover over it to see the list.
+- If any variable in the request is undefined, a line under the URL bar names it and the environment it's missing from, and the tab that holds it shows a warning.
 - The **Params** and **Headers** tabs show a chip for each variable they use: ✓ if it's defined, ✗ if it isn't.
 
 ## Editing environment files

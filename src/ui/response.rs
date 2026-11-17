@@ -34,16 +34,31 @@ impl MercuryApp {
                 ui.set_max_width(ui.available_width());
                 if self.show_history {
                     self.history_list(ui);
-                } else if self.in_flight.is_some() {
-                    self.waiting_state(ui);
-                } else if self.response.is_some() {
+                } else if self.response.is_some() && self.in_flight.is_none() {
                     self.response_view(ui);
-                } else if let Some(error) = self.request_error.clone() {
-                    self.failed_state(ui, &error);
                 } else {
-                    self.ready_state(ui);
+                    // History has a door in every state, not only once a
+                    // response has arrived
+                    ui.allocate_ui_with_layout(
+                        Vec2::new(ui.available_width(), Layout::ICON_BUTTON),
+                        egui::Layout::right_to_left(Align::Center),
+                        |ui| self.history_button(ui),
+                    );
+                    if self.in_flight.is_some() {
+                        self.waiting_state(ui);
+                    } else if let Some(error) = self.request_error.clone() {
+                        self.failed_state(ui, &error);
+                    } else {
+                        self.ready_state(ui);
+                    }
                 }
             });
+    }
+
+    fn history_button(&mut self, ui: &mut Ui) {
+        if icon_button(ui, Icon::Clock, "History (⌘ H)").clicked() {
+            self.show_history = true;
+        }
     }
 
     fn waiting_state(&self, ui: &mut Ui) {
@@ -213,9 +228,7 @@ impl MercuryApp {
             ui.label(faint(format_bytes(response.size_bytes)));
             ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
                 ui.spacing_mut().item_spacing.x = Space::XXS;
-                if icon_button(ui, Icon::Clock, "History (⌘ H)").clicked() {
-                    self.show_history = true;
-                }
+                self.history_button(ui);
                 if (can_save || is_text)
                     && icon_button(ui, Icon::Download, "Save response to a file").clicked()
                 {
@@ -227,8 +240,12 @@ impl MercuryApp {
 
         let mut picked = None;
         let mut raw = None;
-        egui::containers::Sides::new().shrink_left().show(
+        let mut find = false;
+        let current = self.response_tab;
+        let raw_view = self.raw_view;
+        widgets::tab_row(
             ui,
+            Layout::RESPONSE_TABS_MIN,
             |ui| {
                 ui.spacing_mut().item_spacing.x = Space::XS;
                 for (tab, text, count) in [
@@ -236,23 +253,27 @@ impl MercuryApp {
                     (ResponseTab::Headers, "Headers", response.headers.len()),
                     (ResponseTab::Cookies, "Cookies", response.cookies.len()),
                 ] {
-                    if tab_button(ui, text, count, self.response_tab == tab, false) {
+                    if tab_button(ui, text, count, current == tab, false) {
                         picked = Some(tab);
                     }
                 }
             },
             |ui| {
-                if self.response_tab != ResponseTab::Body {
+                if current != ResponseTab::Body {
                     return;
                 }
                 if !is_text {
                     // copying "[Binary data: 8 bytes]" helps nobody
                     return;
                 }
-                raw = widgets::switch(ui, "raw", ["Pretty", "Raw"], self.raw_view);
+                raw = widgets::switch(ui, "raw", ["Pretty", "Raw"], raw_view);
                 copy_button(ui, "response_body", || response.body.clone());
+                find = icon_button(ui, Icon::Search, "Find in response (⌘ F)").clicked();
             },
         );
+        if find {
+            self.run(super::app::Action::FindInResponse);
+        }
         if let Some(tab) = picked {
             self.response_tab = tab;
         }
