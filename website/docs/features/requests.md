@@ -107,9 +107,9 @@ How the body is displayed depends on its type:
 | XML (including SVG) | Indented and highlighted |
 | HTML | Highlighted, wrapped to the panel |
 | Other text | Plain text, wrapped to the panel |
-| Empty or `204` | "The server returned an empty response" |
-| Image, PDF, audio, video, archive, octet-stream | Content type and size, with **Save** |
-| `Content-Length` over 10 MB | **Response Too Large** (not downloaded) |
+| Empty or `204` | "The server returned an empty body" |
+| Image, PDF, audio, video, archive, octet-stream | Content type and size, with **Save** (reopened from history, there are no bytes to save: send again) |
+| Over 10 MB | **Response too large** (not downloaded; without a `Content-Length`, reading stops at the limit) |
 
 If the server doesn't send a `Content-Type`, Mercury guesses the type from the body. Text bodies have a copy button. See [Performance](/docs/performance) for why the size limits exist.
 
