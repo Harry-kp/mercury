@@ -289,6 +289,7 @@ impl Layout {
     pub const MENU_WIDTH: f32 = 200.0;
     /// Square hit area of an icon button.
     pub const ICON_BUTTON: f32 = 24.0;
+    pub const CHIP_HEIGHT: f32 = 26.0;
     /// Below these widths a tab row's right-hand controls drop to a second
     /// line instead of being drawn on top of the tabs.
     pub const REQUEST_TABS_MIN: f32 = 470.0;

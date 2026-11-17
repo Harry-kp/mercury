@@ -186,7 +186,7 @@ TOKEN="dev token"
 | `⌘ D` | Toggle light / dark |
 | `⌘ F` | Find in response |
 | `⌘ ⇧ C` | Copy as cURL |
-| `⌘ ⇧ F` | Focus mode |
+| `⌘ ⇧ F` | Hide / show sidebar |
 | `?` | Keyboard shortcuts |
 | `Esc` | Close find / cancel request / close dialog / clear filter |
 

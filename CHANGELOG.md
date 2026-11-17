@@ -14,6 +14,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - History entries record the **environment** they were sent with, and the response panel shows it, as **from .env.dev** once you've switched. Reopening an entry opens the **file** it was sent from instead of a detached copy. Older history entries load as before.
 
 ### Changed
+- With nothing typed, `⌘ K` lists the requests you opened most recently, then the commands. It used to list every request first, which pushed the commands out of reach in a real workspace.
+- **Focus mode** is now called **Hide / show sidebar**, which is what it does (same `⌘ ⇧ F`).
+- The history panel says it keeps entries for 7 days, headers and tokens included. Only the docs said so.
+- `⌘ S` with no folder open no longer shows a success-ticked notification beside the folder picker; the picker's title says what it's for.
 - The sidebar's **Recent** section is now **Unsaved**: it lists requests you sent without saving. Every send is in History.
 - New and saved requests land in the folder of the request you opened last (or the folder you clicked last, whichever came later). It used to be whichever folder was clicked last, however long ago.
 - The status bar shows whether the open request is saved instead of repeating the workspace path (now the folder chip's tooltip). `⌘ S` on a saved file no longer adds a "Saved" notification, and `⌘ N` no longer announces "New request".
@@ -25,6 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The body type reads **Body type: none / JSON / Form / Text**.
 
 ### Fixed
+- **Every text field reached screen readers as just "text field"**, and header and param checkboxes had no name. Fields are named ("URL", "Filter requests", "Request body", "Key 2"…) and checkboxes say which row they enable. The folder and environment chips draw a focus ring, and Tab now walks the top bar in the order it is drawn.
 - At the minimum window size the request and response tab rows were drawn on top of their own controls ("Auth" over the body type; "Cookies" under copy and Pretty/Raw). The controls now move to a second line when there's no room.
 - **Pasting a cURL into a saved request overwrote the file.** The cURL replaced the method, headers and body, autosave wrote that over the request file within seconds, and `⌘ Z` only brought back the URL. A cURL pasted over a saved request now opens as a new unsaved request. Typing `curl …` by hand no longer re-parses on every keystroke.
 - **Clearing History or Recent was one click with no way back.** The trash icon sits next to the panel's close button. Clearing is still instant, and the notification now has an **Undo** link.

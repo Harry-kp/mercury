@@ -85,6 +85,7 @@ impl MercuryApp {
                             .font(mono(Text::BODY))
                             .id(egui::Id::new("url_bar")),
                     );
+                    widgets::name(&url, "URL");
                     if url.changed() {
                         self.on_url_edited(&before);
                     }
@@ -384,7 +385,7 @@ impl MercuryApp {
         };
         widgets::code_frame().show(ui, |ui| {
             let rows = widgets::fill_rows(ui, Space::XXL, 12);
-            ui.add(
+            let body = ui.add(
                 egui::TextEdit::multiline(&mut self.body_text)
                     .hint_text(muted(if json {
                         r#"{ "key": "value" }"#
@@ -396,6 +397,7 @@ impl MercuryApp {
                     .frame(false)
                     .layouter(&mut layouter),
             );
+            widgets::name(&body, "Request body");
         });
         if kind == BodyKind::None && !self.body_text.trim().is_empty() {
             // the type picker lives in the corner of the tab row, which is
@@ -508,7 +510,7 @@ impl MercuryApp {
                 } else {
                     widgets::field_frame()
                         .show(ui, |ui| {
-                            ui.add(
+                            let field = ui.add(
                                 egui::TextEdit::multiline(text)
                                     .id(egui::Id::new(id))
                                     .hint_text(muted(hint))
@@ -516,8 +518,9 @@ impl MercuryApp {
                                     .desired_rows(rows)
                                     .frame(false)
                                     .font(mono(Text::SMALL)),
-                            )
-                            .changed()
+                            );
+                            widgets::name(&field, label);
+                            field.changed()
                         })
                         .inner
                 };

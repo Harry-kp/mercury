@@ -93,7 +93,7 @@ Hover a folder and click `⋯` (or right-click it) for **New Request**, **New Fo
 
 ## 6. Find anything with `⌘ K`
 
-`⌘ K` opens the command palette. Type part of a request name (or its folder) to open it without hunting through the tree, or type what you want to do — "curl", "format", "import" — to run it. `↑`/`↓` move, `⏎` opens, `Esc` closes.
+`⌘ K` opens the command palette. Type part of a request name (or its folder) to open it without hunting through the tree, or type what you want to do — "curl", "format", "import" — to run it. With nothing typed it lists the requests you opened most recently, then every command. `↑`/`↓` move, `⏎` opens, `Esc` closes.
 
 ## Picking up where you left off
 

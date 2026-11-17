@@ -4,7 +4,7 @@
 
 use super::icon::Icon;
 use super::palette::Palette;
-use super::theme::{self, theme, Layout, Radius, Space, Text};
+use super::theme::{self, theme, Layout, Space};
 use super::widgets::{
     self, confirm_modal, faint, icon_button, input_modal, key_combo, label, menu_item, modal,
     muted, popup_menu, strong, ModalAction,
@@ -17,7 +17,7 @@ use crate::model::{
     RequestFile, ThemeMode,
 };
 use crate::{curl, storage, vars, workspace};
-use eframe::egui::{self, Align, Key, Margin, Sense, Stroke, Vec2};
+use eframe::egui::{self, Align, Key, Margin, Stroke, Vec2};
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -118,7 +118,13 @@ pub const SHORTCUTS: &[Shortcut] = &[
         Action::FindInResponse,
     ),
     cmd("⌘ ⇧ C", "Copy as cURL", Key::C, true, Action::CopyCurl),
-    cmd("⌘ ⇧ F", "Focus mode", Key::F, true, Action::FocusMode),
+    cmd(
+        "⌘ ⇧ F",
+        "Hide / show sidebar",
+        Key::F,
+        true,
+        Action::FocusMode,
+    ),
     Shortcut {
         keys: "?",
         label: "Keyboard shortcuts",
@@ -232,6 +238,8 @@ pub struct MercuryApp {
     /// Where a new or saved request lands: the folder of the request opened
     /// last, or the folder clicked last, whichever came later.
     last_folder: Option<PathBuf>,
+    /// Request files opened lately, newest first (the palette's empty query).
+    pub opened_recently: Vec<PathBuf>,
     pub search: String,
     /// Filtering needs the whole tree in memory; see `sidebar::load_subtree`.
     pub tree_fully_loaded: bool,
@@ -350,6 +358,7 @@ impl MercuryApp {
             response_env: None,
             opened_content: None,
             last_folder: None,
+            opened_recently: Vec::new(),
             request_counter: 0,
             history: Vec::new(),
             history_loaded: false,
@@ -460,7 +469,16 @@ impl MercuryApp {
     }
 
     pub fn pick_folder(&self) {
-        self.spawn(|| rfd::FileDialog::new().pick_folder().map(Event::OpenFolder));
+        self.pick_folder_titled("Open a folder of requests");
+    }
+
+    fn pick_folder_titled(&self, title: &'static str) {
+        self.spawn(move || {
+            rfd::FileDialog::new()
+                .set_title(title)
+                .pick_folder()
+                .map(Event::OpenFolder)
+        });
     }
 
     /// Open an imported collection and land the user inside it.
@@ -498,7 +516,7 @@ impl MercuryApp {
 
     pub fn open_workspace(&mut self, path: PathBuf, env: Option<&str>) {
         if !path.is_dir() {
-            self.notify(format!("Workspace not found: {}", path.display()), true);
+            self.notify(format!("Folder not found: {}", path.display()), true);
             return;
         }
         self.env_files = workspace::env_files(&path);
@@ -699,6 +717,9 @@ impl MercuryApp {
                 );
                 self.opened_content = self.saved_content.clone();
                 self.last_folder = path.parent().map(Path::to_path_buf);
+                self.opened_recently.retain(|p| p != path);
+                self.opened_recently.insert(0, path.to_path_buf());
+                self.opened_recently.truncate(5);
             }
             // the file name and the reason; the absolute path just wraps the
             // notification onto three lines
@@ -748,8 +769,9 @@ impl MercuryApp {
         } else if let Some(root) = self.target_folder() {
             self.open_dialog(Dialog::NewRequest(root, true), "");
         } else {
-            self.pick_folder();
-            self.notify("Open a folder first to save requests", false);
+            // the picker's own title says why it opened; a success-ticked
+            // toast beside it read as if something had been saved
+            self.pick_folder_titled("Choose a folder to save requests in");
         }
     }
 
@@ -1339,19 +1361,26 @@ impl MercuryApp {
                     self.workspace_menu(ui);
                     self.breadcrumb(ui);
 
-                    ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
-                        self.help_menu(ui);
-                        let (what, tip) = if theme::is_dark() {
-                            (Icon::Sun, "Switch to light (⌘ D)")
-                        } else {
-                            (Icon::Moon, "Switch to dark (⌘ D)")
-                        };
-                        if icon_button(ui, what, tip).clicked() {
-                            self.run(Action::ToggleTheme);
-                        }
-                        ui.add_space(Space::SM);
-                        self.env_menu(ui);
-                    });
+                    // The right-hand group is laid out left to right after a
+                    // spacer, not in a right-to-left layout: that reversed
+                    // the Tab order (… → theme → environment).
+                    let (env, _) = self.env_label();
+                    let right = widgets::chip_width(ui, &env)
+                        + Space::SM
+                        + Layout::ICON_BUTTON * 2.0
+                        + ui.spacing().item_spacing.x * 3.0;
+                    ui.add_space((ui.available_width() - right).max(0.0));
+                    self.env_menu(ui);
+                    ui.add_space(Space::SM);
+                    let (what, tip) = if theme::is_dark() {
+                        (Icon::Sun, "Switch to light (⌘ D)")
+                    } else {
+                        (Icon::Moon, "Switch to dark (⌘ D)")
+                    };
+                    if icon_button(ui, what, tip).clicked() {
+                        self.run(Action::ToggleTheme);
+                    }
+                    self.help_menu(ui);
                 });
             });
     }
@@ -1365,7 +1394,7 @@ impl MercuryApp {
         } else {
             "Open folder".to_string()
         };
-        let mut chip = chip(ui, Icon::Folder, &name, t.text, open);
+        let mut chip = widgets::chip(ui, Icon::Folder, &name, t.text, open);
         if let Some(path) = &self.workspace {
             // the full path used to sit in the status bar, truncated
             chip = chip.on_hover_text(path.display().to_string());
@@ -1386,7 +1415,7 @@ impl MercuryApp {
             }
             if open {
                 widgets::divider(ui);
-                if menu_item(ui, Some(Icon::Copy), "Copy workspace path", "") {
+                if menu_item(ui, Some(Icon::Copy), "Copy folder path", "") {
                     let path = self.workspace.clone().unwrap_or_default();
                     ui.ctx().copy_text(path.display().to_string());
                 }
@@ -1441,14 +1470,18 @@ impl MercuryApp {
         }
     }
 
-    fn env_menu(&mut self, ui: &mut egui::Ui) {
+    fn env_label(&self) -> (String, egui::Color32) {
         let t = theme();
-        let (name, color) = match (self.env_name(), &self.workspace) {
+        match (self.env_name(), &self.workspace) {
             (Some(name), _) => (name.to_string(), t.env(name)),
             (None, Some(_)) => ("No environment".to_string(), t.text_muted),
             (None, None) => ("No environment".to_string(), t.text_faint),
-        };
-        let chip = chip(ui, Icon::Layers, &name, color, self.workspace.is_some());
+        }
+    }
+
+    fn env_menu(&mut self, ui: &mut egui::Ui) {
+        let (name, color) = self.env_label();
+        let chip = widgets::chip(ui, Icon::Layers, &name, color, self.workspace.is_some());
         let mut picked = None;
         popup_menu(ui, &chip, Layout::MENU_WIDTH, |ui| {
             if menu_item(ui, None, "None", "") {
@@ -1480,7 +1513,7 @@ impl MercuryApp {
             if menu_item(ui, Some(Icon::Keyboard), "Keyboard shortcuts", "?") {
                 self.dialog = Some(Dialog::Shortcuts);
             }
-            if menu_item(ui, Some(Icon::PanelLeft), "Focus mode", "⌘ ⇧ F") {
+            if menu_item(ui, Some(Icon::PanelLeft), "Hide / show sidebar", "⌘ ⇧ F") {
                 self.run(Action::FocusMode);
             }
             widgets::divider(ui);
@@ -1530,7 +1563,7 @@ impl MercuryApp {
                         key_combo(ui, "⌘ K");
                         if self.focus_mode {
                             ui.add_space(Space::MD);
-                            ui.label(faint("Focus mode · ⌘ ⇧ F to exit").color(t.accent));
+                            ui.label(faint("Sidebar hidden · ⌘ ⇧ F to show").color(t.accent));
                         }
                     });
                 });
@@ -1566,45 +1599,6 @@ impl MercuryApp {
             self.toast = None;
         }
     }
-}
-
-/// A small pill of icon + text used for the workspace and environment menus.
-fn chip(
-    ui: &mut egui::Ui,
-    what: Icon,
-    text: &str,
-    color: egui::Color32,
-    enabled: bool,
-) -> egui::Response {
-    let t = theme();
-    let text = widgets::truncate(text, CRUMB_CHARS);
-    let galley =
-        ui.fonts_mut(|f| f.layout_no_wrap(text.clone(), theme::semibold(Text::SMALL), color));
-    let size = Vec2::new(galley.size().x + 14.0 + Space::SM + Space::MD * 2.0, 26.0);
-    let (rect, response) = ui.allocate_exact_size(size, Sense::click());
-    if response.hovered() {
-        ui.painter().rect_filled(rect, Radius::SM, t.hover);
-    }
-    let icon_rect = egui::Rect::from_center_size(
-        egui::pos2(rect.left() + Space::MD + 7.0, rect.center().y),
-        Vec2::splat(14.0),
-    );
-    super::icon::paint(
-        ui.painter(),
-        what,
-        icon_rect,
-        if enabled { color } else { t.text_faint },
-    );
-    ui.painter().galley(
-        egui::pos2(
-            icon_rect.right() + Space::SM,
-            rect.center().y - galley.size().y / 2.0,
-        ),
-        galley,
-        color,
-    );
-    response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, enabled, &text));
-    response.on_hover_cursor(egui::CursorIcon::PointingHand)
 }
 
 /// "1 request" / "3 requests" — "1 requests" reads like a bug.

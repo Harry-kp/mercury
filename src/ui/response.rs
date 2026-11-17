@@ -151,6 +151,14 @@ impl MercuryApp {
             "Search history",
             0.0,
         );
+        ui.add_space(Space::SM);
+        // only the docs used to say this
+        ui.add(
+            egui::Label::new(faint(
+                "Kept for 7 days on this computer, headers and tokens included.",
+            ))
+            .wrap(),
+        );
         ui.add_space(Space::LG);
 
         if self.history.is_empty() {
@@ -452,12 +460,13 @@ impl MercuryApp {
                                 code(ui, xml_job(text, width));
                             }
                             _ => {
-                                ui.add(
+                                let body = ui.add(
                                     egui::TextEdit::multiline(&mut text.as_str())
                                         .desired_width(width)
                                         .frame(false)
                                         .font(mono(Text::SMALL)),
                                 );
+                                widgets::name(&body, "Response body");
                             }
                         }
                     });
@@ -526,6 +535,7 @@ fn find_bar(
                 .id(egui::Id::new("response_find"))
                 .font(mono(Text::SMALL)),
         );
+        widgets::name(&field, "Find in response");
         // a single-line TextEdit reports Enter by losing focus
         if field.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
             at += 1;

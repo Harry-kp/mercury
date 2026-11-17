@@ -95,9 +95,30 @@ fn open_send_edit_and_save() {
         (accesskit::Role::ComboBox, "GET"),  // the method picker
         (accesskit::Role::Link, "Commands"), // a status-bar link
         (accesskit::Role::Button, "Send"),
+        // text fields are named, not just "text field"
+        (accesskit::Role::TextInput, "URL"),
+        (accesskit::Role::TextInput, "Filter requests"),
     ] {
         harness.get_by_role_and_label(role, name);
     }
+
+    // Tab walks the top bar in the order it is drawn. Its right-hand group
+    // was laid out right to left, so Tab went folder → … → theme → env.
+    for expected in ["ws", ".env.dev", "Switch to light (⌘ D)", "More"] {
+        harness.key_press(Key::Tab);
+        harness.run_steps(1);
+        assert!(
+            harness
+                .query_by(|n| n.is_focused() && n.label().as_deref() == Some(expected))
+                .is_some(),
+            "Tab should reach {expected} next"
+        );
+    }
+    harness.ctx.memory_mut(|m| {
+        if let Some(id) = m.focused() {
+            m.surrender_focus(id);
+        }
+    });
 
     // Panel widths must not drift. A widget that ends up wider than the space
     // it was handed feeds straight back into the panel width, and the panel
@@ -146,6 +167,16 @@ fn open_send_edit_and_save() {
     );
     // History has a door before anything has been sent
     harness.get_by_role_and_label(accesskit::Role::Button, "History (⌘ H)");
+    // header rows' enable checkboxes say which header they enable
+    harness
+        .get_by_role_and_label(accesskit::Role::Button, "Headers")
+        .click();
+    harness.run_steps(2);
+    harness.get_by_role_and_label(accesskit::Role::CheckBox, "Enable Authorization");
+    harness
+        .get_by_role_and_label(accesskit::Role::Button, "Params")
+        .click();
+    harness.run_steps(2);
 
     // ⌘Enter sends; env vars are substituted into URL and headers
     harness.key_press_modifiers(Modifiers::COMMAND, Key::Enter);

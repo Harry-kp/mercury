@@ -37,7 +37,7 @@ Bodies of images and binary responses aren't stored in history. A restored binar
 | Age | Entries older than 7 days are dropped |
 | Clearing | The trash icon in the history header clears it at once. The notification that follows has an **Undo** link for a few seconds |
 
-History stores full request headers and response bodies, including any tokens they contain, in plain text. Clear it if that's a concern.
+History stores full request headers and response bodies, including any tokens they contain, in plain text. The history panel says so under its search box. Clear it if that's a concern.
 
 History is read from disk only when you first open the list or send a request, and only a summary of each entry is kept in memory. See [Performance](/docs/performance#lazy-loading).
 
