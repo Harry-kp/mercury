@@ -408,6 +408,16 @@ fn open_send_edit_and_save() {
             .is_some(),
         "the undefined variable must be named on screen"
     );
+    // and Send names it instead of failing as something else
+    // ("invalid international domain name", or %7B%7BNOPE%7D%7D at the server)
+    harness.state_mut().send_request();
+    harness.run_steps(2);
+    let err = harness.state().request_error.clone().unwrap_or_default();
+    assert!(err.contains("{{NOPE}} isn't defined in .env.dev"), "{err}");
+    let url = harness.state().url.replace("/{{NOPE}}", "");
+    harness.state_mut().url = url;
+    // (the warning line goes with it, so the tabs move up: draw that first)
+    harness.run_steps(2);
 
     // The auth type is picked inside the Auth tab, from visible options.
     harness
@@ -808,6 +818,62 @@ fn open_send_edit_and_save() {
     assert_eq!(harness.state().substituted_body(), "a=@@/etc/passwd");
     harness.state_mut().env_vars.remove("CT");
     harness.state_mut().env_vars.remove("V");
+
+    // Environments, start to finish, as a user does it: a request whose URL
+    // needs variables isn't sent while they're undefined (it used to fail as
+    // "invalid international domain name"); New environment… creates one
+    // seeded with the request's variables and opens the editor; Save makes
+    // the next send work.
+    let envs = dir.path().join("envs-ws");
+    std::fs::create_dir_all(&envs).unwrap();
+    let get = envs.join("get.json");
+    std::fs::write(&get, r#"{"method":"GET","url":"{{host}}/users/{{id}}"}"#).unwrap();
+    let mut app = MercuryApp::new(&egui::Context::default());
+    app.open_workspace(envs.clone(), None);
+    app.open_file(&get);
+    let mut e = Harness::builder()
+        .with_size(egui::vec2(1200.0, 800.0))
+        .build_state(|ctx, app: &mut MercuryApp| app.frame(ctx), app);
+    e.run_steps(2);
+    e.state_mut().send_request();
+    e.run_steps(2);
+    let err = e.state().request_error.clone().unwrap_or_default();
+    assert!(err.contains("{{host}} and {{id}} aren't defined"), "{err}");
+    assert!(e.state().in_flight.is_none(), "not sent");
+    e.query_all_by_label_contains("No environment")
+        .next()
+        .unwrap()
+        .click();
+    e.run_steps(2);
+    e.query_all_by_label("New environment…")
+        .next()
+        .unwrap()
+        .click();
+    e.run_steps(2);
+    e.event(egui::Event::Text("local".into()));
+    e.run_steps(1);
+    e.key_press(Key::Enter);
+    e.run_steps(2);
+    assert_eq!(e.state().env_name(), Some(".env.local"));
+    assert_eq!(
+        e.state().env_edit_text,
+        "host=\nid=\n",
+        "seeded with the request's variables"
+    );
+    assert!(
+        e.state().request_error.is_none(),
+        "the old error went with the old environment"
+    );
+    e.state_mut().env_edit_text = format!("host={server}\nid=7");
+    e.run_steps(1);
+    e.query_all_by_label("Save").last().unwrap().click();
+    e.run_steps(2);
+    assert!(e.state().dialog.is_none());
+    e.state_mut().send_request();
+    wait_for_response(&mut e);
+    let echoed = e.state().response.as_ref().unwrap().body.clone();
+    assert!(echoed.contains("GET /users/7 "), "{echoed}");
+    drop(e);
 
     // a header switched off in the editor survives save + reopen (the file
     // used to keep only enabled headers, so unchecking one deleted it)

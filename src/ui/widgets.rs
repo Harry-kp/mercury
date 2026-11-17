@@ -1098,8 +1098,10 @@ pub fn response_time(ui: &mut Ui, duration_ms: u128) {
     ui.label(muted(text).color(color)).on_hover_text(tip);
 }
 
-pub fn variable_chip(ui: &mut Ui, name: &str, defined: bool) {
+/// `value`: what the selected environment gives it, if anything.
+pub fn variable_chip(ui: &mut Ui, name: &str, value: Option<&str>) {
     let t = theme();
+    let defined = value.is_some();
     let color = if defined { t.success } else { t.error };
     badge(
         ui,
@@ -1108,10 +1110,11 @@ pub fn variable_chip(ui: &mut Ui, name: &str, defined: bool) {
         t.tint(color, 0.12),
         mono(Text::MICRO),
     )
-    .on_hover_text(if defined {
-        "Defined in the selected environment"
-    } else {
-        "Not defined in the selected environment"
+    .on_hover_text(match value {
+        // the value is what you came to check
+        Some("") => "(empty in the selected environment)".to_string(),
+        Some(v) => truncate(v, 200),
+        None => "Not defined in the selected environment".to_string(),
     });
 }
 
@@ -1541,7 +1544,7 @@ pub fn modal(
     }
 }
 
-fn modal_buttons(ui: &mut Ui, confirm: &str, danger: bool) -> ModalAction {
+pub fn modal_buttons(ui: &mut Ui, confirm: &str, danger: bool) -> ModalAction {
     let mut action = ModalAction::Open;
     ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
         let kind = if danger {

@@ -8,11 +8,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Create and edit environments in Mercury.** The environment menu has **New environment…** (seeded with the variables the open request uses) and **Edit .env.dev…**, a table of variables with **Bulk edit** for the raw file. Before, the menu only said to add `.env` files to the workspace folder.
+- Hover the URL bar to see it with every variable filled in, and a variable chip to see its value.
 - **Postman environment exports** import as `.env` files, the same way as collections.
 - **Insomnia 10+ exports (v5 YAML)** import. They used to fail with "missing field `resources`".
 - Postman's `{{$guid}}`, `{{$timestamp}}`, `{{$isoTimestamp}}` and `{{$randomInt}}` work, with a fresh value at every send.
 
 ### Fixed
+- **Security:** an environment file that is a symlink is ignored. A folder from someone else could link `.env.dev` to `~/.aws/credentials`, whose `key = value` lines read as variables a request could send, or to a file that editing the environment would overwrite.
+- **A URL with an undefined variable is no longer sent.** It failed as something else ("invalid international domain name"), or reached the server as `%7B%7BUSER_ID%7D%7D`. The response panel now says which variable is missing and where to define it, and the message goes away when you switch environment.
 - **Importing into an open workspace could overwrite your files.** A request or `.env` with the same name as one in the collection was replaced without a word. Imports now go into their own folder in the workspace, and a taken name gets a suffix instead.
 - **Insomnia imports didn't work.** Every request failed with "invalid international domain name", because `{{ _.base_url }}` wasn't converted to `{{base_url}}`. Sub-environments (Dev, Production) now include the base environment's values, as in Insomnia; Bearer, Basic and API key auth, form and multipart bodies, and nested folders now come across; and requests outside any folder stay at the top instead of `imported/`.
 - Postman requests with **path variables** (`/users/:userId`) were sent with the `:userId` in them; they're filled in now. A raw JSON (or XML, text) body gets the `Content-Type` Postman would have sent.

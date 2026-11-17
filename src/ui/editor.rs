@@ -116,6 +116,13 @@ impl MercuryApp {
                             .id(egui::Id::new("url_bar")),
                     );
                     widgets::name(&url, "URL");
+                    // what {{variables}} resolve to, without sending
+                    let resolved = vars::substitute(&self.url, &self.env_vars);
+                    let url = if resolved != self.url && !url.has_focus() {
+                        url.on_hover_text(resolved)
+                    } else {
+                        url
+                    };
                     if url.changed() {
                         self.on_url_edited(&before);
                     }
@@ -538,7 +545,7 @@ impl MercuryApp {
         ui.horizontal_wrapped(|ui| {
             ui.spacing_mut().item_spacing = Vec2::splat(Space::SM);
             for name in &names {
-                widgets::variable_chip(ui, name, self.env_vars.contains_key(name));
+                widgets::variable_chip(ui, name, self.env_vars.get(name).map(String::as_str));
             }
         });
     }
