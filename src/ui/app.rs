@@ -251,6 +251,9 @@ pub struct MercuryApp {
     pub env_files: Vec<String>,
     pub selected_env: Option<usize>,
     pub env_vars: HashMap<String, String>,
+    /// The variables whose value comes from the shared `.env`, not the
+    /// selected `.env.<name>` (to say where a value is from).
+    pub env_shared: HashSet<String>,
     watcher: Option<workspace::Watcher>,
 
     // Request form. `headers_text` is the source of truth for headers AND auth.
@@ -351,6 +354,7 @@ impl MercuryApp {
             env_files: Vec::new(),
             selected_env: None,
             env_vars: HashMap::new(),
+            env_shared: HashSet::new(),
             watcher: None,
             current_file: None,
             method: HttpMethod::GET,
@@ -646,6 +650,7 @@ impl MercuryApp {
         self.env_files.clear();
         self.selected_env = None;
         self.env_vars.clear();
+        self.env_shared.clear();
         self.current_file = None;
         self.saved_content = None;
     }
@@ -689,6 +694,7 @@ impl MercuryApp {
 
     fn load_env(&mut self) {
         self.env_vars.clear();
+        self.env_shared.clear();
         let (Some(root), Some(name)) = (self.workspace.clone(), self.env_name()) else {
             return;
         };
@@ -698,11 +704,20 @@ impl MercuryApp {
         if name != ".env" && self.env_files.iter().any(|f| f == ".env") {
             files.insert(0, ".env".into());
         }
+        let layered = files.len() == 2;
         for file in files {
             match workspace::env_path(&root, &file)
                 .and_then(|p| fs::read_to_string(p).map_err(|e| e.to_string()))
             {
-                Ok(content) => self.env_vars.extend(vars::parse_env(&content)),
+                Ok(content) => {
+                    let vars = vars::parse_env(&content);
+                    if layered && file == ".env" {
+                        self.env_shared.extend(vars.keys().cloned());
+                    } else {
+                        self.env_shared.retain(|k| !vars.contains_key(k));
+                    }
+                    self.env_vars.extend(vars);
+                }
                 Err(e) => self.notify(format!("Could not read {file}: {e}"), true),
             }
         }
@@ -1303,9 +1318,15 @@ impl MercuryApp {
         };
         let selected = self.env_name().map(str::to_string);
         self.env_files = workspace::env_files(root);
-        self.selected_env =
-            selected.and_then(|name| self.env_files.iter().position(|f| *f == name));
+        self.selected_env = selected
+            .as_ref()
+            .and_then(|name| self.env_files.iter().position(|f| f == name));
         self.load_env();
+        // deleted or renamed outside: say so, or requests quietly go out
+        // without its variables
+        if let (Some(name), None) = (selected, self.selected_env) {
+            self.notify(format!("{name} is gone: no environment selected"), true);
+        }
     }
 
     // -----------------------------------------------------------------------
@@ -1552,7 +1573,8 @@ impl MercuryApp {
         match workspace::env_path(root, file)
             .and_then(|p| fs::read_to_string(p).map_err(|e| e.to_string()))
         {
-            Ok(text) => self.env_edit_text = text,
+            // a BOM glued to the first key made a `# comment` an enabled row
+            Ok(text) => self.env_edit_text = text.trim_start_matches('\u{feff}').to_string(),
             Err(e) => return self.notify(e, true),
         }
         self.env_edit_bulk = false;
@@ -1845,12 +1867,21 @@ impl MercuryApp {
             if menu_item(ui, None, "No environment", "") {
                 picked = Some(None);
             }
-            for (i, env) in self.env_files.iter().enumerate() {
-                let check = (self.selected_env == Some(i)).then_some(Icon::Check);
-                if menu_item(ui, check, env, "") {
-                    picked = Some(Some(i));
-                }
-            }
+            // scrolls: two dozen files ran off the window, taking Edit and
+            // New environment… with them
+            let max_height = ui.ctx().content_rect().height() * 0.6;
+            egui::ScrollArea::vertical()
+                .max_height(max_height)
+                // or it opens at the height it last had and grows a frame at a time
+                .min_scrolled_height(max_height)
+                .show(ui, |ui| {
+                    for (i, env) in self.env_files.iter().enumerate() {
+                        let check = (self.selected_env == Some(i)).then_some(Icon::Check);
+                        if menu_item(ui, check, env, "") {
+                            picked = Some(Some(i));
+                        }
+                    }
+                });
             if self.workspace.is_some() {
                 widgets::divider(ui);
                 if let Some(name) = self.env_name().map(str::to_string) {

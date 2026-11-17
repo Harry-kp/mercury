@@ -695,7 +695,11 @@ pub fn copy_button(ui: &mut Ui, id: &str, text: impl FnOnce() -> String) {
 /// The Send button's label: "Send", or "Send · prod" when `target` names a
 /// production environment.
 pub fn send_label(target: Option<&str>) -> String {
-    target.map_or_else(|| "Send".to_string(), |t| format!("Send · {t}"))
+    // a long `.env.production-eu-west-1` squeezed the URL out of the bar
+    target.map_or_else(
+        || "Send".to_string(),
+        |t| format!("Send · {}", truncate(t, 12)),
+    )
 }
 
 /// Width [`button`] gives `text` with a leading icon, for laying out around it.
@@ -1648,6 +1652,15 @@ pub fn divider(ui: &mut Ui) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn send_label_keeps_a_long_environment_short() {
+        assert_eq!(send_label(Some("production")), "Send · production");
+        assert_eq!(
+            send_label(Some("production-eu-west-1")),
+            "Send · production-…"
+        );
+    }
 
     /// Find paints every match, then the current one over it; the second
     /// pass used to wipe the first pass's tint off the rest of the line.

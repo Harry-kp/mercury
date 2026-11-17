@@ -71,7 +71,7 @@ The Auth tab edits the `Authorization` header. See [Authentication](/docs/featur
 
 ## Variables
 
-`{{NAME}}` is replaced with a value from the selected environment in the URL, headers and body when you send the request or copy it as cURL. Unknown variables are named in a line under the URL bar ("`{{NAME}}` isn't defined in .env.dev") and, if you send anyway, go out as the literal text `{{NAME}}`. See [Environments](/docs/features/environments).
+`{{NAME}}` is replaced with a value from the selected environment in the URL, headers and body when you send the request or copy it as cURL. Unknown variables are named in a line under the URL bar ("`{{NAME}}` isn't defined in .env.dev") and, if you send anyway, go out as the literal text `{{NAME}}` in headers and the body (one in the URL stops the send). See [Environments](/docs/features/environments).
 
 ## Saving
 
