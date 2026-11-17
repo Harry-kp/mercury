@@ -24,7 +24,7 @@ impl MercuryApp {
             .frame(
                 egui::Frame::NONE
                     .fill(t.panel)
-                    .inner_margin(Margin::symmetric(Space::MD as i8, Space::LG as i8)),
+                    .inner_margin(Margin::same(Space::LG as i8)),
             )
             .show(ctx, |ui| {
                 // the panel's own resize separator draws the right-hand border
@@ -119,12 +119,13 @@ impl MercuryApp {
         let open = self.workspace.is_some();
         let mut new_folder = false;
         let mut new_request = false;
-        panel_header(ui, "Requests", |ui| {
-            if open {
+        // with no folder open, the empty state below is the whole section
+        if open {
+            panel_header(ui, "Requests", |ui| {
                 new_request = icon_button(ui, Icon::Plus, "New request (⌘ N)").clicked();
                 new_folder = icon_button(ui, Icon::Folder, "New folder").clicked();
-            }
-        });
+            });
+        }
         if new_folder {
             self.run(Action::NewFolder);
         }
@@ -143,30 +144,53 @@ impl MercuryApp {
         self.tree = tree;
     }
 
+    /// Text sits on the same left edge as the tree rows' contents.
     fn empty_sidebar(&mut self, ui: &mut Ui) {
         let t = theme();
-        ui.add_space(Space::MD);
+        let inset = egui::Frame::NONE.inner_margin(Margin::symmetric(Space::MD as i8, 0));
         if self.workspace.is_some() {
-            ui.label(muted("This folder has no requests yet."));
             ui.add_space(Space::SM);
-            ui.label(faint("Press ⌘S to save the request you're editing."));
+            inset.show(ui, |ui| {
+                ui.label(muted("This folder has no requests yet."));
+                ui.add_space(Space::XS);
+                ui.label(faint("Press ⌘S to save the request you're editing."));
+            });
             return;
         }
-        ui.label(muted(
-            "Requests are plain JSON files in a folder you choose.",
-        ));
-        ui.add_space(Space::LG);
-        if widgets::ghost_button(ui, "Open a folder").clicked() {
-            self.pick_folder();
-        }
         ui.add_space(Space::XL);
-        ui.label(faint("Coming from another client?"));
-        ui.add_space(Space::SM);
+        inset.show(ui, |ui| {
+            widgets::glyph(ui, Icon::Folder, 22.0, t.text_faint);
+            ui.add_space(Space::MD);
+            ui.label(strong("No folder open"));
+            ui.add_space(Space::XS);
+            ui.label(muted(
+                "Requests are plain JSON files in a folder you choose.",
+            ));
+            ui.add_space(Space::LG);
+            if widgets::button(
+                ui,
+                widgets::Button::Ghost,
+                "Open folder…",
+                Some(Icon::Folder),
+            )
+            .clicked()
+            {
+                self.pick_folder();
+            }
+        });
+        ui.add_space(Space::XXL);
+        // same rows as the tree, so they read as things to click
+        panel_header(ui, "Import", |_| {});
+        ui.add_space(Space::XS);
         for (text, action) in [
-            ("Import from Postman", Action::ImportPostman),
-            ("Import from Insomnia", Action::ImportInsomnia),
+            ("Postman collection", Action::ImportPostman),
+            ("Insomnia export", Action::ImportInsomnia),
         ] {
-            if widgets::link(ui, muted(text).color(t.accent)).clicked() {
+            let row = widgets::row(ui, text, text, false, |ui| {
+                widgets::glyph(ui, Icon::Package, 13.0, t.text_muted);
+                ui.label(label(text));
+            });
+            if row.clicked() {
                 self.run(action);
             }
         }
