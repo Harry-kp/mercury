@@ -213,13 +213,24 @@ pub fn host(url: &str) -> Option<String> {
 /// scheme-less URL one: http for loopback, https for anything else.
 pub fn with_scheme(url: &str) -> String {
     let url = url.trim();
-    if url.is_empty() || url.contains("://") {
+    // a scheme, not a `://` further on (`localhost:3000/go?to=https://x`)
+    let has_scheme = url.split_once("://").is_some_and(|(s, _)| {
+        !s.is_empty()
+            && s.chars()
+                .all(|c| c.is_ascii_alphanumeric() || "+-.".contains(c))
+    });
+    if url.is_empty() || has_scheme {
         return url.to_string();
     }
     if let Some(rest) = url.strip_prefix("//") {
         return format!("https://{rest}");
     }
-    let host = url.split(['/', ':', '?', '#']).next().unwrap_or(url);
+    // an IPv6 host is bracketed and full of colons
+    let host = if url.starts_with('[') {
+        url.split_inclusive(']').next().unwrap_or(url)
+    } else {
+        url.split(['/', ':', '?', '#']).next().unwrap_or(url)
+    };
     let loopback = matches!(host, "localhost" | "127.0.0.1" | "0.0.0.0" | "[::1]")
         || host.ends_with(".localhost");
     let scheme = if loopback { "http" } else { "https" };
@@ -743,6 +754,12 @@ mod tests {
             "http://localhost:3000/api"
         );
         assert_eq!(with_scheme("127.0.0.1:8080"), "http://127.0.0.1:8080");
+        assert_eq!(with_scheme("[::1]:8080/x"), "http://[::1]:8080/x");
+        // a URL inside the query isn't this URL's scheme
+        assert_eq!(
+            with_scheme("localhost:3000/go?to=https://a.b"),
+            "http://localhost:3000/go?to=https://a.b"
+        );
         assert_eq!(
             with_scheme("api.example.com/v1"),
             "https://api.example.com/v1"

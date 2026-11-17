@@ -171,7 +171,11 @@ pub fn header_value<'a>(headers_text: &'a str, name: &str) -> Option<&'a str> {
 }
 
 /// Set, replace or (with `None`) remove `name`, keeping its position.
+/// A line break can't be part of a header value: one typed or pasted into
+/// the multi-line Token field split the token into a stray line.
 pub fn set_header(headers_text: &str, name: &str, value: Option<&str>) -> String {
+    let value = value.map(|v| v.replace(['\r', '\n'], ""));
+    let value = value.as_deref();
     let mut lines: Vec<String> = Vec::new();
     let mut replaced = false;
     for line in headers_text.lines() {
@@ -321,10 +325,10 @@ pub fn build_form(rows: &[KeyValue]) -> String {
 }
 
 pub fn parse_query_params(url: &str) -> Vec<KeyValue> {
+    let url = url.split('#').next().unwrap_or(url);
     let Some((_, query)) = url.split_once('?') else {
         return Vec::new();
     };
-    let query = query.split('#').next().unwrap_or("");
     query
         .split('&')
         .filter(|s| !s.is_empty())
@@ -335,8 +339,10 @@ pub fn parse_query_params(url: &str) -> Vec<KeyValue> {
         .collect()
 }
 
-/// Replace the URL's query string with the enabled params.
+/// Replace the URL's query string with the enabled params. A `#fragment`
+/// stays last: a query appended after it is never sent.
 pub fn build_url(url: &str, params: &[KeyValue]) -> String {
+    let (url, fragment) = url.split_at(url.find('#').unwrap_or(url.len()));
     let base = url.split('?').next().unwrap_or(url);
     let query: Vec<String> = params
         .iter()
@@ -350,9 +356,9 @@ pub fn build_url(url: &str, params: &[KeyValue]) -> String {
         })
         .collect();
     if query.is_empty() {
-        base.to_string()
+        format!("{base}{fragment}")
     } else {
-        format!("{base}?{}", query.join("&"))
+        format!("{base}?{}{fragment}", query.join("&"))
     }
 }
 
@@ -498,6 +504,11 @@ mod tests {
             set_auth("# Authorization: a", Some("b")),
             "# Authorization: a\nAuthorization: b"
         );
+        // a line break typed into the Token field can't split the header
+        assert_eq!(
+            set_auth("A: 1", Some("Bearer ab\ncd\r\n")),
+            "A: 1\nAuthorization: Bearer abcd"
+        );
         // custom with empty value keeps the header (so the mode sticks)
         assert_eq!(auth_mode(&set_auth("", Some(""))), AuthMode::Custom);
     }
@@ -517,6 +528,7 @@ mod tests {
         );
         assert!(parse_query_params("https://api.com/users").is_empty());
         assert!(parse_query_params("https://api.com?").is_empty());
+        assert!(parse_query_params("https://a.com/#/route?x=1").is_empty());
         assert_eq!(
             parse_query_params("x?flag&debug")[0],
             KeyValue::new("flag", "")
@@ -543,6 +555,16 @@ mod tests {
             "https://a.com/s?q=hello%20world"
         );
         assert_eq!(build_url("https://a.com", &[]), "https://a.com");
+        // the fragment stays last: a query after it is never sent
+        let q = [KeyValue::new("q", "1")];
+        assert_eq!(
+            build_url("https://a.com/p#top", &q),
+            "https://a.com/p?q=1#top"
+        );
+        assert_eq!(
+            build_url("https://a.com/p?x=1#top", &[]),
+            "https://a.com/p#top"
+        );
         let p = [KeyValue::new("token", "{{API_KEY}}")];
         assert_eq!(
             build_url("https://a.com", &p),
