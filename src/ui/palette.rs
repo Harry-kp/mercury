@@ -10,6 +10,7 @@ use super::theme::{theme, Layout, Space};
 use super::widgets::{self, faint, label, method_text, muted};
 use crate::model::{CollectionItem, HttpMethod};
 use eframe::egui::{self, Align, Key, Vec2};
+use std::cell::OnceCell;
 use std::path::{Path, PathBuf};
 
 /// Commands offered by the palette, in the order they appear. Actions that
@@ -42,15 +43,25 @@ const COMMANDS: &[(Action, &str, Icon)] = &[
     (Action::Docs, "Documentation", Icon::ExternalLink),
 ];
 
+const ROW_H: f32 = 34.0;
+/// Space between rows.
+const GAP: f32 = 1.0;
+
 /// Open-palette state. Requests are snapshotted when it opens so typing never
 /// touches the filesystem.
 pub struct Palette {
     pub query: String,
     selected: usize,
-    /// The query the selection belongs to; a new query starts at the top.
-    selected_for: String,
+    /// The query `rows` and the selection belong to; a new query rebuilds
+    /// them and starts at the top. Scoring 2,000 requests every frame cost
+    /// four times the rest of the frame.
+    rows_for: Option<String>,
+    rows: Vec<Row>,
     /// Keyboard navigation has to drag the list with it.
     scroll_to_selection: bool,
+    /// The list's scroll offset and height last frame, to keep the selection
+    /// in view: only the rows on screen exist, so it can't scroll to itself.
+    view: (f32, f32),
     requests: Vec<RequestEntry>,
     /// Recently opened request files, newest first: what an empty query
     /// shows before the commands. Listing every request first pushed the
@@ -62,7 +73,6 @@ struct RequestEntry {
     name: String,
     folder: String,
     path: PathBuf,
-    method: Option<HttpMethod>,
 }
 
 /// One rendered line. Owned so the search results can outlive the borrow of
@@ -72,7 +82,9 @@ struct Row {
     title: String,
     subtitle: String,
     keys: &'static str,
-    method: Option<HttpMethod>,
+    /// Read from the file the first time the row is drawn: opening the
+    /// palette used to read every request in the workspace (~50 ms at 2,000).
+    method: OnceCell<Option<HttpMethod>>,
     open: Open,
 }
 
@@ -86,7 +98,7 @@ impl Palette {
         let requests = items
             .into_iter()
             .filter_map(|item| match item {
-                CollectionItem::Request { name, path, method } => {
+                CollectionItem::Request { name, path, .. } => {
                     let folder = root
                         .and_then(|r| path.strip_prefix(r).ok())
                         .and_then(Path::parent)
@@ -96,7 +108,6 @@ impl Palette {
                         name: name.strip_suffix(".json").unwrap_or(&name).to_string(),
                         folder,
                         path,
-                        method,
                     })
                 }
                 CollectionItem::Folder { .. } => None,
@@ -105,8 +116,10 @@ impl Palette {
         Self {
             query: String::new(),
             selected: 0,
-            selected_for: String::new(),
+            rows_for: None,
+            rows: Vec::new(),
             scroll_to_selection: false,
+            view: (0.0, 0.0),
             requests,
             recent: recent.to_vec(),
         }
@@ -129,7 +142,7 @@ impl Palette {
                         .iter()
                         .find(|s| s.action == *action)
                         .map_or("", |s| s.keys),
-                    method: None,
+                    method: OnceCell::from(None),
                     open: Open::Command(*action),
                 },
             ));
@@ -165,7 +178,7 @@ fn request_row(request: &RequestEntry) -> Row {
         title: request.name.clone(),
         subtitle: request.folder.clone(),
         keys: "",
-        method: request.method,
+        method: OnceCell::new(),
         open: Open::Request(request.path.clone()),
     }
 }
@@ -232,13 +245,13 @@ impl MercuryApp {
         let Some(palette) = &mut self.palette else {
             return;
         };
-        let rows = palette.rows();
-        let count = rows.len();
-        if palette.selected >= count || palette.selected_for != palette.query {
+        if palette.rows_for.as_ref() != Some(&palette.query) {
+            palette.rows = palette.rows();
+            palette.rows_for = Some(palette.query.clone());
             palette.selected = 0;
-            palette.selected_for = palette.query.clone();
             palette.scroll_to_selection = true;
         }
+        let count = palette.rows.len();
         if count > 0 && (up || down) {
             palette.selected = if down {
                 (palette.selected + 1) % count
@@ -251,7 +264,19 @@ impl MercuryApp {
         let selected = palette.selected;
         let scroll_to = std::mem::take(&mut palette.scroll_to_selection);
         let mut chosen = (enter && count > 0).then_some(selected);
-        let query = &mut palette.query;
+        // the least scrolling that brings the selection into view
+        let (offset, height) = palette.view;
+        let top = selected as f32 * (ROW_H + GAP);
+        let jump = if !scroll_to {
+            None
+        } else if top < offset {
+            Some(top)
+        } else if top + ROW_H > offset + height {
+            Some(top + ROW_H - height)
+        } else {
+            None
+        };
+        let (query, rows, view) = (&mut palette.query, &palette.rows, &mut palette.view);
 
         let modal = egui::Modal::new(egui::Id::new("command_palette"))
             .area(
@@ -277,18 +302,24 @@ impl MercuryApp {
                     ui.vertical_centered(|ui| ui.label(muted("No matches")));
                     ui.add_space(Space::XL);
                 } else {
-                    egui::ScrollArea::vertical()
-                        .max_height(340.0)
-                        .auto_shrink([false, true])
-                        .show(ui, |ui| {
-                            ui.spacing_mut().item_spacing.y = 1.0;
-                            for (i, row) in rows.iter().enumerate() {
-                                let active = i == selected;
-                                if palette_row(ui, i, active, scroll_to && active, row) {
+                    ui.scope(|ui| {
+                        // show_rows spaces rows by this ui's item spacing
+                        ui.spacing_mut().item_spacing.y = GAP;
+                        let mut area = egui::ScrollArea::vertical()
+                            .max_height(340.0)
+                            .auto_shrink([false, true]);
+                        if let Some(y) = jump {
+                            area = area.vertical_scroll_offset(y);
+                        }
+                        let out = area.show_rows(ui, ROW_H, count, |ui, visible| {
+                            for i in visible {
+                                if palette_row(ui, i, i == selected, &rows[i]) {
                                     chosen = Some(i);
                                 }
                             }
                         });
+                        *view = (out.state.offset.y, out.inner_rect.height());
+                    });
                 }
 
                 ui.add_space(Space::MD);
@@ -312,8 +343,10 @@ impl MercuryApp {
         let Some(index) = chosen else {
             return;
         };
-        self.palette = None;
-        match rows.into_iter().nth(index).map(|row| row.open) {
+        let Some(palette) = self.palette.take() else {
+            return;
+        };
+        match palette.rows.into_iter().nth(index).map(|row| row.open) {
             Some(Open::Command(action)) => self.run(action),
             Some(Open::Request(path)) => self.open_file(&path),
             None => {}
@@ -321,9 +354,13 @@ impl MercuryApp {
     }
 }
 
-fn palette_row(ui: &mut egui::Ui, index: usize, active: bool, scroll_to: bool, row: &Row) -> bool {
+fn palette_row(ui: &mut egui::Ui, index: usize, active: bool, row: &Row) -> bool {
     let t = theme();
-    let response = widgets::row_sized(ui, ("palette", index), &row.title, active, 34.0, |ui| {
+    let method = *row.method.get_or_init(|| match &row.open {
+        Open::Request(path) => crate::workspace::request_method(path),
+        Open::Command(_) => None,
+    });
+    let response = widgets::row_sized(ui, ("palette", index), &row.title, active, ROW_H, |ui| {
         ui.spacing_mut().item_spacing.x = Space::MD;
         widgets::glyph(
             ui,
@@ -336,16 +373,13 @@ fn palette_row(ui: &mut egui::Ui, index: usize, active: bool, scroll_to: bool, r
             ui.label(faint(&row.subtitle));
         }
         ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
-            if let Some(method) = row.method {
+            if let Some(method) = method {
                 ui.label(method_text(method));
             } else if !row.keys.is_empty() {
                 widgets::key_combo(ui, row.keys);
             }
         });
     });
-    if scroll_to {
-        response.scroll_to_me(None);
-    }
     response.clicked()
 }
 

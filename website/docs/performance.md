@@ -29,4 +29,5 @@ Images and binary content (PDF, audio, video, archives, `application/octet-strea
 ## Lazy loading
 
 - **Folders.** At startup Mercury reads only the workspace root. It reads a subfolder the first time you expand it.
+- **Command palette.** `⌘ K` lists request names without opening the files, and reads a request's method only when its row scrolls into view. Only the rows on screen are drawn, so it opens and filters at the same speed in a workspace of 2,000 requests as in one of 20.
 - **History.** History isn't read at startup. It is loaded the first time you open the history list or send a request, and only a summary of each entry is kept in memory (method, URL, status, duration). The full request and response are read from disk when you click an entry.

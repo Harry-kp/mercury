@@ -709,6 +709,35 @@ fn open_send_edit_and_save() {
     );
     drop(big);
 
+    // ⌘K draws only the rows on screen, so arrowing to one that isn't drawn
+    // must scroll the list to it (scroll_to_me can't: the row doesn't exist).
+    let mut app = MercuryApp::new(&egui::Context::default());
+    let items = (0..300)
+        .map(|i| crate::model::CollectionItem::Request {
+            name: format!("req-{i:03}.json"),
+            path: ws.join(format!("req-{i:03}.json")),
+            method: None,
+        })
+        .collect();
+    app.palette = Some(super::palette::Palette::new(items, Some(&ws), &[]));
+    let mut many = Harness::builder()
+        .with_size(egui::vec2(1200.0, 800.0))
+        .build_state(|ctx, app: &mut MercuryApp| app.frame(ctx), app);
+    many.event(egui::Event::Text("req-".into())); // every request, no command
+    many.run_steps(3);
+    assert!(many.query_all_by_label("req-000").next().is_some());
+    assert!(
+        many.query_all_by_label("req-299").next().is_none(),
+        "only visible rows drawn"
+    );
+    many.key_press(Key::ArrowUp); // wraps to the last row
+    many.run_steps(3);
+    assert!(
+        many.query_all_by_label("req-299").next().is_some(),
+        "the selection scrolls into view"
+    );
+    drop(many);
+
     // quitting and relaunching reopens the request that was open, instead of
     // orphaning it into an "Untitled" unsaved request
     harness.state_mut().open_file(&file);
