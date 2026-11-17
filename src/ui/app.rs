@@ -296,6 +296,9 @@ pub struct MercuryApp {
     /// The file that was open when it left. If the user navigates to another
     /// request meanwhile, the response belongs to neither of them on screen.
     sent_file: Option<PathBuf>,
+    /// The form was replaced by another unsaved request since it left: no
+    /// file to tell them apart, but the response belongs to neither.
+    sent_replaced: bool,
     /// The environment it left with, recorded in history.
     sent_env: Option<String>,
     /// The environment the response on screen came from.
@@ -382,6 +385,7 @@ impl MercuryApp {
             in_flight: None,
             sent: None,
             sent_file: None,
+            sent_replaced: false,
             sent_env: None,
             response_env: None,
             opened_content: None,
@@ -464,7 +468,9 @@ impl MercuryApp {
     fn undo(&mut self, undo: Undo) {
         match undo {
             Undo::History(entries, mut shown) => {
-                storage::restore_history(entries);
+                if let Err(e) = storage::restore_history(entries) {
+                    self.notify(e, true);
+                }
                 // the list is the truth for the UI; the disk catches up
                 shown.append(&mut self.history);
                 let excess = shown.len().saturating_sub(storage::MAX_HISTORY);
@@ -478,7 +484,7 @@ impl MercuryApp {
                 let excess = old.len().saturating_sub(storage::MAX_RECENT);
                 old.drain(..excess);
                 self.recent = old;
-                storage::save_recent(&self.recent);
+                self.save_recent();
             }
         }
     }
@@ -813,6 +819,8 @@ impl MercuryApp {
         } else {
             Tab::Params
         };
+        // a file reloaded in place is still the request that was sent
+        self.sent_replaced |= file.is_none();
         self.current_file = file;
         self.file_extra.clear();
         self.saved_content = self.current_file.as_ref().map(|_| self.file_content());
@@ -1003,6 +1011,7 @@ impl MercuryApp {
         self.in_flight = Some(id);
         self.sent = Some(self.form_request());
         self.sent_file = self.current_file.clone();
+        self.sent_replaced = false;
         self.sent_env = self.env_name().map(str::to_string);
         let trusted = http::host(&request.url).is_some_and(|h| self.trusted_hosts.contains(&h));
         let client = if trusted {
@@ -1028,22 +1037,11 @@ impl MercuryApp {
         match result {
             Ok(response) => {
                 let request = self.record_history(response.clone(), None);
-
-                if self.current_file.is_none() && !self.recent.iter().any(|r| r.request == request)
-                {
-                    self.recent.push(RecentRequest {
-                        request,
-                        timestamp: storage::now(),
-                    });
-                    // the file is capped; the sidebar has to match it
-                    let excess = self.recent.len().saturating_sub(storage::MAX_RECENT);
-                    self.recent.drain(..excess);
-                    storage::save_recent(&self.recent);
-                }
+                let here = self.sent_on_screen();
                 let summary = widgets::status_label(response.status, &response.status_text);
                 // a green tick next to "404 Not Found" reads as success
                 let failed = response.status >= 400;
-                if self.sent_file.take() == self.current_file {
+                if here {
                     self.response = Some(std::sync::Arc::new(response));
                     self.response_env = self.sent_env.take();
                     self.request_error = None;
@@ -1062,12 +1060,26 @@ impl MercuryApp {
                     // the wrong request
                     self.notify(format!("{summary} — in History (⌘ H)"), failed);
                 }
+                // sent without a file, whatever is open now; sent again, it
+                // moves to the top. After the toasts above: a failed save
+                // must not be hidden by them.
+                if self.sent_file.take().is_none() {
+                    self.recent.retain(|r| r.request != request);
+                    self.recent.push(RecentRequest {
+                        request,
+                        timestamp: storage::now(),
+                    });
+                    // the file is capped; the sidebar has to match it
+                    let excess = self.recent.len().saturating_sub(storage::MAX_RECENT);
+                    self.recent.drain(..excess);
+                    self.save_recent();
+                }
             }
             Err(e) => {
                 // a failed send is in history too: it's the attempt you most
                 // want to look at again
                 self.record_history(http::HttpResponse::failed(), Some(e.clone()));
-                if self.sent_file.take() == self.current_file {
+                if self.sent_on_screen() {
                     self.response = None;
                     // the response panel shows the full error with a Retry
                     // button, so a toast repeating it is just noise
@@ -1079,8 +1091,14 @@ impl MercuryApp {
                 }
             }
         }
+        self.sent_file = None;
         self.formatted_body = None;
         self.body_rows = None;
+    }
+
+    /// The request on screen is still the one in flight.
+    fn sent_on_screen(&self) -> bool {
+        self.sent_file == self.current_file && !self.sent_replaced
     }
 
     /// Add the send that just finished to history; returns what was sent.
@@ -1114,8 +1132,9 @@ impl MercuryApp {
         // off the UI thread: it rewrites the whole history file
         storage::queue_history(entry);
         self.spawn(|| {
-            storage::flush_history();
-            None
+            storage::flush_history()
+                .err()
+                .map(|e| Event::Toast(e, true))
         });
         request
     }
@@ -1160,17 +1179,29 @@ impl MercuryApp {
     }
 
     pub fn clear_history(&mut self) {
-        let shown = std::mem::take(&mut self.history);
-        let entries = storage::take_history();
-        let what = plural(shown.len(), "history entry", "history entries");
-        self.notify_undo(format!("Cleared {what}"), Undo::History(entries, shown));
+        match storage::take_history() {
+            Ok(entries) => {
+                let shown = std::mem::take(&mut self.history);
+                let what = plural(shown.len(), "history entry", "history entries");
+                self.notify_undo(format!("Cleared {what}"), Undo::History(entries, shown));
+            }
+            Err(e) => self.notify(e, true),
+        }
     }
 
     pub fn clear_recent(&mut self) {
         let old = std::mem::take(&mut self.recent);
-        storage::save_recent(&self.recent);
         let what = plural(old.len(), "unsaved request", "unsaved requests");
         self.notify_undo(format!("Cleared {what}"), Undo::Recent(old));
+        // after the toast above, so a failure replaces it
+        self.save_recent();
+    }
+
+    /// Write the Unsaved list; a failure is said, or it is gone on relaunch.
+    pub fn save_recent(&mut self) {
+        if let Err(e) = storage::save_recent(&self.recent) {
+            self.notify(e, true);
+        }
     }
 
     /// The body as sent. A Multipart body is filled in field by field, so a
@@ -1456,15 +1487,21 @@ impl MercuryApp {
         match dialog {
             Dialog::NewRequest(parent, saving) => {
                 let path = workspace::create_request(&parent, name, &self.file_content())?;
-                // it's saved now, so it no longer belongs in Recent
-                let url = self.url.clone();
-                self.recent.retain(|r| r.request.url != url);
-                storage::save_recent(&self.recent);
+                // it's saved now, so it no longer belongs in Unsaved; a
+                // different method to the same URL is another request
+                let (method, url) = (self.method, self.url.clone());
+                self.recent
+                    .retain(|r| r.request.method != method || r.request.url != url);
                 self.expanded.insert(parent);
                 self.rebuild_tree();
                 self.open_file(&path);
                 // the name field took focus and is gone; the URL is next
                 self.focus("url_bar");
+                if let Err(e) = storage::save_recent(&self.recent) {
+                    // the request is saved: said, but the dialog is done
+                    self.dialog = None;
+                    return Err(e);
+                }
                 Ok(if saving { "Saved" } else { "Request created" })
             }
             Dialog::NewFolder(parent) => {
@@ -2192,7 +2229,8 @@ impl eframe::App for MercuryApp {
 
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
         self.autosave();
-        storage::save_state(&AppState {
+        // nowhere left to show it: the window is closing
+        if let Err(e) = storage::save_state(&AppState {
             workspace_path: self
                 .workspace
                 .as_ref()
@@ -2208,7 +2246,9 @@ impl eframe::App for MercuryApp {
                 .current_file
                 .as_ref()
                 .map(|p| p.to_string_lossy().into_owned()),
-        });
+        }) {
+            eprintln!("{e}");
+        }
     }
 }
 

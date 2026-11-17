@@ -57,6 +57,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - After **Create** in the New request dialog, or **New request** from ⌘K, the URL bar didn't get the focus, so typing went nowhere.
 - ⌘K with the palette open did nothing; it closes it now.
 - The keyboard shortcuts dialog ran off the window at the minimum window height, hiding its title and Close button; the list scrolls.
+- **App data is written safely.** `history.json`, `recent.json` and `state.json` are written to a temporary file and then renamed into place, so a full disk or a crash mid-write no longer wipes the whole history. Two Mercury windows sending at once no longer lose each other's history entries.
+- If `~/.mercury` (or `$MERCURY_HOME`) can't be written, Mercury says so in a notification instead of losing history and unsaved requests silently on the next launch. Sends still work, and history stays in the list until you quit.
+- A response to an unsaved request that arrived after you switched to another unsaved request (`⌘ N`, an **Unsaved** row, a history entry) was shown under that one. It now goes to history, with a notification.
+- A saved request sent just before switching to an unsaved one landed in **Unsaved**, and an unsaved request sent just before opening a file didn't.
+- Sending an **Unsaved** request again moves it to the top of the list instead of leaving it where it was.
+- Saving an unsaved request removed every **Unsaved** entry with the same URL, including other methods (`POST /users` took `GET /users` with it).
+- A history search that matches nothing says so, instead of an empty panel.
 
 ### Changed
 - **History keeps response bodies up to 1 MB.** It rewrote up to 50 × 10 MB on every send; a bigger body is still shown in full when it arrives.

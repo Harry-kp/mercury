@@ -42,35 +42,41 @@ fn load_from<T: DeserializeOwned>(dir: &Path, name: &str) -> Option<T> {
     serde_json::from_str(&content).ok()
 }
 
-fn save<T: Serialize + ?Sized>(name: &str, value: &T) {
+fn save<T: Serialize + ?Sized>(name: &str, value: &T) -> Result<(), String> {
     save_to(&dir(), name, value)
 }
 
-fn save_to<T: Serialize + ?Sized>(dir: &Path, name: &str, value: &T) {
-    let result = fs::create_dir_all(dir).and_then(|_| {
-        let json = serde_json::to_string_pretty(value).expect("app data serializes");
-        fs::write(dir.join(name), json)
-    });
-    if let Err(e) = result {
-        eprintln!("Failed to save {name}: {e}");
-    }
+/// Written beside the file and then renamed over it: a full disk or a crash
+/// mid-write used to leave a cut-off file, which reads back as empty (the
+/// whole history gone).
+fn save_to<T: Serialize + ?Sized>(dir: &Path, name: &str, value: &T) -> Result<(), String> {
+    let json = serde_json::to_string_pretty(value).expect("app data serializes");
+    // per process: two Mercury windows saving at once must not share it
+    let tmp = dir.join(format!("{name}.{}.tmp", std::process::id()));
+    fs::create_dir_all(dir)
+        .and_then(|_| fs::write(&tmp, json))
+        .and_then(|_| fs::rename(&tmp, dir.join(name)))
+        .map_err(|e| {
+            let _ = fs::remove_file(&tmp);
+            format!("Could not save {name} in {}: {e}", dir.display())
+        })
 }
 
 pub fn load_state() -> Option<AppState> {
     load("state.json")
 }
 
-pub fn save_state(state: &AppState) {
-    save("state.json", state);
+pub fn save_state(state: &AppState) -> Result<(), String> {
+    save("state.json", state)
 }
 
 pub fn load_recent() -> Vec<RecentRequest> {
     load("recent.json").unwrap_or_default()
 }
 
-pub fn save_recent(requests: &[RecentRequest]) {
+pub fn save_recent(requests: &[RecentRequest]) -> Result<(), String> {
     let skip = requests.len().saturating_sub(MAX_RECENT);
-    save("recent.json", &requests[skip..]);
+    save("recent.json", &requests[skip..])
 }
 
 /// History file plus the entries sent but not yet written to it.
@@ -119,29 +125,59 @@ impl History {
         self.lock().push(entry);
     }
 
-    fn flush(&self, dir: &Path) {
+    fn flush(&self, dir: &Path) -> Result<(), String> {
         let mut pending = self.lock();
         if pending.is_empty() {
-            return;
+            return Ok(());
         }
+        let _other_windows = file_lock(dir);
         let mut entries: Vec<HistoryEntry> = load_from(dir, "history.json").unwrap_or_default();
-        entries.append(&mut pending);
-        save_to(dir, "history.json", &prune(entries, now()));
+        entries.extend(pending.iter().cloned());
+        let saved = save_to(dir, "history.json", &prune(entries, now()));
+        // unwritten, it stays queued: still in the list this session
+        *pending = match saved {
+            Ok(()) => Vec::new(),
+            Err(_) => prune(std::mem::take(&mut *pending), now()),
+        };
+        saved
     }
 
-    fn take(&self, dir: &Path) -> Vec<HistoryEntry> {
+    fn take(&self, dir: &Path) -> Result<Vec<HistoryEntry>, String> {
         let mut pending = self.lock();
+        let _other_windows = file_lock(dir);
         let mut entries: Vec<HistoryEntry> = load_from(dir, "history.json").unwrap_or_default();
+        match fs::remove_file(dir.join("history.json")) {
+            Err(e) if e.kind() != std::io::ErrorKind::NotFound => {
+                return Err(format!("Could not clear history: {e}"))
+            }
+            _ => {}
+        }
         entries.append(&mut pending);
-        let _ = fs::remove_file(dir.join("history.json"));
-        entries
+        Ok(entries)
     }
 
-    fn restore(&self, dir: &Path, mut old: Vec<HistoryEntry>) {
+    fn restore(&self, dir: &Path, mut old: Vec<HistoryEntry>) -> Result<(), String> {
         let _pending = self.lock();
+        let _other_windows = file_lock(dir);
         old.extend(load_from::<Vec<HistoryEntry>>(dir, "history.json").unwrap_or_default());
-        save_to(dir, "history.json", &prune(old, now()));
+        save_to(dir, "history.json", &prune(old, now()))
     }
+}
+
+/// Held across a read-modify-write of history.json, so two Mercury windows
+/// can't each write back a list without the other's send. Released on drop.
+/// Without it (no lock support) writes go ahead as before.
+fn file_lock(dir: &Path) -> Option<fs::File> {
+    fs::create_dir_all(dir).ok()?;
+    // never truncated: Windows refuses that while another window holds it
+    let file = fs::OpenOptions::new()
+        .create(true)
+        .write(true)
+        .truncate(false)
+        .open(dir.join("history.lock"))
+        .ok()?;
+    file.lock().ok()?;
+    Some(file)
 }
 
 /// Drop expired entries and keep the newest MAX_HISTORY (oldest first).
@@ -174,18 +210,18 @@ pub fn queue_history(entry: HistoryEntry) {
 }
 
 /// Write queued entries to disk. Slow with a big history: background only.
-pub fn flush_history() {
-    HISTORY.flush(&dir());
+pub fn flush_history() -> Result<(), String> {
+    HISTORY.flush(&dir())
 }
 
 /// Delete the history file, returning what it held so the clear can be undone.
-pub fn take_history() -> Vec<HistoryEntry> {
+pub fn take_history() -> Result<Vec<HistoryEntry>, String> {
     HISTORY.take(&dir())
 }
 
 /// Undo [`take_history`]: put `old` back in front of anything sent since.
-pub fn restore_history(old: Vec<HistoryEntry>) {
-    HISTORY.restore(&dir(), old);
+pub fn restore_history(old: Vec<HistoryEntry>) -> Result<(), String> {
+    HISTORY.restore(&dir(), old)
 }
 
 #[cfg(test)]
@@ -265,7 +301,7 @@ mod tests {
         assert!(h.entry(dir.path(), t).is_some());
         assert_eq!(h.all(dir.path()).len(), 1);
         assert!(!dir.path().join("history.json").exists(), "not written yet");
-        h.flush(dir.path());
+        h.flush(dir.path()).unwrap();
         assert!(
             h.entry(dir.path(), t).is_some(),
             "and still there after the write"
@@ -296,7 +332,7 @@ mod tests {
                 let (dir, h) = (dir.path().to_path_buf(), h.clone());
                 std::thread::spawn(move || {
                     h.queue(entry(now - i as f64));
-                    h.flush(&dir);
+                    h.flush(&dir).unwrap();
                 })
             })
             .collect();
@@ -305,6 +341,54 @@ mod tests {
         }
         let kept: Vec<HistoryEntry> = load_from(dir.path(), "history.json").unwrap();
         assert_eq!(kept.len(), 20);
+    }
+
+    /// Two Mercury windows share one history file: each one's write used to
+    /// be built from what it read before the other's landed, so one lost
+    /// the other's sends.
+    #[test]
+    fn two_processes_keep_each_others_entries() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let (a, b) = (
+            std::sync::Arc::new(history()),
+            std::sync::Arc::new(history()),
+        );
+        let now = now();
+        let threads: Vec<_> = (0..40)
+            .map(|i| {
+                let dir = dir.path().to_path_buf();
+                let h = if i % 2 == 0 { a.clone() } else { b.clone() };
+                std::thread::spawn(move || {
+                    h.queue(entry(now - i as f64));
+                    h.flush(&dir).unwrap();
+                })
+            })
+            .collect();
+        for t in threads {
+            t.join().unwrap();
+        }
+        let kept: Vec<HistoryEntry> = load_from(dir.path(), "history.json").unwrap();
+        assert_eq!(kept.len(), 40);
+    }
+
+    /// An app-data folder Mercury can't write must say so: history and the
+    /// unsaved list used to vanish on relaunch with only a line on stderr.
+    #[cfg(unix)]
+    #[test]
+    fn an_unwritable_home_is_an_error() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::TempDir::new().unwrap();
+        save_to(dir.path(), "recent.json", &[1]).unwrap();
+        fs::set_permissions(dir.path(), fs::Permissions::from_mode(0o555)).unwrap();
+        let result = save_to(dir.path(), "recent.json", &[2]);
+        fs::set_permissions(dir.path(), fs::Permissions::from_mode(0o755)).unwrap();
+        let error = result.unwrap_err();
+        assert!(error.starts_with("Could not save recent.json"), "{error}");
+        // and the old file is untouched, not half-written
+        assert_eq!(
+            load_from::<Vec<i32>>(dir.path(), "recent.json"),
+            Some(vec![1])
+        );
     }
 
     #[test]

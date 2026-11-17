@@ -1172,6 +1172,126 @@ fn open_send_edit_and_save() {
         .expanded
         .contains(&ws.join("billing/invoices")));
 
+    // An unsaved request's response belongs to it alone: replacing the form
+    // with another unsaved request (⌘N, an Unsaved row, a history entry)
+    // while it was in flight put the response under the new one.
+    let unsaved = |url: String| crate::model::Request {
+        url,
+        ..Default::default()
+    };
+    harness
+        .state_mut()
+        .load_request(unsaved(format!("{server}/first")), None);
+    harness.state_mut().send_request();
+    harness
+        .state_mut()
+        .load_request(unsaved(format!("{server}/second")), None);
+    wait_for_response(&mut harness);
+    assert!(
+        harness.state().response.is_none(),
+        "/first's response was shown under /second"
+    );
+    assert!(harness
+        .state()
+        .history
+        .last()
+        .unwrap()
+        .url
+        .ends_with("/first"));
+    // ...and it is still an unsaved request that was sent: Unsaved keeps it
+    let recent_urls = |h: &Harness<'_, MercuryApp>| -> Vec<String> {
+        h.state()
+            .recent
+            .iter()
+            .map(|r| r.request.url.clone())
+            .collect()
+    };
+    assert!(recent_urls(&harness).last().unwrap().ends_with("/first"));
+    // a saved request sent just before switching to an unsaved one is not
+    // "unsaved": it has a file
+    harness.state_mut().open_file(&file);
+    harness.state_mut().send_request();
+    harness
+        .state_mut()
+        .load_request(unsaved(format!("{server}/second")), None);
+    wait_for_response(&mut harness);
+    assert!(
+        !recent_urls(&harness)
+            .iter()
+            .any(|u| u.contains("{{BASE}}/users")),
+        "a saved request landed in Unsaved: {:?}",
+        recent_urls(&harness)
+    );
+
+    // sending an Unsaved request again moves it to the top of the list
+    for path in ["/a", "/b", "/a"] {
+        harness
+            .state_mut()
+            .load_request(unsaved(format!("{server}{path}")), None);
+        harness.state_mut().send_request();
+        wait_for_response(&mut harness);
+    }
+    let urls = recent_urls(&harness);
+    assert!(urls.last().unwrap().ends_with("/a"), "{urls:?}");
+    assert_eq!(urls.iter().filter(|u| u.ends_with("/a")).count(), 1);
+
+    // saving one takes it out of Unsaved, but not a different method that
+    // happens to share its URL
+    harness.state_mut().method = crate::model::HttpMethod::POST;
+    harness.state_mut().send_request();
+    wait_for_response(&mut harness);
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::S);
+    harness.run_steps(2);
+    harness.event(egui::Event::Text("post-a".into()));
+    harness.run_steps(1);
+    harness.key_press(Key::Enter);
+    harness.run_steps(2);
+    assert!(harness.state().current_file.is_some(), "saved");
+    let left: Vec<_> = harness
+        .state()
+        .recent
+        .iter()
+        .filter(|r| r.request.url.ends_with("/a"))
+        .map(|r| r.request.method)
+        .collect();
+    assert_eq!(left, vec![crate::model::HttpMethod::GET]);
+
+    // a history search that matches nothing says so, not a blank panel
+    harness.state_mut().show_history = true;
+    harness.state_mut().history_search = "zzz-nothing".into();
+    harness.run_steps(2);
+    harness.get_by_label("No requests match \"zzz-nothing\"");
+    harness.state_mut().history_search.clear();
+    harness.state_mut().show_history = false;
+
+    // an app-data folder Mercury can't write: the send still works, and the
+    // history that won't survive a relaunch is said, not printed to stderr
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let home = dir.path().join("home");
+        let mode = |m| std::fs::set_permissions(&home, std::fs::Permissions::from_mode(m));
+        mode(0o555).unwrap();
+        harness.state_mut().open_file(&file);
+        harness.state_mut().send_request();
+        wait_for_response(&mut harness);
+        for _ in 0..200 {
+            harness.step();
+            if harness.state().toast.is_some() {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        mode(0o755).unwrap();
+        assert!(harness.state().response.is_some(), "the send itself works");
+        let toast = harness.state().toast.as_ref().expect("an error toast");
+        assert!(
+            toast.is_error && toast.text.starts_with("Could not save history.json"),
+            "{}",
+            toast.text
+        );
+    }
+
     // quitting and relaunching reopens the request that was open, instead of
     // orphaning it into an "Untitled" unsaved request
     harness.state_mut().open_file(&file);
