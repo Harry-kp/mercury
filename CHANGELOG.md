@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.3] - 2026-11-17
+
+The first published build of the 0.4 line: everything below, and everything listed under 0.4.0.
+
 ### Added
 - **Create and edit environments in Mercury.** The environment menu has **New environment…** (seeded with the variables the open request uses) and **Edit .env.dev…**, a table of variables with **Bulk edit** for the raw file. Before, the menu only said to add `.env` files to the workspace folder.
 - Hover the URL bar to see it with every variable filled in, and a variable chip to see its value.
@@ -24,7 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.4.2] - 2026-11-17
 
-The first published build of the 0.4 line; the changes are listed under 0.4.0. 0.4.0 went out without installers (a CI output was dropped, so no build ran) and was withdrawn; 0.4.1's Apple Silicon build died on a GitHub runner image that has been retired. Same code, now built and published.
+Not published: GitHub had no Apple Silicon runner capacity for its macOS build. (0.4.0 went out without installers because a CI output was dropped, and was withdrawn; 0.4.1's Apple Silicon build hit a retired runner image.) Its changes are listed under 0.4.0 and ship in 0.4.3.
 
 ## [0.4.0] - 2026-11-17
 
