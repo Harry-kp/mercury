@@ -61,69 +61,74 @@ const fn rgb(hex: u32) -> Color32 {
     Color32::from_rgb((hex >> 16) as u8, (hex >> 8) as u8, hex as u8)
 }
 
+/// Graphite Violet: the app icon's graphite and violet. The work area
+/// (`bg`) sits a step above the chrome (`panel`: sidebar, top and status
+/// bars), and code sits a step below it.
 pub const DARK: Theme = Theme {
-    bg: rgb(0x0B0D10),
-    panel: rgb(0x121519),
-    card: rgb(0x171B21),
-    elevated: rgb(0x1C2128),
-    input: rgb(0x0E1114),
-    code: rgb(0x0E1114),
-    hover: Color32::from_rgba_premultiplied(14, 14, 14, 14),
-    selected: Color32::from_rgba_premultiplied(37, 31, 55, 56),
+    bg: rgb(0x111116),
+    panel: rgb(0x0B0B0E),
+    card: rgb(0x17171D),
+    elevated: rgb(0x1D1D25),
+    input: rgb(0x0D0D11),
+    code: rgb(0x0C0C10),
+    hover: Color32::from_rgba_premultiplied(16, 16, 20, 16),
+    selected: Color32::from_rgba_premultiplied(40, 32, 66, 64),
 
-    border: rgb(0x232830),
-    border_strong: rgb(0x323945),
+    border: rgb(0x22222B),
+    border_strong: rgb(0x33333F),
 
-    text: rgb(0xE4E8EE),
-    text_muted: rgb(0x98A1AE),
-    text_faint: rgb(0x7D8898),
+    text: rgb(0xECECF1),
+    text_muted: rgb(0xA1A1B3),
+    text_faint: rgb(0x838397),
 
     accent: rgb(0xA78BFA),
     accent_hover: rgb(0xC4B5FD),
-    on_accent: rgb(0x14101F),
+    on_accent: rgb(0x140F24),
 
-    success: rgb(0x34D399),
+    success: rgb(0x4ADE80),
     warning: rgb(0xFBBF24),
     error: rgb(0xFB7185),
 
     shadow: Color32::from_black_alpha(140),
     methods: [
         rgb(0x4ADE80), // GET
-        rgb(0x60A5FA), // POST
+        rgb(0x818CF8), // POST
         rgb(0xFBBF24), // PUT
         rgb(0x2DD4BF), // PATCH
         rgb(0xFB7185), // DELETE
-        rgb(0xA3B0C2), // HEAD
+        rgb(0xA1A1B3), // HEAD
         rgb(0xFB923C), // OPTIONS
         rgb(0xA3E635), // CONNECT
-        rgb(0x8C95A3), // TRACE
+        rgb(0x8E8EA3), // TRACE
     ],
     syntax: Syntax {
-        key: rgb(0x7DD3FC),
-        string: rgb(0x86EFAC),
-        number: rgb(0xFCD34D),
-        boolean: rgb(0xF0ABFC),
-        null: rgb(0x94A3B8),
-        punct: rgb(0x778397),
+        key: rgb(0xC4B5FD),
+        string: rgb(0xE2E8F0),
+        number: rgb(0xF9A8D4),
+        boolean: rgb(0x93C5FD),
+        null: rgb(0x8E8EA3),
+        punct: rgb(0x8A8A9E),
     },
 };
 
+/// The same direction in daylight: white work area, a faint graphite
+/// chrome, violet accent, and the dark palette's syntax hues deepened.
 pub const LIGHT: Theme = Theme {
-    bg: rgb(0xF6F7F9),
-    panel: rgb(0xFFFFFF),
+    bg: rgb(0xFFFFFF),
+    panel: rgb(0xF6F6F8),
     card: rgb(0xFFFFFF),
     elevated: rgb(0xFFFFFF),
-    input: rgb(0xF4F5F8),
-    code: rgb(0xF4F5F8),
-    hover: Color32::from_rgba_premultiplied(0, 0, 0, 12),
-    selected: Color32::from_rgba_premultiplied(15, 10, 31, 36),
+    input: rgb(0xF4F4F7),
+    code: rgb(0xF6F6F9),
+    hover: Color32::from_rgba_premultiplied(0, 0, 0, 10),
+    selected: Color32::from_rgba_premultiplied(18, 11, 38, 30),
 
-    border: rgb(0xE3E6EC),
-    border_strong: rgb(0xC7CDD6),
+    border: rgb(0xE6E6EC),
+    border_strong: rgb(0xCDCDD6),
 
-    text: rgb(0x101419),
-    text_muted: rgb(0x4A525C),
-    text_faint: rgb(0x6A717B),
+    text: rgb(0x111116),
+    text_muted: rgb(0x4B4B5A),
+    text_faint: rgb(0x696978),
 
     accent: rgb(0x6D45E0),
     accent_hover: rgb(0x5A34C9),
@@ -136,22 +141,22 @@ pub const LIGHT: Theme = Theme {
     shadow: Color32::from_black_alpha(30),
     methods: [
         rgb(0x15803D), // GET
-        rgb(0x1D4ED8), // POST
+        rgb(0x4338CA), // POST
         rgb(0xB45309), // PUT
         rgb(0x0F766E), // PATCH
         rgb(0xBE123C), // DELETE
-        rgb(0x475569), // HEAD
+        rgb(0x52525E), // HEAD
         rgb(0xC2410C), // OPTIONS
         rgb(0x4D7C0F), // CONNECT
-        rgb(0x62728A), // TRACE
+        rgb(0x62627A), // TRACE
     ],
     syntax: Syntax {
-        key: rgb(0x0E7490),
-        string: rgb(0x15803D),
-        number: rgb(0xB45309),
-        boolean: rgb(0xA21CAF),
-        null: rgb(0x627188),
-        punct: rgb(0x6B717B),
+        key: rgb(0x6D28D9),
+        string: rgb(0x27272F),
+        number: rgb(0xBE185D),
+        boolean: rgb(0x1D4ED8),
+        null: rgb(0x62627A),
+        punct: rgb(0x6A6A7A),
     },
 };
 

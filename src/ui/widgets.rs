@@ -372,12 +372,12 @@ pub fn card() -> egui::Frame {
         .inner_margin(Margin::same(Space::LG as i8))
 }
 
-/// Inset surface for code: request body, response body, auth preview.
+/// Inset surface for code: request body, response body, auth preview. A
+/// fill a step darker than the page, no outline.
 pub fn code_frame() -> egui::Frame {
     egui::Frame::NONE
         .fill(theme().code)
-        .corner_radius(Radius::SM)
-        .stroke(Stroke::new(1.0_f32, theme().border))
+        .corner_radius(Radius::MD)
         .inner_margin(Margin::same(Space::LG as i8))
 }
 
@@ -619,7 +619,15 @@ pub fn row_sized(
         (false, false) => Color32::TRANSPARENT,
     };
     ui.painter()
-        .set(background, egui::Shape::rect_filled(rect, Radius::XS, fill));
+        .set(background, egui::Shape::rect_filled(rect, Radius::SM, fill));
+    if selected {
+        // a short accent bar marks the open item
+        let bar = Rect::from_min_size(
+            egui::pos2(rect.left(), rect.center().y - 7.0),
+            Vec2::new(2.5, 14.0),
+        );
+        ui.painter().rect_filled(bar, Radius::XS, t.accent);
+    }
     focus_ring(ui, rect.shrink(1.0), &response);
     response
         .widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::Button, true, selected, name));
