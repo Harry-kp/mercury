@@ -196,7 +196,9 @@ pub struct Toast {
 }
 
 pub enum Undo {
-    History(Vec<HistoryEntry>),
+    /// What was on disk, and what the list showed (a send's background
+    /// append may not have reached the disk yet when the list was cleared).
+    History(Vec<HistoryEntry>, Vec<HistorySummary>),
     Recent(Vec<RecentRequest>),
 }
 
@@ -435,9 +437,13 @@ impl MercuryApp {
 
     fn undo(&mut self, undo: Undo) {
         match undo {
-            Undo::History(entries) => {
+            Undo::History(entries, mut shown) => {
                 storage::restore_history(entries);
-                self.history = storage::load_history_summaries();
+                // the list is the truth for the UI; the disk catches up
+                shown.append(&mut self.history);
+                let excess = shown.len().saturating_sub(storage::MAX_HISTORY);
+                shown.drain(..excess);
+                self.history = shown;
                 self.history_loaded = true;
             }
             Undo::Recent(mut old) => {
@@ -901,7 +907,11 @@ impl MercuryApp {
                 self.history.push(HistorySummary::from(&entry));
                 let excess = self.history.len().saturating_sub(storage::MAX_HISTORY);
                 self.history.drain(..excess);
-                storage::append_history(entry);
+                // off the UI thread: it rewrites the whole history file
+                self.spawn(move || {
+                    storage::append_history(entry);
+                    None
+                });
 
                 if self.current_file.is_none() && !self.recent.iter().any(|r| r.request == request)
                 {
@@ -985,11 +995,10 @@ impl MercuryApp {
     }
 
     pub fn clear_history(&mut self) {
-        let count = self.history.len();
-        self.history.clear();
+        let shown = std::mem::take(&mut self.history);
         let entries = storage::take_history();
-        let what = plural(count, "history entry", "history entries");
-        self.notify_undo(format!("Cleared {what}"), Undo::History(entries));
+        let what = plural(shown.len(), "history entry", "history entries");
+        self.notify_undo(format!("Cleared {what}"), Undo::History(entries, shown));
     }
 
     pub fn clear_recent(&mut self) {

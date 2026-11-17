@@ -6,7 +6,8 @@
 use crate::model::{AppState, HistoryEntry, HistorySummary, RecentRequest};
 use serde::{de::DeserializeOwned, Serialize};
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 
 pub const MAX_HISTORY: usize = 50;
 pub const MAX_RECENT: usize = 50;
@@ -30,13 +31,20 @@ fn dir() -> PathBuf {
 }
 
 fn load<T: DeserializeOwned>(name: &str) -> Option<T> {
-    let content = fs::read_to_string(dir().join(name)).ok()?;
+    load_from(&dir(), name)
+}
+
+fn load_from<T: DeserializeOwned>(dir: &Path, name: &str) -> Option<T> {
+    let content = fs::read_to_string(dir.join(name)).ok()?;
     serde_json::from_str(&content).ok()
 }
 
 fn save<T: Serialize + ?Sized>(name: &str, value: &T) {
-    let dir = dir();
-    let result = fs::create_dir_all(&dir).and_then(|_| {
+    save_to(&dir(), name, value)
+}
+
+fn save_to<T: Serialize + ?Sized>(dir: &Path, name: &str, value: &T) {
+    let result = fs::create_dir_all(dir).and_then(|_| {
         let json = serde_json::to_string_pretty(value).expect("app data serializes");
         fs::write(dir.join(name), json)
     });
@@ -66,6 +74,18 @@ fn load_history() -> Vec<HistoryEntry> {
     load("history.json").unwrap_or_default()
 }
 
+/// History is appended from a background thread (rewriting a file of up to
+/// 50 full responses took ~60 ms per send on the UI thread), so every
+/// read-modify-write of it goes through this lock, or two quick sends would
+/// lose one entry.
+static HISTORY: Mutex<()> = Mutex::new(());
+
+fn history_lock() -> std::sync::MutexGuard<'static, ()> {
+    HISTORY
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
 /// Drop expired entries and keep the newest MAX_HISTORY (oldest first).
 fn prune(entries: Vec<HistoryEntry>, now: f64) -> Vec<HistoryEntry> {
     let mut kept: Vec<_> = entries
@@ -78,6 +98,7 @@ fn prune(entries: Vec<HistoryEntry>, now: f64) -> Vec<HistoryEntry> {
 }
 
 pub fn load_history_summaries() -> Vec<HistorySummary> {
+    let _lock = history_lock();
     prune(load_history(), now())
         .iter()
         .map(HistorySummary::from)
@@ -86,19 +107,27 @@ pub fn load_history_summaries() -> Vec<HistorySummary> {
 
 /// Full entry (with response body) for a summary the user clicked.
 pub fn load_history_entry(timestamp: f64) -> Option<HistoryEntry> {
+    let _lock = history_lock();
     load_history()
         .into_iter()
         .find(|e| e.timestamp == timestamp)
 }
 
+/// Slow with a big history: call it off the UI thread (`MercuryApp::spawn`).
 pub fn append_history(entry: HistoryEntry) {
-    let mut entries = load_history();
+    append_in(&dir(), entry);
+}
+
+fn append_in(dir: &Path, entry: HistoryEntry) {
+    let _lock = history_lock();
+    let mut entries: Vec<HistoryEntry> = load_from(dir, "history.json").unwrap_or_default();
     entries.push(entry);
-    save("history.json", &prune(entries, now()));
+    save_to(dir, "history.json", &prune(entries, now()));
 }
 
 /// Delete the history file, returning what it held so the clear can be undone.
 pub fn take_history() -> Vec<HistoryEntry> {
+    let _lock = history_lock();
     let entries = load_history();
     let _ = fs::remove_file(dir().join("history.json"));
     entries
@@ -106,6 +135,7 @@ pub fn take_history() -> Vec<HistoryEntry> {
 
 /// Undo [`take_history`]: put `old` back in front of anything sent since.
 pub fn restore_history(mut old: Vec<HistoryEntry>) {
+    let _lock = history_lock();
     old.extend(load_history());
     save("history.json", &prune(old, now()));
 }
@@ -165,6 +195,25 @@ mod tests {
         // 0.4 added which environment and file a send came from
         assert_eq!(entries[0].env, None);
         assert_eq!(entries[0].file, None);
+    }
+
+    /// Appends now run on background threads; concurrent ones must not
+    /// lose each other's entries.
+    #[test]
+    fn concurrent_appends_keep_every_entry() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let now = now();
+        let threads: Vec<_> = (0..20)
+            .map(|i| {
+                let dir = dir.path().to_path_buf();
+                std::thread::spawn(move || append_in(&dir, entry(now - i as f64)))
+            })
+            .collect();
+        for t in threads {
+            t.join().unwrap();
+        }
+        let kept: Vec<HistoryEntry> = load_from(dir.path(), "history.json").unwrap();
+        assert_eq!(kept.len(), 20);
     }
 
     #[test]
