@@ -32,13 +32,14 @@ Press `?` (when you aren't typing in a field), pick **Keyboard shortcuts** from 
 
 - **`⌘ N`** clears the editor for a new, unsaved request. It saves the current request first if it has a file.
 - **`⌘ S`** on an unsaved request asks for a name and saves it to the selected collection (the workspace root if none is selected). See [Saving](/docs/features/requests#saving).
-- **`⌘ K`** opens the command palette: type to search every request in the workspace and every command Mercury has. `↑`/`↓` move, `⏎` opens, `Esc` closes.
+- **`⌘ K`** opens the command palette: type to search every request in the workspace and every command Mercury has. `↑`/`↓` move, `⏎` opens, `Esc` or `⌘ K` again closes.
 - **`⌘ D`** switches between the light and dark theme. Mercury follows your system theme until you press it.
 - **`⌘ E`** steps through the environments in the picker, then None, then starts over.
 - **`⌘ F`** opens the find bar over the response body: every match is highlighted, `⏎` steps to the next one, and `Esc` closes it.
 - **`⌘ Shift F`** hides the sidebar. Press it again to bring the sidebar back.
 - **`Tab`** moves between the controls on screen and `Space` or `⏎` activates the one you land on — the focus ring shows where you are. Everything Mercury can do is reachable without a mouse.
-- **`Esc`** closes the find bar first, since that is what you are looking at when you press it. Otherwise it cancels a running request, and failing that clears the sidebar filter. A dialog or the palette closes before any of it.
+- **`Esc`** closes the find bar first, since that is what you are looking at when you press it. Otherwise it cancels a running request, and failing that clears the sidebar filter. A dialog, the palette or an open menu closes before any of it, and that Esc does nothing else.
+- While a dialog is open, the other shortcuts wait until it closes.
 
 ## Related
 

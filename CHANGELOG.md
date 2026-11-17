@@ -51,6 +51,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Hovering a variable that comes from the shared `.env` says **from .env**, not from the selected file.
 - Deleting or renaming the selected environment file outside Mercury says so, instead of quietly switching to No environment.
 - The environment editor shows a commented first line as a comment when the file starts with a byte-order mark (it was an enabled variable).
+- A header added in the Headers table with an empty value (`X-Empty:`) wasn't sent or saved, and was gone after a reload.
+- Shortcuts ran behind an open dialog: ⌘⏎ behind a delete confirmation sent the request, and ⌘K stacked the palette on the dialog, so one Esc closed both.
+- The Esc that closes a menu also cleared the sidebar filter, closed find or cancelled the request in flight.
+- After **Create** in the New request dialog, or **New request** from ⌘K, the URL bar didn't get the focus, so typing went nowhere.
+- ⌘K with the palette open did nothing; it closes it now.
+- The keyboard shortcuts dialog ran off the window at the minimum window height, hiding its title and Close button; the list scrolls.
 
 ### Changed
 - **History keeps response bodies up to 1 MB.** It rewrote up to 50 × 10 MB on every send; a bigger body is still shown in full when it arrives.

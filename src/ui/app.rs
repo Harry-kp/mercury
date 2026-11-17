@@ -1463,6 +1463,8 @@ impl MercuryApp {
                 self.expanded.insert(parent);
                 self.rebuild_tree();
                 self.open_file(&path);
+                // the name field took focus and is gone; the URL is next
+                self.focus("url_bar");
                 Ok(if saving { "Saved" } else { "Request created" })
             }
             Dialog::NewFolder(parent) => {
@@ -1674,13 +1676,15 @@ impl MercuryApp {
         }
     }
 
-    fn handle_keys(&mut self, ctx: &egui::Context) {
+    /// `menu_was_open`: a menu was open at the start of the frame, so the
+    /// Esc that closed it is spent.
+    fn handle_keys(&mut self, ctx: &egui::Context, menu_was_open: bool) {
         // the palette owns the keyboard while it is open
         if self.palette.is_some() {
             return;
         }
         let typing = ctx.wants_keyboard_input();
-        let (actions, escape): (Vec<Action>, bool) = ctx.input(|i| {
+        let (mut actions, escape): (Vec<Action>, bool) = ctx.input(|i| {
             let actions = SHORTCUTS
                 .iter()
                 .filter(|s| s.pressed(i, typing))
@@ -1688,8 +1692,14 @@ impl MercuryApp {
                 .collect();
             (actions, i.key_pressed(Key::Escape))
         });
+        // a dialog is modal: ⌘⏎ behind a delete confirmation sent the
+        // request, ⌘K stacked the palette on it. Only `?` closing help stays.
+        if self.dialog.is_some() {
+            let help = matches!(self.dialog, Some(Dialog::Shortcuts));
+            actions.retain(|a| help && *a == Action::Help);
+        }
 
-        if escape && self.dialog.is_none() {
+        if escape && self.dialog.is_none() && !menu_was_open {
             // innermost first: the find bar is the thing the user is looking
             // at when they press it
             if self.find.is_some() {
@@ -2084,15 +2094,22 @@ fn shortcuts_modal(ctx: &egui::Context) -> ModalAction {
             .iter()
             .map(|s| (s.keys, s.label))
             .chain([ESCAPE_HELP]);
-        for (keys, text) in rows {
-            ui.horizontal(|ui| {
-                ui.set_min_height(28.0);
-                ui.label(label(text));
-                ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
-                    key_combo(ui, keys);
-                });
+        // scrolls: at the minimum window height the list pushed the title
+        // and Close off the window (260: the title, footer and margins)
+        let max_height = ui.ctx().content_rect().height() - 260.0;
+        egui::ScrollArea::vertical()
+            .max_height(max_height)
+            .show(ui, |ui| {
+                for (keys, text) in rows {
+                    ui.horizontal(|ui| {
+                        ui.set_min_height(28.0);
+                        ui.label(label(text));
+                        ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
+                            key_combo(ui, keys);
+                        });
+                    });
+                }
             });
-        }
         ui.add_space(Space::LG);
         ui.label(faint("On Windows and Linux, ⌘ is Ctrl."));
         ui.add_space(Space::XL);
@@ -2116,8 +2133,18 @@ impl MercuryApp {
             return;
         }
         self.time = ctx.input(|i| i.time);
-        if let Some(id) = self.pending_focus.take() {
-            ctx.memory_mut(|m| m.request_focus(egui::Id::new(id)));
+        // before the menus draw: the one Esc closes is gone by `handle_keys`
+        let menu_was_open = egui::Popup::is_any_open(ctx);
+        // A modal that closed last frame still holds focus to its layer this
+        // frame (egui records the top modal at frame end), so the URL bar
+        // after "Create" or after ⌘K → New request never got it. Wait it out.
+        let modal_closing = self.dialog.is_none()
+            && self.palette.is_none()
+            && ctx.memory(|m| m.top_modal_layer()).is_some();
+        if !modal_closing {
+            if let Some(id) = self.pending_focus.take() {
+                ctx.memory_mut(|m| m.request_focus(egui::Id::new(id)));
+            }
         }
         if take_copy_as_curl(ctx) {
             self.run(Action::CopyCurl);
@@ -2152,7 +2179,7 @@ impl MercuryApp {
 
         self.show_toast(ctx);
         // keys after widgets so text fields have claimed focus this frame
-        self.handle_keys(ctx);
+        self.handle_keys(ctx, menu_was_open);
         self.show_dialog(ctx);
         self.command_palette(ctx);
     }

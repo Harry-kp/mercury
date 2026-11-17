@@ -1262,4 +1262,58 @@ fn open_send_edit_and_save() {
     sync.run_steps(2);
     assert!(matches!(sync.state().dialog, Some(Dialog::NewFolder(_))));
     assert_eq!(sync.state().dialog_text, "a/b");
+
+    // A dialog is modal: shortcuts behind it don't run. ⌘K stacked the
+    // palette on it (and one Esc then closed both); ⌘H toggled history.
+    sync.key_press_modifiers(Modifiers::COMMAND, Key::K);
+    sync.key_press_modifiers(Modifiers::COMMAND, Key::H);
+    sync.run_steps(2);
+    assert!(sync.state().palette.is_none() && !sync.state().show_history);
+    sync.key_press(Key::Escape);
+    sync.run_steps(2);
+    assert!(sync.state().dialog.is_none());
+
+    // Creating a request from the dialog lands in the URL bar: the name
+    // field had focus, and the modal still held it the frame after closing
+    let url_bar = egui::Id::new("url_bar");
+    let focused = |h: &Harness<'_, MercuryApp>| h.ctx.memory(|m| m.focused());
+    sync.state_mut()
+        .open_dialog(Dialog::NewRequest(sws.clone(), false), "");
+    sync.run_steps(2);
+    sync.event(egui::Event::Text("fresh".into()));
+    sync.key_press(Key::Enter);
+    sync.run_steps(3);
+    assert!(sync.state().current_file.is_some());
+    assert_eq!(focused(&sync), Some(url_bar));
+    // ...and so does New request from the palette; ⌘K again closes it
+    sync.key_press_modifiers(Modifiers::COMMAND, Key::K);
+    sync.run_steps(2);
+    sync.key_press_modifiers(Modifiers::COMMAND, Key::K);
+    sync.run_steps(2);
+    assert!(sync.state().palette.is_none(), "⌘K toggles the palette");
+    sync.key_press_modifiers(Modifiers::COMMAND, Key::K);
+    sync.run_steps(2);
+    sync.event(egui::Event::Text("new request".into()));
+    sync.key_press(Key::Enter);
+    sync.run_steps(3);
+    assert!(sync.state().current_file.is_none());
+    assert_eq!(focused(&sync), Some(url_bar));
+
+    // #150: the URL bar keeps focus through ⌘⏎ and the response
+    sync.state_mut().url = format!("{server}/x");
+    sync.key_press_modifiers(Modifiers::COMMAND, Key::Enter);
+    wait_for_response(&mut sync);
+    assert!(sync.state().response.is_some());
+    assert_eq!(focused(&sync), Some(url_bar));
+
+    // Esc that closes a menu is spent: it used to clear the filter too
+    // (or cancel the request in flight)
+    sync.state_mut().search = "x".into();
+    sync.run_steps(2);
+    sync.get_by_role_and_label(accesskit::Role::Button, "More")
+        .click();
+    sync.run_steps(2);
+    sync.key_press(Key::Escape);
+    sync.run_steps(2);
+    assert_eq!(sync.state().search, "x");
 }
