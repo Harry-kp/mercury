@@ -12,7 +12,11 @@ categories = ["development-tools", "network-programming"]
 
 [dependencies]
 eframe = { version = "0.33", default-features = false, features = ["glow", "default_fonts", "accesskit"] }
-reqwest = { version = "0.13", features = ["json", "blocking", "cookies", "gzip", "brotli", "deflate"] }
+# rustls on `ring` instead of the default aws-lc-rs: the same TLS stack
+# (OS trust store via rustls-platform-verifier) at a fraction of the size.
+# `json` is unused (bodies go through serde_json directly).
+reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider", "charset", "http2", "system-proxy", "blocking", "cookies", "gzip", "brotli", "deflate"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 serde_yaml = "0.9"
@@ -34,10 +38,10 @@ lto = true
 codegen-units = 1
 strip = true
 
-# The profile that 'dist' will build with
+# The profile that 'dist' will build with (what users download). It used to
+# override `lto = "thin"`, shipping a binary ~1 MB larger than release.
 [profile.dist]
 inherits = "release"
-lto = "thin"
 
 # Bundle configuration for cargo-bundle
 [package.metadata.bundle]

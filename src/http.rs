@@ -46,6 +46,9 @@ pub struct HttpResponse {
 
 /// One client for the whole session so cookies persist across requests.
 pub fn client() -> reqwest::blocking::Client {
+    // reqwest is built without a crypto provider (see Cargo.toml); use ring.
+    // Err only means one is already installed, which is fine.
+    let _ = rustls::crypto::ring::default_provider().install_default();
     reqwest::blocking::Client::builder()
         .cookie_store(true)
         .timeout(Duration::from_secs(TIMEOUT_SECS))
@@ -444,6 +447,20 @@ mod tests {
             "{err}"
         );
         assert!(err.to_lowercase().contains("refused"), "{err}");
+    }
+
+    /// A real TLS handshake against the OS trust store. Needs the network,
+    /// so it is opt-in: `cargo test -- --ignored` after touching TLS.
+    #[test]
+    #[ignore]
+    fn https_handshake_with_system_roots() {
+        let ok = get("https://example.com", &[]).expect("https request");
+        assert_eq!(ok.status, 200);
+        let bad = get("https://self-signed.badssl.com", &[]).unwrap_err();
+        assert!(
+            bad.contains("SSL/TLS") || bad.to_lowercase().contains("certificate"),
+            "{bad}"
+        );
     }
 
     #[test]

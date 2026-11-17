@@ -14,6 +14,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - History entries record the **environment** they were sent with, and the response panel shows it, as **from .env.dev** once you've switched. Reopening an entry opens the **file** it was sent from instead of a detached copy. Older history entries load as before.
 
 ### Changed
+- CI checks that the shipped binary stays within a size budget, runs against the committed `Cargo.lock`, audits dependency changes before they merge, and fails if the shortcut tables in the README or docs drift from the app.
+- **Smaller download: 8.7 MB → 7.6 MB.** TLS now uses rustls on the `ring` crypto provider instead of aws-lc (same verification against the system's trusted certificates), and release builds use full link-time optimisation.
+- **Sending no longer stutters with a large history.** Each response used to rewrite the whole history file (up to 50 full responses) on the UI thread, about 60 ms per send at 50 MB. It's written in the background now.
 - **On macOS the top bar is the title bar.** The grey system title bar is gone; the window buttons sit in Mercury's own top bar, which drags the window and zooms it on double-click.
 - **A new look: Graphite Violet.** The neutrals follow the app icon's graphite instead of blue-grey, and the violet accent stays. Syntax colours are calmer (lavender keys, light strings, pink numbers) and the light theme follows the same direction. The layout is flatter: the request editor and the response share one surface, only the URL bar keeps a border, code sits on an inset fill without an outline, and the open request in the sidebar is marked with an accent bar.
 - With nothing typed, `⌘ K` lists the requests you opened most recently, then the commands. It used to list every request first, which pushed the commands out of reach in a real workspace.
@@ -31,6 +34,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The body type reads **Body type: none / JSON / Form / Text**.
 
 ### Fixed
+- **Security:** updated the TLS stack (`rustls` 0.23.46, `rustls-webpki` 0.103.17, `webpki-root-certs` 1.0.12) for six advisories, including a ServerHello downgrade (RUSTSEC-2026-0349) and acceptance of distrusted intermediates (RUSTSEC-2026-0382).
 - **The Pretty view re-sorted JSON keys and rewrote numbers.** It re-serialised the body, so keys came out alphabetical, integers too large for 64 bits turned into floats, `1.10` became `1.1`, and duplicate keys disappeared. **Format body** did the same to the request you were about to send. Both now only re-indent: the text is exactly what was sent.
 - **`⌘ ⇧ C` copied the selected text instead of the request** whenever any text was selected: the selection answered the same copy event after Mercury and won the clipboard. `⌘ ⇧ C` now always copies the request as cURL; plain `⌘ C` still copies a selection.
 - Clicking a sidebar row selected its name as text. Only text you would copy is selectable now: the response body, response headers and cookies, and error messages.

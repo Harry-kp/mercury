@@ -196,7 +196,9 @@ pub struct Toast {
 }
 
 pub enum Undo {
-    History(Vec<HistoryEntry>),
+    /// What was on disk, and what the list showed (a send's background
+    /// append may not have reached the disk yet when the list was cleared).
+    History(Vec<HistoryEntry>, Vec<HistorySummary>),
     Recent(Vec<RecentRequest>),
 }
 
@@ -435,9 +437,13 @@ impl MercuryApp {
 
     fn undo(&mut self, undo: Undo) {
         match undo {
-            Undo::History(entries) => {
+            Undo::History(entries, mut shown) => {
                 storage::restore_history(entries);
-                self.history = storage::load_history_summaries();
+                // the list is the truth for the UI; the disk catches up
+                shown.append(&mut self.history);
+                let excess = shown.len().saturating_sub(storage::MAX_HISTORY);
+                shown.drain(..excess);
+                self.history = shown;
                 self.history_loaded = true;
             }
             Undo::Recent(mut old) => {
@@ -901,7 +907,13 @@ impl MercuryApp {
                 self.history.push(HistorySummary::from(&entry));
                 let excess = self.history.len().saturating_sub(storage::MAX_HISTORY);
                 self.history.drain(..excess);
-                storage::append_history(entry);
+                // queued now (instantly visible to history reads), written
+                // off the UI thread: it rewrites the whole history file
+                storage::queue_history(entry);
+                self.spawn(|| {
+                    storage::flush_history();
+                    None
+                });
 
                 if self.current_file.is_none() && !self.recent.iter().any(|r| r.request == request)
                 {
@@ -985,11 +997,10 @@ impl MercuryApp {
     }
 
     pub fn clear_history(&mut self) {
-        let count = self.history.len();
-        self.history.clear();
+        let shown = std::mem::take(&mut self.history);
         let entries = storage::take_history();
-        let what = plural(count, "history entry", "history entries");
-        self.notify_undo(format!("Cleared {what}"), Undo::History(entries));
+        let what = plural(shown.len(), "history entry", "history entries");
+        self.notify_undo(format!("Cleared {what}"), Undo::History(entries, shown));
     }
 
     pub fn clear_recent(&mut self) {
@@ -1837,6 +1848,35 @@ mod tests {
             delete_message("list-users", false, (1, 0)),
             "Delete the request 'list-users'?"
         );
+    }
+
+    /// CLAUDE.md: a change to SHORTCUTS updates the README and the docs
+    /// site's table in the same PR. This holds both to it, row for row.
+    #[test]
+    fn shortcut_tables_in_the_docs_match_the_app() {
+        let expected: Vec<String> = SHORTCUTS
+            .iter()
+            .map(|s| (s.keys, s.label))
+            .chain([ESCAPE_HELP])
+            .map(|(keys, label)| format!("| `{keys}` | {label} |"))
+            .collect();
+        for (doc, text) in [
+            ("README.md", include_str!("../../README.md")),
+            (
+                "website/docs/reference/keyboard-shortcuts.md",
+                include_str!("../../website/docs/reference/keyboard-shortcuts.md"),
+            ),
+        ] {
+            let rows: Vec<&str> = text
+                .lines()
+                .skip_while(|l| !l.starts_with(&expected[0]))
+                .take_while(|l| l.starts_with("| `"))
+                .collect();
+            assert_eq!(
+                rows, expected,
+                "the shortcut table in {doc} is out of sync with SHORTCUTS"
+            );
+        }
     }
 
     /// The help modal and the palette render `keys` as one cap per space-run.
