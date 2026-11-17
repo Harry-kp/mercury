@@ -14,7 +14,7 @@ import os
 REPO = pathlib.Path(os.environ.get("MERCURY_REPO") or (sys.argv[1] if len(sys.argv) > 1 else "."))
 
 W, H, FPS = 1600, 1000, 30           # render size / rate
-SHOT = (1600, 1000)                   # captured app frame size
+SHOT = (3200, 2000)                   # captured app frame size (2x, so zooms stay sharp)
 
 # Mercury's own palette (src/ui/theme.rs) so the film matches the product
 BG        = (11, 13, 16)
@@ -291,7 +291,7 @@ def sc_send(t, d):
     cy = 0.085 + ease_in_out(clamp((t - 0.45) / 1.15)) * 0.39
     full(c, camera(shot("send", f), z, cx, cy))
     if t > 1.5:
-        lower_third(c, "Send. Read. Nothing in between.", GREEN, t - 1.5, "200 OK · 354 ms")
+        lower_third(c, "Send. Read. Nothing in between.", GREEN, t - 1.5, "200 OK")
     return c
 
 def sc_find(t, d):
@@ -305,7 +305,7 @@ def sc_find(t, d):
 def sc_post(t, d):
     c = backdrop(20 + t).convert("RGBA")
     framed(c, shot("post", int(t * 12) + 14), 0.80, ease_out(t / 0.5), lift=-60)
-    lower_third(c, "JSON, form or text — the header follows", ACCENT, t - 0.3, "Request body")
+    lower_third(c, "JSON, form, multipart or text — the header follows", ACCENT, t - 0.3, "Request body")
     return c
 
 def sc_auth(t, d):
