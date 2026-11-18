@@ -148,7 +148,7 @@ impl MercuryApp {
             .horizontal_wrapped(|ui| {
                 ui.spacing_mut().item_spacing.x = Space::MD;
                 widgets::glyph(ui, Icon::Play, 11.0, t.accent);
-                let link = widgets::link(ui, muted("Send a sample request").color(t.accent));
+                let link = widgets::accent_link(ui, "Send a sample request");
                 ui.label(faint(SAMPLE_HOST));
                 link
             })
@@ -315,10 +315,7 @@ impl MercuryApp {
         };
         let t = theme();
         let kind = response.response_type;
-        let is_text = matches!(
-            kind,
-            ResponseType::Json | ResponseType::Xml | ResponseType::Html | ResponseType::PlainText
-        );
+        let is_text = kind.is_text();
         // binary bodies restored from history have no bytes to save
         let can_save = kind == ResponseType::LargeText || response.raw_bytes.is_some();
 
@@ -604,6 +601,8 @@ fn field_menu(
     save: &mut Option<(String, String)>,
 ) {
     label.context_menu(|ui| {
+        // as wide as the response panel otherwise
+        ui.set_max_width(Layout::MENU_WIDTH);
         if menu_item(ui, Some(Icon::Copy), "Copy value", "") {
             ui.ctx().copy_text(value.clone());
         }
@@ -612,7 +611,7 @@ fn field_menu(
             if menu_item(
                 ui,
                 Some(Icon::Layers),
-                &format!("Save as {{{{{name}}}}} in {env}"),
+                &format!("Save as {{{{{}}}}} in {env}", widgets::truncate(&name, 24)),
                 "",
             ) {
                 *save = Some((name, value.clone()));

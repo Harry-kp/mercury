@@ -43,6 +43,13 @@ fn echo_server() -> String {
     format!("http://{addr}")
 }
 
+/// The app in a window of `w` × `h` points.
+fn window(app: MercuryApp, w: f32, h: f32) -> Harness<'static, MercuryApp> {
+    Harness::builder()
+        .with_size(egui::vec2(w, h))
+        .build_state(|ctx, app: &mut MercuryApp| app.frame(ctx), app)
+}
+
 fn wait_for_response(harness: &mut Harness<'_, MercuryApp>) {
     for _ in 0..200 {
         harness.step();
@@ -98,9 +105,7 @@ fn open_send_edit_and_save() {
     let ctx = egui::Context::default();
     let mut app = MercuryApp::new(&ctx);
     app.open_workspace(ws.clone(), None);
-    let mut harness = Harness::builder()
-        .with_size(egui::vec2(1200.0, 800.0))
-        .build_state(|ctx, app: &mut MercuryApp| app.frame(ctx), app);
+    let mut harness = window(app, 1200.0, 800.0);
     harness.run_steps(2);
     assert_eq!(harness.state().env_name(), Some(".env.dev"));
     assert_eq!(
@@ -310,6 +315,10 @@ fn open_send_edit_and_save() {
         .click();
     harness.run_steps(2);
     assert_eq!(harness.state().env_vars["access_token"], "eyJ.abc");
+    // the last send's "{{access_token}} isn't defined" stayed on screen
+    harness.state_mut().request_error = Some("{{access_token}} isn't defined".into());
+    harness.state_mut().save_variable("access_token", "eyJ.abc");
+    assert!(harness.state().request_error.is_none());
     let dev = std::fs::read_to_string(ws.join(".env.dev")).unwrap();
     assert!(
         dev.contains("TOKEN=rotated\naccess_token=eyJ.abc\n"),
@@ -856,12 +865,7 @@ fn open_send_edit_and_save() {
 
     // At the minimum window size, tab-row controls wrap instead of being
     // painted on top of the tabs.
-    let mut small = Harness::builder()
-        .with_size(egui::vec2(900.0, 620.0))
-        .build_state(
-            |ctx, app: &mut MercuryApp| app.frame(ctx),
-            MercuryApp::new(&egui::Context::default()),
-        );
+    let mut small = window(MercuryApp::new(&egui::Context::default()), 900.0, 620.0);
     small.state_mut().open_workspace(ws.clone(), None);
     small.state_mut().open_file(&file);
     small.run_steps(3);
@@ -912,12 +916,7 @@ fn open_send_edit_and_save() {
             .collect::<Vec<_>>()
             .join(",")
     );
-    let mut big = Harness::builder()
-        .with_size(egui::vec2(1200.0, 800.0))
-        .build_state(
-            |ctx, app: &mut MercuryApp| app.frame(ctx),
-            MercuryApp::new(&egui::Context::default()),
-        );
+    let mut big = window(MercuryApp::new(&egui::Context::default()), 1200.0, 800.0);
     big.state_mut().response = Some(std::sync::Arc::new(crate::http::HttpResponse {
         status: 200,
         status_text: "200 OK".into(),
@@ -953,9 +952,7 @@ fn open_send_edit_and_save() {
         })
         .collect();
     app.palette = Some(super::palette::Palette::new(items, Some(&ws), &[]));
-    let mut many = Harness::builder()
-        .with_size(egui::vec2(1200.0, 800.0))
-        .build_state(|ctx, app: &mut MercuryApp| app.frame(ctx), app);
+    let mut many = window(app, 1200.0, 800.0);
     many.run_steps(3);
     let below = |h: &Harness<'_, MercuryApp>, a: &str, b: &str| {
         let r = |l: &str| h.query_all_by_label(l).next().unwrap().rect();
@@ -982,12 +979,7 @@ fn open_send_edit_and_save() {
 
     // first run: one click gives a working request without an API of your
     // own, opened as a new request so no saved file is touched
-    let mut first = Harness::builder()
-        .with_size(egui::vec2(1200.0, 800.0))
-        .build_state(
-            |ctx, app: &mut MercuryApp| app.frame(ctx),
-            MercuryApp::new(&egui::Context::default()),
-        );
+    let mut first = window(MercuryApp::new(&egui::Context::default()), 1200.0, 800.0);
     first.state_mut().response = None;
     first.run_steps(2);
     first.get_by_label("Send a sample request").click();
@@ -1097,9 +1089,7 @@ fn open_send_edit_and_save() {
     let mut app = MercuryApp::new(&egui::Context::default());
     app.open_workspace(envs.clone(), None);
     app.open_file(&get);
-    let mut e = Harness::builder()
-        .with_size(egui::vec2(1200.0, 800.0))
-        .build_state(|ctx, app: &mut MercuryApp| app.frame(ctx), app);
+    let mut e = window(app, 1200.0, 800.0);
     e.run_steps(2);
     e.state_mut().send_request();
     e.run_steps(2);
@@ -1380,12 +1370,7 @@ fn open_send_edit_and_save() {
     std::fs::create_dir(sws.join("auth")).unwrap();
     let login = sws.join("auth/login.json");
     std::fs::write(&login, r#"{"method":"POST","url":"http://a/login"}"#).unwrap();
-    let mut sync = Harness::builder()
-        .with_size(egui::vec2(1200.0, 800.0))
-        .build_state(
-            |ctx, app: &mut MercuryApp| app.frame(ctx),
-            MercuryApp::new(&egui::Context::default()),
-        );
+    let mut sync = window(MercuryApp::new(&egui::Context::default()), 1200.0, 800.0);
     sync.state_mut().open_workspace(sws.clone(), None);
     sync.state_mut().open_file(&login);
     sync.run_steps(2);

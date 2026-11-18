@@ -18,10 +18,14 @@ const HISTORY_TTL_SECS: f64 = 7.0 * 24.0 * 60.0 * 60.0;
 
 /// Seconds since the Unix epoch (what all stored timestamps use).
 pub fn now() -> f64 {
+    since_epoch().as_secs_f64()
+}
+
+/// Time since the Unix epoch; zero for a clock set before 1970.
+pub fn since_epoch() -> std::time::Duration {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs_f64())
-        .unwrap_or(0.0)
+        .unwrap_or_default()
 }
 
 fn dir() -> PathBuf {
@@ -75,9 +79,7 @@ pub fn write_atomic(path: &Path, data: &[u8]) -> std::io::Result<()> {
     // exclusively (O_EXCL never follows a planted symlink), and never more
     // readable than the file it replaces, not even for a moment
     let (tmp, mut file) = loop {
-        let nanos = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map_or(0, |d| d.subsec_nanos());
+        let nanos = since_epoch().subsec_nanos();
         let n = COUNTER.fetch_add(1, Ordering::Relaxed);
         let tmp = target.with_file_name(format!(".{name}.{}.{nanos}.{n}.tmp", std::process::id()));
         let mut options = fs::OpenOptions::new();
@@ -145,7 +147,7 @@ impl History {
 
     fn all(&self, dir: &Path) -> Vec<HistoryEntry> {
         let pending = self.lock();
-        let mut entries: Vec<HistoryEntry> = load_from(dir, "history.json").unwrap_or_default();
+        let mut entries = on_disk(dir);
         entries.extend(pending.iter().cloned());
         entries
     }
@@ -156,11 +158,7 @@ impl History {
             .iter()
             .find(|e| e.timestamp == timestamp)
             .cloned()
-            .or_else(|| {
-                load_from::<Vec<HistoryEntry>>(dir, "history.json")?
-                    .into_iter()
-                    .find(|e| e.timestamp == timestamp)
-            })
+            .or_else(|| on_disk(dir).into_iter().find(|e| e.timestamp == timestamp))
     }
 
     fn queue(&self, entry: HistoryEntry) {
@@ -173,9 +171,9 @@ impl History {
             return Ok(());
         }
         let _other_windows = file_lock(dir);
-        let mut entries: Vec<HistoryEntry> = load_from(dir, "history.json").unwrap_or_default();
+        let mut entries = on_disk(dir);
         entries.extend(pending.iter().cloned());
-        let saved = save_to(dir, "history.json", &prune(entries, now()));
+        let saved = save_to(dir, HISTORY_FILE, &prune(entries, now()));
         // unwritten, it stays queued: still in the list this session
         *pending = match saved {
             Ok(()) => Vec::new(),
@@ -187,8 +185,8 @@ impl History {
     fn take(&self, dir: &Path) -> Result<Vec<HistoryEntry>, String> {
         let mut pending = self.lock();
         let _other_windows = file_lock(dir);
-        let mut entries: Vec<HistoryEntry> = load_from(dir, "history.json").unwrap_or_default();
-        match fs::remove_file(dir.join("history.json")) {
+        let mut entries = on_disk(dir);
+        match fs::remove_file(dir.join(HISTORY_FILE)) {
             Err(e) if e.kind() != std::io::ErrorKind::NotFound => {
                 return Err(format!("Could not clear history: {e}"))
             }
@@ -201,9 +199,16 @@ impl History {
     fn restore(&self, dir: &Path, mut old: Vec<HistoryEntry>) -> Result<(), String> {
         let _pending = self.lock();
         let _other_windows = file_lock(dir);
-        old.extend(load_from::<Vec<HistoryEntry>>(dir, "history.json").unwrap_or_default());
-        save_to(dir, "history.json", &prune(old, now()))
+        old.extend(on_disk(dir));
+        save_to(dir, HISTORY_FILE, &prune(old, now()))
     }
+}
+
+const HISTORY_FILE: &str = "history.json";
+
+/// What history.json holds now; empty if it's missing or unreadable.
+fn on_disk(dir: &Path) -> Vec<HistoryEntry> {
+    load_from(dir, HISTORY_FILE).unwrap_or_default()
 }
 
 /// Held across a read-modify-write of history.json, so two Mercury windows

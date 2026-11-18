@@ -302,6 +302,18 @@ pub fn set_body_kind(headers_text: &str, kind: BodyKind) -> String {
     set_header(headers_text, "Content-Type", kind.content_type())
 }
 
+/// The fields a Multipart body sends: enabled lines with a name.
+pub fn multipart_fields(text: &str) -> impl Iterator<Item = KeyValue> {
+    parse_lines(text, "=")
+        .into_iter()
+        .filter(|r| r.enabled && !r.key.is_empty())
+}
+
+/// A Multipart value's file path: `@path` is a file, `@@x` the text `@x`.
+pub fn multipart_file(value: &str) -> Option<&str> {
+    value.strip_prefix('@').filter(|p| !p.starts_with('@'))
+}
+
 /// `a=1&b=2` as editable rows, so a form body is a table and not a string
 /// the user has to percent-encode by hand.
 pub fn parse_form(body: &str) -> Vec<KeyValue> {
@@ -324,17 +336,8 @@ pub fn build_form(rows: &[KeyValue]) -> String {
 
 pub fn parse_query_params(url: &str) -> Vec<KeyValue> {
     let url = url.split('#').next().unwrap_or(url);
-    let Some((_, query)) = url.split_once('?') else {
-        return Vec::new();
-    };
-    query
-        .split('&')
-        .filter(|s| !s.is_empty())
-        .map(|pair| {
-            let (k, v) = pair.split_once('=').unwrap_or((pair, ""));
-            KeyValue::new(url_decode(k), url_decode(v))
-        })
-        .collect()
+    url.split_once('?')
+        .map_or_else(Vec::new, |(_, q)| parse_form(q))
 }
 
 /// Replace the URL's query string with the enabled params. A `#fragment`

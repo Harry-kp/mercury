@@ -90,11 +90,7 @@ fn unique(path: std::path::PathBuf) -> std::path::PathBuf {
     if !taken(&path) {
         return path;
     }
-    let name = path
-        .file_name()
-        .unwrap_or_default()
-        .to_string_lossy()
-        .into_owned();
+    let name = crate::workspace::file_name(&path);
     let (stem, ext) = match name.strip_suffix(".json") {
         Some(stem) => (stem.to_string(), ".json"),
         None => (name.clone(), ""),
@@ -117,7 +113,7 @@ fn import_folder(out: &Path, name: &str) -> Result<std::path::PathBuf, String> {
                 // environment imported first put the requests in a subfolder
                 .all(|e| {
                     let name = e.file_name().to_string_lossy().into_owned();
-                    name == ".DS_Store" || name == ".env" || name.starts_with(".env.")
+                    name == ".DS_Store" || crate::workspace::is_env_name(&name)
                 })
         })
         .unwrap_or(true);
@@ -130,19 +126,23 @@ fn import_folder(out: &Path, name: &str) -> Result<std::path::PathBuf, String> {
     Ok(dir)
 }
 
-/// Always a new file (see [`crate::workspace::create_new`]): never over an
-/// existing one, never through a symlink.
-fn write_file(path: &Path, content: String) -> Result<(), String> {
-    crate::workspace::create_new(path, &content)
-}
-
 fn create_dir(path: &Path) -> Result<(), String> {
     fs::create_dir_all(path).map_err(|e| format!("Failed to create '{}': {e}", path.display()))
 }
 
 /// `request`'s headers and body as imported; what Mercury will load is
 /// worked out here.
-fn write_request(dir: &Path, name: &str, mut request: RequestFile) -> Result<(), String> {
+fn write_request(
+    dir: &Path,
+    name: &str,
+    mut request: RequestFile,
+    description: &str,
+) -> Result<(), String> {
+    if !description.trim().is_empty() {
+        request
+            .extra
+            .insert("description".into(), description.into());
+    }
     // The headers exactly as Mercury will load them: written as `name:
     // value` lines and parsed back. A newline in a value, a name holding a
     // `:` ("Content-Type: multipart/form-data;x"), padding around a name:
@@ -177,14 +177,15 @@ fn write_request(dir: &Path, name: &str, mut request: RequestFile) -> Result<(),
     if maybe_multipart {
         let mut rows = kv::parse_lines(&request.body, "=");
         for row in &mut rows {
-            if row.value.starts_with('@') && !row.value.starts_with("@@") {
+            if kv::multipart_file(&row.value).is_some() {
                 row.enabled = false;
             }
         }
         request.body = kv::format_lines(&rows, "=");
     }
     let path = unique(dir.join(format!("{}.json", sanitize_filename(name))));
-    write_file(&path, request.to_json())
+    // always a new file: never over an existing one, never through a symlink
+    crate::workspace::create_new(&path, &request.to_json())
 }
 
 /// A free `.env.<name>` in `dir`.
@@ -207,12 +208,8 @@ fn write_env<'a>(
             )
         })
         .collect();
-    write_file(&path, content)?;
-    Ok(path
-        .file_name()
-        .unwrap_or_default()
-        .to_string_lossy()
-        .into_owned())
+    crate::workspace::create_new(&path, &content)?;
+    Ok(crate::workspace::file_name(&path))
 }
 
 fn read(path: &Path) -> Result<String, String> {
@@ -468,33 +465,82 @@ impl PostmanAuth {
 /// goes in the URL. `None` means Mercury cannot express it — OAuth 2, AWS
 /// signatures, NTLM and the rest need a token exchange a request file cannot
 /// describe, so the import reports them rather than dropping them quietly.
-fn postman_auth(auth: &PostmanAuth) -> Option<Auth> {
+fn postman_auth(auth: &PostmanAuth) -> Auth {
     match auth.kind.as_str() {
-        "noauth" => Some(Auth::None),
-        "bearer" => Some(Auth::Header(
-            "Authorization".into(),
-            format!("Bearer {}", auth.param("token")),
-        )),
-        "basic" => Some(Auth::Header(
-            "Authorization".into(),
-            kv::basic_auth(&auth.param("username"), &auth.param("password")),
-        )),
-        "apikey" => {
-            let (key, value) = (auth.param("key"), auth.param("value"));
-            if auth.param("in") == "query" {
-                Some(Auth::Query(key, value))
-            } else {
-                Some(Auth::Header(key, value))
-            }
-        }
-        _ => None,
+        "noauth" => Auth::None,
+        "bearer" => bearer("Bearer", &auth.param("token")),
+        "basic" => basic(&auth.param("username"), &auth.param("password")),
+        "apikey" => api_key(
+            auth.param("in") == "query",
+            auth.param("key"),
+            auth.param("value"),
+        ),
+        other => Auth::Skip(format!("{other} auth")),
     }
 }
 
+/// An imported request's auth, in Mercury's terms.
 enum Auth {
     None,
     Header(String, String),
     Query(String, String),
+    /// what can't be expressed, for the import summary
+    Skip(String),
+}
+
+fn bearer(prefix: &str, token: &str) -> Auth {
+    Auth::Header("Authorization".into(), format!("{prefix} {token}"))
+}
+
+fn basic(user: &str, pass: &str) -> Auth {
+    if format!("{user}{pass}").contains("{{") {
+        // the header is base64 of user:pass, which hides a variable from
+        // substitution
+        Auth::Skip("basic auth with variables".into())
+    } else {
+        Auth::Header("Authorization".into(), kv::basic_auth(user, pass))
+    }
+}
+
+fn api_key(in_query: bool, key: String, value: String) -> Auth {
+    if in_query {
+        Auth::Query(key, value)
+    } else {
+        Auth::Header(key, value)
+    }
+}
+
+/// Puts `auth` on the request: a header, or a parameter added to the URL's.
+fn apply_auth(
+    auth: Auth,
+    name: &str,
+    headers: &mut BTreeMap<String, String>,
+    url: &mut String,
+    skipped: &mut Vec<String>,
+) {
+    match auth {
+        Auth::None => {}
+        Auth::Header(key, value) => {
+            if !key.is_empty() {
+                headers.insert(key, value);
+            }
+        }
+        Auth::Query(key, value) => {
+            let params = [kv::parse_query_params(url), vec![KeyValue::new(key, value)]].concat();
+            *url = kv::build_url(url, &params);
+        }
+        Auth::Skip(what) => skipped.push(format!("{name}: {what}")),
+    }
+}
+
+/// A request's default `Content-Type`, unless it already has one in any case.
+fn default_content_type(headers: &mut BTreeMap<String, String>, content_type: &str) {
+    if !headers
+        .keys()
+        .any(|k| k.eq_ignore_ascii_case("content-type"))
+    {
+        headers.insert("Content-Type".into(), content_type.into());
+    }
 }
 
 #[derive(Deserialize)]
@@ -604,28 +650,19 @@ fn postman_item(
         };
         let mut headers = headers_where(false);
         let mut url = postman_url(&req.url);
-        match auth.map(postman_auth) {
-            Some(Some(Auth::Header(name, value))) => {
-                headers.insert(name, value);
-            }
-            Some(Some(Auth::Query(key, value))) => {
-                let params = [KeyValue::new(key, value)];
-                url = kv::build_url(
-                    &url,
-                    &[kv::parse_query_params(&url), params.to_vec()].concat(),
-                );
-            }
-            Some(Some(Auth::None)) | None => {}
-            Some(None) => skipped.push(format!(
-                "{}: {} auth",
-                item.name,
-                auth.map_or("", |a| a.kind.as_str())
-            )),
+        if let Some(auth) = auth {
+            apply_auth(
+                postman_auth(auth),
+                &item.name,
+                &mut headers,
+                &mut url,
+                skipped,
+            );
         }
         let body = match req.body.as_ref().map(postman_body) {
             Some(Some((body, content_type))) => {
                 if let Some(ct) = content_type {
-                    headers.entry("Content-Type".into()).or_insert(ct.into());
+                    default_content_type(&mut headers, ct);
                 }
                 body
             }
@@ -636,7 +673,7 @@ fn postman_item(
             }
             None => String::new(),
         };
-        let mut request = RequestFile {
+        let request = RequestFile {
             method: HttpMethod::parse(&req.method).unwrap_or_default(),
             url,
             headers,
@@ -648,10 +685,7 @@ fn postman_item(
             Some(Value::Object(d)) => d.get("content").map(value_to_string),
             other => other.as_ref().map(value_to_string),
         };
-        if let Some(d) = description.filter(|d| !d.trim().is_empty()) {
-            request.extra.insert("description".into(), d.into());
-        }
-        write_request(dir, &item.name, request)?;
+        write_request(dir, &item.name, request, &description.unwrap_or_default())?;
         return Ok(1);
     }
     if item.item.is_empty() {
@@ -828,42 +862,21 @@ fn insomnia_request(req: &Value, dir: &Path, skipped: &mut Vec<String>) -> Resul
     });
     if let Some(auth) = auth {
         let text = |k: &str| insomnia_text(str_of(auth, k));
-        match str_of(auth, "type") {
-            "bearer" => {
-                let prefix = match str_of(auth, "prefix") {
-                    "" => "Bearer",
-                    p => p,
-                };
-                headers.insert(
-                    "Authorization".into(),
-                    format!("{prefix} {}", text("token")),
-                );
-            }
-            "basic" => {
-                let (user, pass) = (text("username"), text("password"));
-                if format!("{user}{pass}").contains("{{") {
-                    // the header is base64 of user:pass, which hides a
-                    // variable from substitution
-                    skipped.push(format!("{name}: basic auth with variables"));
-                } else {
-                    headers.insert("Authorization".into(), kv::basic_auth(&user, &pass));
-                }
-            }
-            "apikey" => {
-                let (key, value) = (text("key"), text("value"));
-                if str_of(auth, "addTo") == "queryParams" {
-                    let params = [KeyValue::new(key, value)];
-                    url = kv::build_url(
-                        &url,
-                        &[kv::parse_query_params(&url), params.to_vec()].concat(),
-                    );
-                } else if !key.is_empty() {
-                    headers.insert(key, value);
-                }
-            }
-            "none" => {}
-            other => skipped.push(format!("{name}: {other} auth")),
-        }
+        let auth = match str_of(auth, "type") {
+            "bearer" => match str_of(auth, "prefix") {
+                "" => bearer("Bearer", &text("token")),
+                prefix => bearer(prefix, &text("token")),
+            },
+            "basic" => basic(&text("username"), &text("password")),
+            "apikey" => api_key(
+                str_of(auth, "addTo") == "queryParams",
+                text("key"),
+                text("value"),
+            ),
+            "none" => Auth::None,
+            other => Auth::Skip(format!("{other} auth")),
+        };
+        apply_auth(auth, name, &mut headers, &mut url, skipped);
     }
 
     // body
@@ -922,12 +935,7 @@ fn insomnia_request(req: &Value, dir: &Path, skipped: &mut Vec<String>) -> Resul
         }
     };
     if !mime.is_empty() && !text.is_empty() {
-        let has_type = headers
-            .keys()
-            .any(|k| k.eq_ignore_ascii_case("content-type"));
-        if !has_type {
-            headers.insert("Content-Type".into(), mime);
-        }
+        default_content_type(&mut headers, &mime);
     }
     if [url.as_str(), text.as_str()]
         .iter()
@@ -936,7 +944,7 @@ fn insomnia_request(req: &Value, dir: &Path, skipped: &mut Vec<String>) -> Resul
     {
         skipped.push(format!("{name}: template tags ({{% … %}})"));
     }
-    let mut request = RequestFile {
+    let request = RequestFile {
         method: HttpMethod::parse(str_of(req, "method")).unwrap_or_default(),
         url,
         headers,
@@ -944,13 +952,7 @@ fn insomnia_request(req: &Value, dir: &Path, skipped: &mut Vec<String>) -> Resul
         disabled_headers: headers_where(true),
         ..Default::default()
     };
-    let description = str_of(req, "description");
-    if !description.trim().is_empty() {
-        request
-            .extra
-            .insert("description".into(), description.into());
-    }
-    write_request(dir, name, request)
+    write_request(dir, name, request, str_of(req, "description"))
 }
 
 /// Writes one `.env` per environment the user can pick: each sub-environment
@@ -1280,7 +1282,7 @@ mod tests {
         );
         let live: Vec<_> = kv::parse_lines(&upload.body, "=")
             .into_iter()
-            .filter(|r| r.enabled && r.value.starts_with('@') && !r.value.starts_with("@@"))
+            .filter(|r| r.enabled && kv::multipart_file(&r.value).is_some())
             .collect();
         assert!(live.is_empty(), "{live:?}");
         assert_eq!(
@@ -1386,6 +1388,31 @@ resources:
 
     fn file(path: &Path) -> RequestFile {
         RequestFile::from_json(&fs::read_to_string(path).unwrap()).unwrap()
+    }
+
+    /// Postman and Insomnia share one auth and Content-Type path; Postman's
+    /// copy base64'd `{{password}}` out of reach and doubled a lowercase
+    /// `content-type`.
+    #[test]
+    fn postman_basic_auth_variables_and_lowercase_content_type() {
+        let (dir, count) = import(
+            import_postman,
+            r#"{"info": {"name": "C"}, "item": [{"name": "Login", "request": {
+                "method": "POST", "url": "http://x/login",
+                "auth": {"type": "basic", "basic": [
+                    {"key": "username", "value": "me"},
+                    {"key": "password", "value": "{{password}}"}]},
+                "header": [{"key": "content-type", "value": "text/plain"}],
+                "body": {"mode": "raw", "raw": "{}",
+                         "options": {"raw": {"language": "json"}}}}}]}"#,
+        );
+        assert_eq!(count.unwrap().skipped, ["Login: basic auth with variables"]);
+        let login = file(&dir.path().join("out/Login.json"));
+        assert_eq!(
+            login.headers.keys().collect::<Vec<_>>(),
+            ["content-type"],
+            "no Authorization, no second Content-Type"
+        );
     }
 
     /// QA (2026-11-17), Postman as Postman 11 exports it: path variables,
@@ -1552,7 +1579,7 @@ resources:
                 let body = file(&entry.path()).body;
                 let live: Vec<_> = kv::parse_lines(&body, "=")
                     .into_iter()
-                    .filter(|r| r.enabled && r.value.starts_with('@') && !r.value.starts_with("@@"))
+                    .filter(|r| r.enabled && kv::multipart_file(&r.value).is_some())
                     .collect();
                 assert!(live.is_empty(), "{}: {body:?}", entry.path().display());
             }
@@ -1584,7 +1611,7 @@ resources:
             let sent = kv::headers_to_map(&text);
             let live = kv::parse_lines(&req.body, "=")
                 .into_iter()
-                .any(|r| r.enabled && r.value.starts_with('@') && !r.value.starts_with("@@"));
+                .any(|r| r.enabled && kv::multipart_file(&r.value).is_some());
             // either the body can't be multipart once loaded, or nothing in it is live
             assert!(
                 !(crate::http::is_multipart(&sent) && live),

@@ -277,7 +277,7 @@ impl MercuryApp {
                 }
                 CollectionItem::Request { name, path, method } => {
                     let current = self.current_file.as_ref() == Some(path);
-                    let shown = name.strip_suffix(".json").unwrap_or(name);
+                    let shown = workspace::display_name(name);
                     let response =
                         widgets::row(ui, ("request", path.as_path()), shown, current, |ui| {
                             reserve_action(ui);
@@ -326,21 +326,14 @@ impl MercuryApp {
         ui.set_max_width(Layout::MENU_WIDTH);
         // the open request's actions live on its row, not beside Send
         let open = self.current_file.as_deref() == Some(path);
-        if open
-            && menu_item(
-                ui,
-                Some(Icon::Terminal),
-                "Copy as cURL",
-                super::app::keys(Action::CopyCurl),
-            )
-        {
-            self.run(Action::CopyCurl);
+        if open {
+            self.action_item(ui, Action::CopyCurl);
         }
         if menu_item(ui, Some(Icon::File), "Duplicate", "") {
             self.duplicate(path);
         }
-        if open && menu_item(ui, Some(Icon::Clock), "Revert to saved", "") {
-            self.run(Action::RevertFile);
+        if open {
+            self.action_item(ui, Action::RevertFile);
         }
         self.common_menu(ui, name, path);
     }
@@ -354,7 +347,7 @@ impl MercuryApp {
         }
         widgets::divider(ui);
         if menu_item(ui, Some(Icon::Copy), "Copy path", "") {
-            ui.ctx().copy_text(path.display().to_string());
+            self.copy(path.display().to_string(), "Copied path");
         }
     }
 }
@@ -404,9 +397,7 @@ fn load_subtree(
 fn matches_search(item: &CollectionItem, search: &str) -> bool {
     match item {
         // the name the row shows: ".json" would match every request
-        CollectionItem::Request { name, .. } => name
-            .strip_suffix(".json")
-            .unwrap_or(name)
+        CollectionItem::Request { name, .. } => workspace::display_name(name)
             .to_lowercase()
             .contains(search),
         CollectionItem::Folder { name, children, .. } => {

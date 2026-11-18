@@ -11,7 +11,12 @@ use std::time::Duration;
 
 pub type Watcher = Debouncer<notify::RecommendedWatcher>;
 
-fn file_name(path: &Path) -> String {
+/// A request as the sidebar names it: its file name without `.json`.
+pub fn display_name(file_name: &str) -> &str {
+    file_name.strip_suffix(".json").unwrap_or(file_name)
+}
+
+pub(crate) fn file_name(path: &Path) -> String {
     path.file_name()
         .unwrap_or_default()
         .to_string_lossy()
@@ -111,8 +116,7 @@ pub fn env_files(root: &Path) -> Vec<String> {
         // the entry's own type: not followed through a link
         .filter(|e| e.file_type().is_ok_and(|t| t.is_file()))
         .map(|e| file_name(&e.path()))
-        // not `.envrc` (direnv) or anything else that merely starts with it
-        .filter(|n| n == ".env" || n.starts_with(".env."))
+        .filter(|n| is_env_name(n))
         .collect();
     names.sort();
     names
@@ -182,10 +186,16 @@ pub fn create_request(parent: &Path, name: &str, content: &str) -> Result<PathBu
     Ok(path)
 }
 
+/// `.env` or `.env.<something>`: not `.envrc` (direnv) or anything else
+/// that merely starts with it.
+pub fn is_env_name(name: &str) -> bool {
+    name == ".env" || name.starts_with(".env.")
+}
+
 /// The path of environment `name`, refusing a symlink (see [`env_files`]);
 /// checked at every read and write, not only when listing.
 pub fn env_path(root: &Path, name: &str) -> Result<std::path::PathBuf, String> {
-    if !name.starts_with(".env") || name.contains(['/', '\\']) || name.contains("..") {
+    if !is_env_name(name) || name.contains(['/', '\\']) {
         return Err(format!("{name} isn't an environment file name"));
     }
     let path = root.join(name);
@@ -195,6 +205,16 @@ pub fn env_path(root: &Path, name: &str) -> Result<std::path::PathBuf, String> {
         )),
         _ => Ok(path),
     }
+}
+
+/// Environment `name`'s text (see [`env_path`]).
+pub fn read_env(root: &Path, name: &str) -> Result<String, String> {
+    fs::read_to_string(env_path(root, name)?).map_err(|e| e.to_string())
+}
+
+/// Replace environment `name`'s text, atomically (see [`env_path`]).
+pub fn write_env(root: &Path, name: &str, text: &str) -> Result<(), String> {
+    crate::storage::write_atomic(&env_path(root, name)?, text.as_bytes()).map_err(|e| e.to_string())
 }
 
 /// A new `.env.<name>` in the workspace root, holding `content`. Accepts
@@ -419,6 +439,19 @@ mod tests {
             .unwrap_err()
             .contains("link"));
         assert!(env_path(dir.path(), ".env.dev").is_ok());
+    }
+
+    #[test]
+    fn every_listed_environment_can_be_opened() {
+        // `.env.v1..v2` was listed but refused at every read and write
+        let dir = TempDir::new().unwrap();
+        fs::write(dir.path().join(".env.v1..v2"), "A=1").unwrap();
+        fs::write(dir.path().join(".envrc"), "").unwrap();
+        assert_eq!(env_files(dir.path()), vec![".env.v1..v2"]);
+        assert!(env_path(dir.path(), ".env.v1..v2").is_ok());
+        for bad in [".envrc", ".env/../x", "../.env", ".env.a\\b"] {
+            assert!(env_path(dir.path(), bad).is_err(), "{bad}");
+        }
     }
 
     #[test]
