@@ -68,11 +68,7 @@ impl MercuryApp {
 
                     let executing = self.in_flight.is_some();
                     let target = self.prod_target().map(str::to_owned);
-                    let send_width = if executing {
-                        86.0
-                    } else {
-                        widgets::button_width(ui, &widgets::send_label(target.as_deref()))
-                    };
+                    let send_width = widgets::send_button_width(ui, executing, target.as_deref());
                     if focused {
                         self.take_pasted_curl(ui);
                     }
@@ -276,12 +272,7 @@ impl MercuryApp {
                 Ok(req) => {
                     let saved = self.current_file.is_some();
                     self.autosave();
-                    let headers = req
-                        .headers
-                        .iter()
-                        .map(|(k, v)| format!("{k}: {v}"))
-                        .collect::<Vec<_>>()
-                        .join("\n");
+                    let headers = kv::map_to_headers(req.headers.iter().map(|(k, v)| (k, v)));
                     self.load_request(
                         Request {
                             method: req.method,
@@ -435,13 +426,12 @@ impl MercuryApp {
                 self.body_text = kv::format_lines(&kv::parse_lines(&self.form_text, "="), "=");
             }
             ui.add_space(Space::MD);
-            let t = theme();
             ui.horizontal_wrapped(|ui| {
                 ui.spacing_mut().item_spacing.x = Space::SM;
                 ui.label(widgets::faint(
                     "A value starting with @ is a file, sent as an upload (@@ for text that starts with @).",
                 ));
-                if widgets::link(ui, muted("Attach file…").color(t.accent)).clicked() {
+                if widgets::accent_link(ui, "Attach file…").clicked() {
                     self.attach_file();
                 }
             });
@@ -513,7 +503,7 @@ impl MercuryApp {
             widgets::glyph(ui, Icon::Alert, 13.0, t.warning);
             ui.label(muted("No Content-Type. Most APIs need one —").color(t.warning));
             for kind in [BodyKind::Json, BodyKind::Form, BodyKind::Text] {
-                if widgets::link(ui, muted(kind.label()).color(t.accent)).clicked() {
+                if widgets::accent_link(ui, kind.label()).clicked() {
                     chosen = Some(kind);
                 }
             }

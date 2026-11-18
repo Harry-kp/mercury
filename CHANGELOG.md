@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- An environment named with `..` (`.env.v1..v2`) was listed but couldn't be opened, edited or used.
+- Importing from Postman: Basic auth with `{{variables}}` is reported instead of base64-encoded out of reach of substitution (as Insomnia's import already did), and a lowercase `content-type` header no longer gets a second `Content-Type` beside it.
+- **Revert to saved** keeps the response's tab and its "from .env.x" label, as reloading a file changed on disk already did.
+- After **Save as `{{x}}`** or importing an environment, the last send's "`{{x}}` isn't defined" error no longer stays on screen.
+- **Copy path** and **Copy folder path** say they copied, like Copy as cURL.
+- The right-click menu on a JSON field no longer stretches across the response panel for a long field name.
 - The environment editor no longer grows past the window with a long `.env` file, which pushed its title and **Save** off screen (most visibly in **Bulk edit**). Its variables now scroll inside the dialog.
 
 ## [0.5.0] - 2026-11-18

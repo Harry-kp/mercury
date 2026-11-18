@@ -252,19 +252,19 @@ pub fn generate(
         }
     }
     if multipart {
-        for row in crate::kv::parse_lines(body, "=") {
-            if row.enabled && !row.key.is_empty() {
-                // -F only for real files: curl reads `@path` and `<path` in a
-                // -F value from disk, so every text field is --form-string
-                // (`@@x` is the text `@x`)
-                let (flag, value) = match row.value.strip_prefix('@') {
-                    Some(rest) if rest.starts_with('@') => ("--form-string", rest.to_string()),
-                    Some(_) => ("-F", row.value),
-                    None => ("--form-string", row.value),
-                };
-                let field = format!("{}={value}", row.key);
-                curl.push_str(&format!(" \\\n  {flag} {}", shell_quote(&field)));
-            }
+        for row in crate::kv::multipart_fields(body) {
+            // -F only for real files: curl reads `@path` and `<path` in a -F
+            // value from disk, so every text field is --form-string (`@@x`
+            // is the text `@x`)
+            let (flag, value) = match crate::kv::multipart_file(&row.value) {
+                Some(_) => ("-F", row.value.as_str()),
+                None => (
+                    "--form-string",
+                    row.value.strip_prefix('@').unwrap_or(&row.value),
+                ),
+            };
+            let field = format!("{}={value}", row.key);
+            curl.push_str(&format!(" \\\n  {flag} {}", shell_quote(&field)));
         }
     } else if !body.is_empty() {
         // not -d: it reads a body starting with `@` from a file

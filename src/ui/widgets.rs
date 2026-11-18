@@ -702,10 +702,16 @@ pub fn send_label(target: Option<&str>) -> String {
     )
 }
 
-/// Width [`button`] gives `text` with a leading icon, for laying out around it.
-pub fn button_width(ui: &Ui, text: &str) -> f32 {
-    let label =
-        ui.fonts_mut(|f| f.layout_no_wrap(text.to_owned(), semibold(Text::BODY), Color32::WHITE));
+const STOP_WIDTH: f32 = 86.0;
+
+/// Width [`send_button`] takes, for laying out the URL field around it.
+pub fn send_button_width(ui: &Ui, executing: bool, target: Option<&str>) -> f32 {
+    if executing {
+        return STOP_WIDTH;
+    }
+    // what [`button`] gives its label and a leading icon
+    let label = ui
+        .fonts_mut(|f| f.layout_no_wrap(send_label(target), semibold(Text::BODY), Color32::WHITE));
     label.size().x + 15.0 + Space::SM + Space::XL * 2.0
 }
 
@@ -722,7 +728,7 @@ pub fn send_button(ui: &mut Ui, executing: bool, target: Option<&str>) -> Respon
             .on_hover_text("Send request (⌘ ⏎)");
     }
     let t = theme();
-    let size = Vec2::new(86.0, Layout::CONTROL_HEIGHT);
+    let size = Vec2::new(STOP_WIDTH, Layout::CONTROL_HEIGHT);
     let (rect, response) = ui.allocate_exact_size(size, Sense::click());
     ui.painter()
         .rect_filled(rect, Radius::SM, t.tint(t.error, 0.16));
@@ -1398,7 +1404,6 @@ pub fn key_value_editor(
     bulk_edit: &mut bool,
     hint: &str,
 ) -> bool {
-    let t = theme();
     let mut toggled = false;
     egui::containers::Sides::new().shrink_left().show(
         ui,
@@ -1411,7 +1416,7 @@ pub fn key_value_editor(
         },
         |ui| {
             let mode = if *bulk_edit { "Table" } else { "Bulk edit" };
-            toggled = link(ui, muted(mode).color(t.accent))
+            toggled = accent_link(ui, mode)
                 .on_hover_text("Toggle edit mode")
                 .clicked();
         },
@@ -1554,6 +1559,21 @@ pub fn modal(
     } else {
         response.inner
     }
+}
+
+/// A modal's body that scrolls once it's taller than the window allows:
+/// `reserved` is what the title, footer and margins around it take.
+pub fn modal_scroll<R>(ui: &mut Ui, reserved: f32, add: impl FnOnce(&mut Ui) -> R) -> R {
+    let max_height = ui.ctx().content_rect().height() - reserved;
+    egui::ScrollArea::vertical()
+        .max_height(max_height.max(120.0))
+        .show(ui, add)
+        .inner
+}
+
+/// A link in the accent color: a secondary action inside a panel.
+pub fn accent_link(ui: &mut Ui, text: impl Into<String>) -> Response {
+    link(ui, muted(text).color(theme().accent))
 }
 
 pub fn modal_buttons(ui: &mut Ui, confirm: &str, danger: bool) -> ModalAction {

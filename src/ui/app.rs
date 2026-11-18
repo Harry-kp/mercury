@@ -499,16 +499,14 @@ impl MercuryApp {
                 }
                 // the list is the truth for the UI; the disk catches up
                 shown.append(&mut self.history);
-                let excess = shown.len().saturating_sub(storage::MAX_HISTORY);
-                shown.drain(..excess);
+                keep_last(&mut shown, storage::MAX_HISTORY);
                 self.history = shown;
                 self.history_loaded = true;
             }
             Undo::Recent(mut old) => {
                 // anything sent since the clear stays, after the old ones
                 old.append(&mut self.recent);
-                let excess = old.len().saturating_sub(storage::MAX_RECENT);
-                old.drain(..excess);
+                keep_last(&mut old, storage::MAX_RECENT);
                 self.recent = old;
                 self.save_recent();
             }
@@ -568,12 +566,7 @@ impl MercuryApp {
         if same && count.requests == 0 {
             // just an environment: keep the open request, switch to it
             self.refresh_env_files();
-            let index = self
-                .env_files
-                .iter()
-                .position(|e| Some(e) == count.env.as_ref());
-            self.selected_env = index;
-            self.load_env();
+            self.select_env(count.env.as_deref().and_then(|e| self.env_index(e)));
         } else {
             self.open_workspace(folder.clone(), count.env.as_deref());
             // otherwise the editor still holds whatever was open before
@@ -621,7 +614,7 @@ impl MercuryApp {
         }
         self.env_files = workspace::env_files(&path);
         self.selected_env = env
-            .and_then(|name| self.env_files.iter().position(|f| f == name))
+            .and_then(|name| self.env_index(name))
             .or_else(|| self.env_files.iter().position(|f| f.contains(".dev")))
             .or((!self.env_files.is_empty()).then_some(0));
 
@@ -703,6 +696,10 @@ impl MercuryApp {
     /// A user-chosen switch (menu or ⌘E). It is announced: the only other
     /// signal is a chip in the corner, and ⌘E cycles in file-name order, so
     /// one press from dev can land on prod.
+    fn env_index(&self, name: &str) -> Option<usize> {
+        self.env_files.iter().position(|f| f == name)
+    }
+
     pub fn select_env(&mut self, index: Option<usize>) {
         self.selected_env = index;
         // an error from the last send ("{{x}} isn't defined…") was about the
@@ -738,9 +735,7 @@ impl MercuryApp {
         }
         let layered = files.len() == 2;
         for file in files {
-            match workspace::env_path(&root, &file)
-                .and_then(|p| fs::read_to_string(p).map_err(|e| e.to_string()))
-            {
+            match workspace::read_env(&root, &file) {
                 Ok(content) => {
                     let vars = vars::parse_env(&content);
                     if layered && file == ".env" {
@@ -842,9 +837,10 @@ impl MercuryApp {
         self.body_text = request.body;
         self.query_params = kv::parse_query_params(&self.url);
         self.auth_stash = Default::default(); // another request's auth
-                                              // Open on the tab that holds this request's content. The tab used to
-                                              // be one global value, so a GET opened on an empty Body editor, or on
-                                              // whatever the previous request was showing.
+
+        // Open on the tab that holds this request's content. The tab used to
+        // be one global value, so a GET opened on an empty Body editor, or on
+        // whatever the previous request was showing.
         self.tab = if !self.body_text.trim().is_empty()
             || matches!(
                 self.method,
@@ -968,6 +964,30 @@ impl MercuryApp {
     }
 
     /// Back to the file as it was when it was opened.
+    /// Reload the open request in place: its response and tabs stay put.
+    fn keeping_response(&mut self, reload: impl FnOnce(&mut Self)) {
+        let keep = (
+            self.response.take(),
+            self.response_env.take(),
+            self.tab,
+            self.response_tab,
+        );
+        reload(self);
+        (
+            self.response,
+            self.response_env,
+            self.tab,
+            self.response_tab,
+        ) = keep;
+    }
+
+    /// The response panel shows `error` in place of a response.
+    fn show_error(&mut self, error: String) {
+        self.response = None;
+        self.show_history = false;
+        self.request_error = Some(error);
+    }
+
     fn revert_file(&mut self) {
         let (Some(path), Some(content)) = (self.current_file.clone(), self.opened_content.clone())
         else {
@@ -976,9 +996,7 @@ impl MercuryApp {
         let Ok(file) = RequestFile::from_json(&content) else {
             return;
         };
-        let response = self.response.take();
-        self.load_file(file, path);
-        self.response = response;
+        self.keeping_response(|app| app.load_file(file, path));
         self.saved_content = None; // differs from disk until written
         if self.save_file() {
             self.notify("Reverted to the version you opened", false);
@@ -1029,9 +1047,7 @@ impl MercuryApp {
             .filter(|v| !self.env_vars.contains_key(v))
             .collect();
         if !missing.is_empty() {
-            self.response = None;
-            self.show_history = false;
-            self.request_error = Some(missing_vars_message(&missing, self.env_name()));
+            self.show_error(missing_vars_message(&missing, self.env_name()));
             return;
         }
         let request = RequestFile {
@@ -1105,8 +1121,7 @@ impl MercuryApp {
                         timestamp: storage::now(),
                     });
                     // the file is capped; the sidebar has to match it
-                    let excess = self.recent.len().saturating_sub(storage::MAX_RECENT);
-                    self.recent.drain(..excess);
+                    keep_last(&mut self.recent, storage::MAX_RECENT);
                     self.save_recent();
                 }
             }
@@ -1115,11 +1130,9 @@ impl MercuryApp {
                 // want to look at again
                 self.record_history(http::HttpResponse::failed(), Some(e.clone()));
                 if self.sent_on_screen() {
-                    self.response = None;
                     // the response panel shows the full error with a Retry
                     // button, so a toast repeating it is just noise
-                    self.show_history = false;
-                    self.request_error = Some(e);
+                    self.show_error(e);
                 } else {
                     // failed after the user moved to another request
                     self.notify(format!("Request failed: {e}"), true);
@@ -1161,8 +1174,7 @@ impl MercuryApp {
             error,
         };
         self.history.push(HistorySummary::from(&entry));
-        let excess = self.history.len().saturating_sub(storage::MAX_HISTORY);
-        self.history.drain(..excess);
+        keep_last(&mut self.history, storage::MAX_HISTORY);
         // queued now (instantly visible to history reads), written
         // off the UI thread: it rewrites the whole history file
         storage::queue_history(entry);
@@ -1188,8 +1200,7 @@ impl MercuryApp {
             .filter(|s| !loaded.iter().any(|l| l.timestamp == s.timestamp))
             .collect();
         loaded.extend(sent);
-        let excess = loaded.len().saturating_sub(storage::MAX_HISTORY);
-        loaded.drain(..excess);
+        keep_last(&mut loaded, storage::MAX_HISTORY);
         self.history = loaded;
         self.history_loaded = true;
         self.history_loading = false;
@@ -1219,14 +1230,13 @@ impl MercuryApp {
                     }
                 }
                 match entry.error {
-                    Some(e) => {
-                        self.response = None;
-                        self.request_error = Some(e);
+                    Some(e) => self.show_error(e),
+                    None => {
+                        self.response = Some(std::sync::Arc::new(entry.response));
+                        self.show_history = false;
                     }
-                    None => self.response = Some(std::sync::Arc::new(entry.response)),
                 }
                 self.response_env = entry.env;
-                self.show_history = false;
             }
             None => self.notify("History entry no longer exists", true),
         }
@@ -1279,8 +1289,7 @@ impl MercuryApp {
             &kv::headers_to_map(&sub(&self.headers_text)),
             &self.substituted_body(),
         );
-        self.ctx.copy_text(curl);
-        self.notify("Copied as cURL", false);
+        self.copy(curl, "Copied as cURL");
     }
 
     pub fn save_response(&self) {
@@ -1381,19 +1390,7 @@ impl MercuryApp {
             self.notify("File changed on disk; keeping your unsaved edits", true);
         } else {
             // the same request, newer: the tabs and the response stay put
-            let keep = (
-                self.response.take(),
-                self.response_env.take(),
-                self.tab,
-                self.response_tab,
-            );
-            self.open_file(&path);
-            (
-                self.response,
-                self.response_env,
-                self.tab,
-                self.response_tab,
-            ) = keep;
+            self.keeping_response(|app| app.open_file(&path));
         }
     }
 
@@ -1405,9 +1402,7 @@ impl MercuryApp {
         };
         let selected = self.env_name().map(str::to_string);
         self.env_files = workspace::env_files(root);
-        self.selected_env = selected
-            .as_ref()
-            .and_then(|name| self.env_files.iter().position(|f| f == name));
+        self.selected_env = selected.as_deref().and_then(|name| self.env_index(name));
         self.load_env();
         // deleted or renamed outside: say so, or requests quietly go out
         // without its variables
@@ -1495,20 +1490,17 @@ impl MercuryApp {
             Dialog::EditEnv(file) => {
                 let (body, bulk) = (&mut self.env_edit_text, &mut self.env_edit_bulk);
                 widgets::modal(ctx, &format!("Edit {file}"), |ui| {
-                    // scrolls: a long file pushed the title and Save off the
-                    // window (320: the title, hint, footer and margins)
-                    let max_height = ui.ctx().content_rect().height() - 320.0;
-                    egui::ScrollArea::vertical()
-                        .max_height(max_height.max(120.0))
-                        .show(ui, |ui| {
-                            widgets::key_value_editor(
-                                ui,
-                                body,
-                                "=",
-                                bulk,
-                                "baseUrl=https://api.example.com\ntoken=…",
-                            )
-                        });
+                    // a long file pushed the title and Save off the window
+                    // (320: the title, hint, footer and margins)
+                    widgets::modal_scroll(ui, 320.0, |ui| {
+                        widgets::key_value_editor(
+                            ui,
+                            body,
+                            "=",
+                            bulk,
+                            "baseUrl=https://api.example.com\ntoken=…",
+                        )
+                    });
                     ui.add_space(Space::MD);
                     ui.add(
                         egui::Label::new(widgets::faint(
@@ -1620,8 +1612,7 @@ impl MercuryApp {
             Dialog::EditEnv(file) => {
                 let root = self.workspace.clone().ok_or("No folder is open")?;
                 let text = kv::format_lines(&kv::parse_lines(&self.env_edit_text, "="), "=");
-                let path = workspace::env_path(&root, &file)?;
-                storage::write_atomic(&path, format!("{text}\n").as_bytes())
+                workspace::write_env(&root, &file, &format!("{text}\n"))
                     .map_err(|e| format!("Could not save {file}: {e}"))?;
                 self.refresh_env_files();
                 self.request_error = None;
@@ -1642,12 +1633,10 @@ impl MercuryApp {
         let content: String = used.iter().map(|k| format!("{k}=\n")).collect();
         let file = workspace::create_env(&root, name, &content)?;
         self.refresh_env_files();
-        let index = self.env_files.iter().position(|f| *f == file);
-        self.select_env(index);
+        self.select_env(self.env_index(&file));
         Ok(file)
     }
 
-    /// Open the editor on an environment file of the open workspace.
     /// A response value kept for the next request: written into the selected
     /// environment file (other lines and comments untouched) and live at once.
     pub fn save_variable(&mut self, key: &str, value: &str) {
@@ -1656,27 +1645,26 @@ impl MercuryApp {
         else {
             return;
         };
-        let saved = workspace::env_path(&root, &file).and_then(|path| {
-            let text = fs::read_to_string(&path).map_err(|e| e.to_string())?;
-            let text = vars::set_env_var(&text, key, value);
-            storage::write_atomic(&path, text.as_bytes()).map_err(|e| e.to_string())
+        let saved = workspace::read_env(&root, &file).and_then(|text| {
+            workspace::write_env(&root, &file, &vars::set_env_var(&text, key, value))
         });
         match saved {
             Ok(()) => {
                 self.load_env();
+                // "{{key}} isn't defined" from the last send is out of date
+                self.request_error = None;
                 self.notify(format!("Saved {{{{{key}}}}} in {file}"), false);
             }
             Err(e) => self.notify(format!("Could not save {file}: {e}"), true),
         }
     }
 
+    /// Open the editor on an environment file of the open workspace.
     pub fn edit_env(&mut self, file: &str) {
         let Some(root) = &self.workspace else {
             return;
         };
-        match workspace::env_path(root, file)
-            .and_then(|p| fs::read_to_string(p).map_err(|e| e.to_string()))
-        {
+        match workspace::read_env(root, file) {
             // a BOM glued to the first key made a `# comment` an enabled row
             Ok(text) => self.env_edit_text = text.trim_start_matches('\u{feff}').to_string(),
             Err(e) => return self.notify(e, true),
@@ -1688,6 +1676,21 @@ impl MercuryApp {
     // -----------------------------------------------------------------------
     // Commands
     // -----------------------------------------------------------------------
+
+    /// Put `text` on the clipboard and say so.
+    pub fn copy(&mut self, text: String, done: &str) {
+        self.ctx.copy_text(text);
+        self.notify(done, false);
+    }
+
+    /// A menu row for `action`, named as the palette names it, with its
+    /// shortcut; clicking it runs the action.
+    pub fn action_item(&mut self, ui: &mut egui::Ui, action: Action) {
+        let (text, icon) = super::palette::command(action);
+        if menu_item(ui, Some(icon), text, keys(action)) {
+            self.run(action);
+        }
+    }
 
     /// Run one [`Action`], whatever triggered it (key, palette or click).
     pub fn run(&mut self, action: Action) {
@@ -1714,15 +1717,10 @@ impl MercuryApp {
             Action::ToggleRaw => self.raw_view = !self.raw_view,
             Action::FindInResponse => {
                 // the find bar only exists over a text body
-                let text = self.response.as_ref().is_some_and(|r| {
-                    matches!(
-                        r.response_type,
-                        http::ResponseType::Json
-                            | http::ResponseType::Xml
-                            | http::ResponseType::Html
-                            | http::ResponseType::PlainText
-                    )
-                });
+                let text = self
+                    .response
+                    .as_ref()
+                    .is_some_and(|r| r.response_type.is_text());
                 if text && !self.show_history {
                     self.response_tab = ResponseTab::Body;
                     self.find.get_or_insert_with(String::new);
@@ -1892,29 +1890,18 @@ impl MercuryApp {
             chip = chip.on_hover_text(path.display().to_string());
         }
         popup_menu(ui, &chip, Layout::MENU_WIDTH, |ui| {
-            if menu_item(
-                ui,
-                Some(Icon::Folder),
-                "Open folder…",
-                keys(Action::OpenFolder),
-            ) {
-                self.pick_folder();
-            }
-            if open && menu_item(ui, Some(Icon::Plus), "New folder", "") {
-                self.run(Action::NewFolder);
+            self.action_item(ui, Action::OpenFolder);
+            if open {
+                self.action_item(ui, Action::NewFolder);
             }
             widgets::divider(ui);
-            if menu_item(ui, Some(Icon::Package), "Import from Postman…", "") {
-                self.start_import(&POSTMAN);
-            }
-            if menu_item(ui, Some(Icon::Package), "Import from Insomnia…", "") {
-                self.start_import(&INSOMNIA);
-            }
+            self.action_item(ui, Action::ImportPostman);
+            self.action_item(ui, Action::ImportInsomnia);
             if open {
                 widgets::divider(ui);
                 if menu_item(ui, Some(Icon::Copy), "Copy folder path", "") {
                     let path = self.workspace.clone().unwrap_or_default();
-                    ui.ctx().copy_text(path.display().to_string());
+                    self.copy(path.display().to_string(), "Copied folder path");
                 }
             }
         });
@@ -1934,7 +1921,7 @@ impl MercuryApp {
             // the only way to keep a request used to be ⌘S, which nothing on
             // screen mentioned once the first-run tips were gone
             if !self.url.trim().is_empty()
-                && widgets::link(ui, muted("Save…").color(t.accent))
+                && widgets::accent_link(ui, "Save…")
                     .on_hover_text("Save this request as a file (⌘ S)")
                     .clicked()
             {
@@ -2030,14 +2017,8 @@ impl MercuryApp {
             if menu_item(ui, Some(Icon::Search), "Command palette", palette) {
                 self.run(Action::Palette);
             }
-            let help = keys(Action::Help);
-            if menu_item(ui, Some(Icon::Keyboard), "Keyboard shortcuts", help) {
-                self.dialog = Some(Dialog::Shortcuts);
-            }
-            let sidebar = keys(Action::FocusMode);
-            if menu_item(ui, Some(Icon::PanelLeft), "Hide / show sidebar", sidebar) {
-                self.run(Action::FocusMode);
-            }
+            self.action_item(ui, Action::Help);
+            self.action_item(ui, Action::FocusMode);
             widgets::divider(ui);
             for (what, text, url) in [
                 (Icon::ExternalLink, "Documentation", DOCS_URL),
@@ -2209,22 +2190,19 @@ fn shortcuts_modal(ctx: &egui::Context) -> ModalAction {
             .iter()
             .map(|s| (s.keys, s.label))
             .chain([ESCAPE_HELP]);
-        // scrolls: at the minimum window height the list pushed the title
-        // and Close off the window (260: the title, footer and margins)
-        let max_height = ui.ctx().content_rect().height() - 260.0;
-        egui::ScrollArea::vertical()
-            .max_height(max_height)
-            .show(ui, |ui| {
-                for (keys, text) in rows {
-                    ui.horizontal(|ui| {
-                        ui.set_min_height(28.0);
-                        ui.label(label(text));
-                        ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
-                            key_combo(ui, keys);
-                        });
+        // at the minimum window height the list pushed the title and Close
+        // off the window (260: the title, footer and margins)
+        widgets::modal_scroll(ui, 260.0, |ui| {
+            for (keys, text) in rows {
+                ui.horizontal(|ui| {
+                    ui.set_min_height(28.0);
+                    ui.label(label(text));
+                    ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
+                        key_combo(ui, keys);
                     });
-                }
-            });
+                });
+            }
+        });
         ui.add_space(Space::LG);
         ui.label(faint("On Windows and Linux, ⌘ is Ctrl."));
         ui.add_space(Space::XL);
@@ -2330,6 +2308,11 @@ impl eframe::App for MercuryApp {
             eprintln!("{e}");
         }
     }
+}
+
+/// Drop the oldest items past `max` (lists are kept oldest first).
+fn keep_last<T>(items: &mut Vec<T>, max: usize) {
+    items.drain(..items.len().saturating_sub(max));
 }
 
 #[cfg(test)]

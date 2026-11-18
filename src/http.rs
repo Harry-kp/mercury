@@ -29,6 +29,13 @@ pub enum ResponseType {
     Empty,
 }
 
+impl ResponseType {
+    /// A body shown as text, with find and copy.
+    pub fn is_text(self) -> bool {
+        matches!(self, Self::Json | Self::Xml | Self::Html | Self::PlainText)
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HttpResponse {
     pub status: u16,
@@ -70,9 +77,7 @@ pub fn substitute_multipart(
     vars: &std::collections::HashMap<String, String>,
 ) -> String {
     let sub = |s: &str| crate::vars::substitute(s, vars).replace(['\r', '\n'], " ");
-    crate::kv::parse_lines(text, "=")
-        .into_iter()
-        .filter(|r| r.enabled && !r.key.is_empty())
+    crate::kv::multipart_fields(text)
         .map(|r| {
             let key = sub(&r.key).replace('=', "%3D");
             let value = if let Some(rest) = r.value.strip_prefix("@@") {
@@ -99,21 +104,13 @@ pub fn substitute_multipart(
 /// for a file read from disk, `name=@@x` for the text `@x`. `#` lines are
 /// switched off. Returns the boundary and the bytes.
 pub fn multipart_body(text: &str) -> Result<(String, Vec<u8>), String> {
-    let boundary = format!(
-        "mercury-{:x}",
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map_or(0, |d| d.as_nanos())
-    );
+    let boundary = format!("mercury-{:x}", crate::storage::since_epoch().as_nanos());
     let quote = |s: &str| s.replace('"', "%22").replace(['\r', '\n'], " ");
     let mut out = Vec::new();
-    for row in crate::kv::parse_lines(text, "=") {
-        if !row.enabled || row.key.is_empty() {
-            continue;
-        }
+    for row in crate::kv::multipart_fields(text) {
         out.extend(format!("--{boundary}\r\n").as_bytes());
         let name = quote(&row.key);
-        let file = row.value.strip_prefix('@').filter(|p| !p.starts_with('@'));
+        let file = crate::kv::multipart_file(&row.value);
         let text = row.value.strip_prefix('@').unwrap_or(&row.value);
         match file {
             Some(path) => {
@@ -199,7 +196,6 @@ pub fn client_with(check_certs: bool) -> reqwest::blocking::Client {
         .expect("HTTP client builds with static config")
 }
 
-/// `host[:port]` of a URL as typed (no scheme needed).
 /// The host a [`CERT_ERROR`] names: the one the failed request went to,
 /// whatever the URL bar says by now.
 pub fn untrusted_host(error: &str) -> Option<&str> {
@@ -211,6 +207,7 @@ pub fn untrusted_host(error: &str) -> Option<&str> {
     (host != "the server").then_some(host)
 }
 
+/// `host[:port]` of a URL as typed (no scheme needed).
 pub fn host(url: &str) -> Option<String> {
     let u = reqwest::Url::parse(&with_scheme(url)).ok()?;
     Some(format!(
@@ -453,11 +450,6 @@ fn detect_response_type(content_type: &str, body: &[u8], status: u16) -> Respons
     }
 }
 
-/// Pretty-print JSON; returns the input unchanged if it isn't valid JSON.
-/// Indent valid JSON exactly as written: only whitespace between tokens
-/// changes. Parsing into a `serde_json::Value` and printing it back sorted
-/// keys, rewrote numbers and dropped duplicate keys, so the "Pretty" view
-/// (and Format body) didn't show what was actually sent.
 /// `"token": "abc",`, one line of formatted JSON, as `("token", "abc")`.
 /// `None` for a line that opens an object or array, or has no key.
 pub fn json_field(line: &str) -> Option<(String, String)> {
@@ -473,6 +465,11 @@ pub fn json_field(line: &str) -> Option<(String, String)> {
     Some((key, value))
 }
 
+/// Pretty-print JSON; returns the input unchanged if it isn't valid JSON.
+/// Indent valid JSON exactly as written: only whitespace between tokens
+/// changes. Parsing into a `serde_json::Value` and printing it back sorted
+/// keys, rewrote numbers and dropped duplicate keys, so the "Pretty" view
+/// (and Format body) didn't show what was actually sent.
 pub fn format_json(body: &str) -> String {
     if serde_json::from_str::<serde::de::IgnoredAny>(body).is_err() {
         return body.to_string();

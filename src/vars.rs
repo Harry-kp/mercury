@@ -137,9 +137,7 @@ pub fn var_at(text: &str, char_index: usize) -> Option<String> {
 /// are: a fresh value at every send. `None` for any other name.
 pub fn dynamic(name: &str) -> Option<String> {
     use std::hash::{BuildHasher, Hasher};
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default();
+    let now = crate::storage::since_epoch();
     // std's per-hasher random keys: enough for test data, no dependency
     let random = || {
         let mut h = std::collections::hash_map::RandomState::new().build_hasher();

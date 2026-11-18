@@ -43,6 +43,15 @@ const COMMANDS: &[(Action, &str, Icon)] = &[
     (Action::Docs, "Documentation", Icon::ExternalLink),
 ];
 
+/// How the palette names `action`, for a menu row that runs it.
+pub fn command(action: Action) -> (&'static str, Icon) {
+    COMMANDS
+        .iter()
+        .find(|(a, ..)| *a == action)
+        .map(|&(_, text, icon)| (text, icon))
+        .expect("every menu action is a palette command")
+}
+
 const ROW_H: f32 = 34.0;
 /// Space between rows.
 const GAP: f32 = 1.0;
@@ -105,7 +114,7 @@ impl Palette {
                         .map(|p| p.to_string_lossy().into_owned())
                         .unwrap_or_default();
                     Some(RequestEntry {
-                        name: name.strip_suffix(".json").unwrap_or(&name).to_string(),
+                        name: crate::workspace::display_name(&name).to_string(),
                         folder,
                         path,
                     })
