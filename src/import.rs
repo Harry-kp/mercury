@@ -1407,7 +1407,7 @@ resources:
                          "options": {"raw": {"language": "json"}}}}}]}"#,
         );
         assert_eq!(count.unwrap().skipped, ["Login: basic auth with variables"]);
-        let login = file(&dir.path().join("out/Login.json"));
+        let login = file(&dir.path().join("out/login.json"));
         assert_eq!(
             login.headers.keys().collect::<Vec<_>>(),
             ["content-type"],
