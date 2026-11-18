@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-18
+
+See a variable's value on hover, save a response field into your `.env`, trust a self-signed host, import several files at once, a shared `.env` under every environment, no request timeout, and about 90 fixes from ten QA rounds.
+
 ### Added
 - **Save a response value for the next request.** Right-click a field in a JSON response and choose **Save as `{{token}}` in .env.dev**: the line is written into the environment file and used from the next send. **Copy value** is there too.
 - **`.env` is shared by every environment**, as in dotenv: with `.env.dev` selected, `.env` is read first and `.env.dev` overrides it.
