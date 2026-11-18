@@ -1132,6 +1132,23 @@ fn open_send_edit_and_save() {
     );
     e.state_mut().env_edit_text = format!("host={server}\nid=7");
     e.run_steps(1);
+    // a long file grew the modal past the window, title and Save off screen,
+    // in Bulk edit and in the table alike: the editor scrolls instead
+    let saved = e.state().env_edit_text.clone();
+    e.state_mut().env_edit_text = (0..60).map(|i| format!("VAR_{i}=v{i}\n")).collect();
+    for mode in ["Bulk edit", "Table"] {
+        e.query_all_by_label(mode).last().unwrap().click();
+        e.run_steps(5); // the modal re-centres over a few frames
+        let save = e.query_all_by_label("Save").last().unwrap().rect();
+        let title = e.get_by_label("Edit .env.local").rect();
+        assert!(
+            title.min.y >= 0.0 && save.max.y <= 800.0,
+            "{mode}: {title:?} {save:?}"
+        );
+    }
+    assert!(!e.state().env_edit_bulk, "back in the table");
+    e.state_mut().env_edit_text = saved;
+    e.run_steps(1);
     e.query_all_by_label("Save").last().unwrap().click();
     e.run_steps(2);
     assert!(e.state().dialog.is_none());

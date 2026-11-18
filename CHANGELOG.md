@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- The environment editor no longer grows past the window with a long `.env` file, which pushed its title and **Save** off screen (most visibly in **Bulk edit**). Its variables now scroll inside the dialog.
+
 ## [0.5.0] - 2026-11-18
 
 See a variable's value on hover, save a response field into your `.env`, trust a self-signed host, import several files at once, a shared `.env` under every environment, no request timeout, and about 90 fixes from ten QA rounds.
