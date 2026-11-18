@@ -1495,13 +1495,20 @@ impl MercuryApp {
             Dialog::EditEnv(file) => {
                 let (body, bulk) = (&mut self.env_edit_text, &mut self.env_edit_bulk);
                 widgets::modal(ctx, &format!("Edit {file}"), |ui| {
-                    widgets::key_value_editor(
-                        ui,
-                        body,
-                        "=",
-                        bulk,
-                        "baseUrl=https://api.example.com\ntoken=…",
-                    );
+                    // scrolls: a long file pushed the title and Save off the
+                    // window (320: the title, hint, footer and margins)
+                    let max_height = ui.ctx().content_rect().height() - 320.0;
+                    egui::ScrollArea::vertical()
+                        .max_height(max_height.max(120.0))
+                        .show(ui, |ui| {
+                            widgets::key_value_editor(
+                                ui,
+                                body,
+                                "=",
+                                bulk,
+                                "baseUrl=https://api.example.com\ntoken=…",
+                            )
+                        });
                     ui.add_space(Space::MD);
                     ui.add(
                         egui::Label::new(widgets::faint(
